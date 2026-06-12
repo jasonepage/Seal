@@ -36,6 +36,7 @@ final class CeremonyManager: NSObject {
         case verificationFailed
         case missingCredentialID
         case identityNotFound
+        case alreadyRegistered
 
         var errorDescription: String? {
             switch self {
@@ -45,6 +46,7 @@ final class CeremonyManager: NSObject {
             case .verificationFailed: "That key doesn't match this person's identity. The forge was NOT completed."
             case .missingCredentialID: "This person registered before credential publishing — they need to update their identity."
             case .identityNotFound: "No identity in the directory matches that key. Register instead?"
+            case .alreadyRegistered: "This key already holds a Seal identity — one key, one identity. Use \"Sign in\" instead."
             }
         }
     }
@@ -54,14 +56,23 @@ final class CeremonyManager: NSObject {
     /// Creates the root credential (hardware key or passkey), then a Secure
     /// Enclave device key, then asks the root credential to sign an
     /// endorsement committing to the device key (SDS §2).
-    func register(tier: IdentityTier, displayName: String) async throws -> RootIdentity {
+    func register(tier: IdentityTier, displayName: String, directory: SyncEngine? = nil) async throws -> RootIdentity {
         phase = .searching
         do {
+            // 0. One key ≈ one identity: exclude every credential ID already
+            //    in the directory, so an authenticator that minted a Seal
+            //    identity refuses to mint another (the authenticator itself
+            //    recognizes its own credential IDs, even non-discoverable
+            //    ones). Best-effort by design: directory unreachable →
+            //    proceed; deterrence, not an invariant (SDS §7).
+            let excluded = (try? await directory?.fetchAllCredentialIDs()) ?? []
+
             // 1. Create the root WebAuthn credential.
             let challenge = Self.randomChallenge()
             let userID = Self.randomChallenge(16)
             let registration = try await performRequest(
-                makeRegistrationRequest(tier: tier, name: displayName, challenge: challenge, userID: userID)
+                makeRegistrationRequest(tier: tier, name: displayName, challenge: challenge,
+                                        userID: userID, excluding: excluded)
             ) as? ASAuthorizationPublicKeyCredentialRegistration
             guard let registration, let attestation = registration.rawAttestationObject else {
                 throw CeremonyError.unexpectedCredential
@@ -117,6 +128,9 @@ final class CeremonyManager: NSObject {
         } catch let error as ASAuthorizationError where error.code == .canceled {
             phase = .failed(CeremonyError.cancelled.localizedDescription)
             throw CeremonyError.cancelled
+        } catch let error as ASAuthorizationError where error.code == .matchedExcludedCredential {
+            phase = .failed(CeremonyError.alreadyRegistered.localizedDescription)
+            throw CeremonyError.alreadyRegistered
         } catch {
             phase = .failed((error as? LocalizedError)?.errorDescription ?? "Something went wrong. Tap to try again.")
             throw error
@@ -329,19 +343,29 @@ final class CeremonyManager: NSObject {
 
     // MARK: - Request building
 
-    private func makeRegistrationRequest(tier: IdentityTier, name: String, challenge: Data, userID: Data) -> ASAuthorizationRequest {
+    private func makeRegistrationRequest(tier: IdentityTier, name: String, challenge: Data,
+                                         userID: Data, excluding: [Data] = []) -> ASAuthorizationRequest {
         switch tier {
         case .passkey:
             let provider = ASAuthorizationPlatformPublicKeyCredentialProvider(
                 relyingPartyIdentifier: Self.relyingPartyID)
-            return provider.createCredentialRegistrationRequest(
+            let request = provider.createCredentialRegistrationRequest(
                 challenge: challenge, name: name, userID: userID)
+            request.excludedCredentials = excluding.map {
+                ASAuthorizationPlatformPublicKeyCredentialDescriptor(credentialID: $0)
+            }
+            return request
         case .verified:
             let provider = ASAuthorizationSecurityKeyPublicKeyCredentialProvider(
                 relyingPartyIdentifier: Self.relyingPartyID)
             let request = provider.createCredentialRegistrationRequest(
                 challenge: challenge, displayName: name, name: name, userID: userID)
             request.credentialParameters = [ASAuthorizationPublicKeyCredentialParameters(algorithm: .ES256)]
+            request.excludedCredentials = excluding.map {
+                ASAuthorizationSecurityKeyPublicKeyCredentialDescriptor(
+                    credentialID: $0,
+                    transports: ASAuthorizationSecurityKeyPublicKeyCredentialDescriptor.Transport.allSupported)
+            }
             // Non-discoverable: discoverable credentials force the CTAP2
             // clientPIN ceremony on PIN-protected keys, which fails on some
             // firmware/NFC combinations ("wrong PIN" despite correct PIN).

@@ -104,6 +104,31 @@ final class SyncEngine {
         return (root, live)
     }
 
+    /// Every credential ID in the directory — fed to `excludedCredentials` at
+    /// registration so an authenticator that already holds a Seal identity
+    /// refuses to mint a second one (1 key ≈ 1 account; SDS §7: deterrence,
+    /// not an invariant — FIDO2 reset or a modified client evades it).
+    /// NOTE: requires the `recordName QUERYABLE` index on Identity in the
+    /// CloudKit schema (console → Indexes → Identity), dev + Production.
+    /// Scale ceiling is documented in SDS §7 — revisit past ~1k identities.
+    func fetchAllCredentialIDs() async throws -> [Data] {
+        let query = CKQuery(recordType: "Identity", predicate: NSPredicate(value: true))
+        var ids: [Data] = []
+        var (results, cursor) = try await publicDB.records(
+            matching: query, desiredKeys: ["credentialID"], resultsLimit: 200)
+        while true {
+            for (_, result) in results {
+                if let record = try? result.get(), let id = record["credentialID"] as? Data {
+                    ids.append(id)
+                }
+            }
+            guard let next = cursor else { break }
+            (results, cursor) = try await publicDB.records(
+                continuingMatchFrom: next, desiredKeys: ["credentialID"], resultsLimit: 200)
+        }
+        return ids
+    }
+
     /// Append a (root-key-signed) device revocation to our directory record.
     func publishRevocation(_ revocation: DeviceRevocation, for credentialIDHash: String) async throws {
         let recordID = CKRecord.ID(recordName: credentialIDHash)

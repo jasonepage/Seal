@@ -34,9 +34,18 @@ TODO: FR-3 backup keys, ML-KEM spike, demo mode + review video (FR-22/23/24, nee
 - PIN'd security keys: "wrong PIN" failures were from discoverable-credential creation (CTAP2 clientPIN over NFC); fixed by residentKey .discouraged. Root cause unconfirmed — wanted: USB-C test + Yubico Authenticator retry count.
 - iOS caches failed AASA checks: delete+reinstall app if WebAuthn errors immediately (code 1001).
 - TestFlight = Production CloudKit env; Xcode builds = Development. Separate worlds.
-- Family testing in progress (passkey tier). Two-device E2EE receive path NOT yet verified end-to-end — top validation priority.
+- Two-device E2EE receive path VALIDATED 2026-06-12 (TestFlight/Production, Nathan ↔ Karen): inbound text + encrypted photo decrypted, verified, and displayed. Test used TWO identities minted from ONE YubiKey 5Ci (pre-exclusion build) — that setup stops working once excludedCredentials ships; future tests need passkeys or a second key. Still unvalidated: push with app fully closed; disappearing-message expiry on both ends; friend ceremony was one-directional (Nathan's USB-C-only key can't reach a Lightning iPhone — NFC or passkey needed for the reverse ceremony; passkey nearby-device friending path still untested).
 - Schema changes always: exercise in dev (or add manually in console) → Deploy to Production.
+- 1-key-1-identity: registration passes ALL directory credential IDs as `excludedCredentials` (both tiers); authenticator refuses a second identity → `.matchedExcludedCredential` → "sign in instead" error. Deterrence only (FIDO2 reset / modified client evade; SDS §7). **Requires `recordName QUERYABLE` index on Identity in CloudKit console** — add in dev + deploy WITH the revocations field. Scale ceiling ~1k identities.
+- Demo mode (FR-22/23 partial): launch arg `-SealDemoMode` seeds local identity/friends/chats via DemoFixtures (fully local, non-destructive, watermarked; `-SealDemoHideWatermark` for marketing shots). Review-account gating still TODO.
 - UI rule: seal mascot only on social surfaces, never on security surfaces. Brass = trust moments only.
+
+## App Store status (2026-06-12)
+- ASC metadata DONE: name/subtitle ("Provably human group chat"), promo text, description, keywords, support/marketing/privacy URLs (site pages live in jasonepage.github.io/seal/ — landing, privacy, support; push that repo), category Social Networking, age 4+ (honest answers; Signal precedent), content rights (no third-party), encryption exempt (CryptoKit only — consider ITSAppUsesNonExemptEncryption=NO in Info.plist), DSA non-trader.
+- External TestFlight group "parents" created; build must be added via group → Builds → + (needs complete Test Information), triggers Beta App Review.
+- App Review info: sign-in NOT required (passkey explained in notes — notes text drafted in session), reviewer phone needed, demo video (FR-24) still TODO — only real submission blocker. Release set to automatic — switch to manual if approval shouldn't mean instant launch.
+- App Privacy: change "Data Not Collected" → Name / app functionality / not linked (display names in public directory count as collected).
+- Demo mode is launch-arg only; reviewers can't trigger it. FR-22 review-account gating still TODO; v1 strategy is passkey registration + Note to self + video.
 
 ## Process notes
 - User prefers numbered steps for ops tasks, concise replies. Mom is a tester + gave the mascot feedback.

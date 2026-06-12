@@ -113,6 +113,7 @@ Group transport = CloudKit **shared zones**: creator owns the zone, members acce
 | Replay of ceremony assertions | Fresh challenges bound to identities + timestamps |
 | Removed member reads on | Epoch rotation on removal |
 | Metadata exposure | Accepted residual risk: Apple sees who talks to whom and when. Document honestly (NFR-3). |
+| One key minting many identities | `excludedCredentials` at registration: every directory credential ID is passed, and an authenticator that already holds a Seal credential refuses to create another (works even for non-discoverable credentials — keys recognize their own credential IDs). **Deterrence, not an invariant**: a FIDO2 factory reset (which destroys the old identity's credential) or a modified client evades it, and the list must enumerate the whole directory (scale ceiling ~1k identities; requires `recordName QUERYABLE` index on Identity). True Sybil resistance is the in-person edge requirement — n accounts without forged friendships have no reach. Do not re-litigate: per-unit key attestation is impossible by FIDO2 design (batch certs, deliberate unlinkability). |
 
 ## 8. Migration Path (if CloudKit outgrown)
 Add a thin Vapor/Cloudflare-Workers backend for: standard WebAuthn ceremonies, an identity directory not tied to iCloud, and Android/web clients. The signature-chain design is transport-agnostic — records move to any store without redesigning trust.

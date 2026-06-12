@@ -110,7 +110,8 @@ struct RegistrationView: View {
         ceremony.resetPhase()
         _ = try? await ceremony.register(
             tier: tier,
-            displayName: displayName.trimmingCharacters(in: .whitespaces)
+            displayName: displayName.trimmingCharacters(in: .whitespaces),
+            directory: sync   // enables 1-key-1-identity excludedCredentials
         )
     }
 
