@@ -1,27 +1,52 @@
 import Foundation
 import CryptoKit
 
-/// Hybrid post-quantum key wrapping (SDS §2): X25519 AND ML-KEM-768 shared
-/// secrets feed a single HKDF, so breaking the wrap requires breaking both.
-/// KEM private keys are software (keychain, .afterFirstUnlockThisDeviceOnly,
-/// non-synchronized); their public keys are signed by the SE device key.
+/// Key wrapping for sender-chain distribution (SDS §2).
+/// v1: X25519 ephemeral-static ECDH + HKDF + AES-256-GCM.
+/// TODO(post-spike): add ML-KEM-768 alongside X25519 (hybrid — both secrets
+/// feed one HKDF) once the CryptoKit API surface is confirmed on-device.
 enum HybridKEM {
-    struct PublicBundle: Codable {
-        let x25519: Data
-        let mlkem768: Data
-        let deviceSignature: Data   // SE device key signature over both
+    struct Envelope: Codable {
+        let ephemeralPublicKey: Data
+        let ciphertext: Data        // AES.GCM combined (nonce ‖ ct ‖ tag)
     }
 
-    /// Wrap a sender chain key to a recipient device.
-    static func wrap(_ chainKey: SymmetricKey, to recipient: PublicBundle) throws -> Data {
-        // TODO: X25519 ephemeral ECDH + ML-KEM-768 encapsulation (CryptoKit, iOS 26)
-        //       → combined = HKDF(ecdhSecret || kemSecret) → AES-GCM wrap chainKey.
-        // Spike required: confirm CryptoKit ML-KEM API surface on target SDK
-        // before building; fall back to X25519-only behind a protocol if needed.
-        fatalError("unimplemented")
+    enum KEMError: Error { case badRecipientKey, badEnvelope }
+
+    /// Wrap a sender chain key to a recipient device's X25519 public key.
+    static func wrap(_ chainKey: Data, to recipientKEMPublicKey: Data) throws -> Data {
+        guard let recipientPub = try? Curve25519.KeyAgreement.PublicKey(
+            rawRepresentation: recipientKEMPublicKey) else { throw KEMError.badRecipientKey }
+
+        let ephemeral = Curve25519.KeyAgreement.PrivateKey()
+        let shared = try ephemeral.sharedSecretFromKeyAgreement(with: recipientPub)
+        let wrapKey = shared.hkdfDerivedSymmetricKey(
+            using: SHA256.self,
+            salt: ephemeral.publicKey.rawRepresentation + recipientKEMPublicKey,
+            sharedInfo: Data("seal.kem.x25519.v1".utf8),
+            outputByteCount: 32
+        )
+        let sealed = try AES.GCM.seal(chainKey, using: wrapKey)
+        let envelope = Envelope(
+            ephemeralPublicKey: ephemeral.publicKey.rawRepresentation,
+            ciphertext: sealed.combined!
+        )
+        return try JSONEncoder().encode(envelope)
     }
 
-    static func unwrap(_ envelope: Data) throws -> SymmetricKey {
-        fatalError("unimplemented")
+    /// Unwrap with this device's X25519 private key.
+    static func unwrap(_ envelopeData: Data, with myPrivateKey: Curve25519.KeyAgreement.PrivateKey) throws -> Data {
+        guard let envelope = try? JSONDecoder().decode(Envelope.self, from: envelopeData),
+              let ephPub = try? Curve25519.KeyAgreement.PublicKey(
+                rawRepresentation: envelope.ephemeralPublicKey) else { throw KEMError.badEnvelope }
+
+        let shared = try myPrivateKey.sharedSecretFromKeyAgreement(with: ephPub)
+        let wrapKey = shared.hkdfDerivedSymmetricKey(
+            using: SHA256.self,
+            salt: envelope.ephemeralPublicKey + myPrivateKey.publicKey.rawRepresentation,
+            sharedInfo: Data("seal.kem.x25519.v1".utf8),
+            outputByteCount: 32
+        )
+        return try AES.GCM.open(try AES.GCM.SealedBox(combined: envelope.ciphertext), using: wrapKey)
     }
 }

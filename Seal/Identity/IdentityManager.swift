@@ -9,6 +9,7 @@ final class IdentityManager {
     private(set) var deviceEndorsement: DeviceEndorsement?
 
     private static let deviceKeyTag = "seal.deviceKey"
+    private static let kemKeyTag = "seal.kemKey"
     private static let identityKey = "seal.rootIdentity"
     private static let endorsementKey = "seal.deviceEndorsement"
 
@@ -36,8 +37,19 @@ final class IdentityManager {
         let key = try SecureEnclave.P256.Signing.PrivateKey(accessControl: access)
         KeychainStore.save(key.dataRepresentation, for: Self.deviceKeyTag)
         deviceKey = key
+
+        // X25519 KEM key for sender-chain wrapping (SDS §2). Software key,
+        // this-device-only; its public half is published in the endorsement.
+        let kem = Curve25519.KeyAgreement.PrivateKey()
+        KeychainStore.save(kem.rawRepresentation, for: Self.kemKeyTag)
+        kemPrivateKey = kem
         return key
     }
+
+    /// This device's X25519 KEM private key (decrypts wrapped sender keys).
+    private(set) var kemPrivateKey: Curve25519.KeyAgreement.PrivateKey?
+
+    var kemPublicKeyData: Data? { kemPrivateKey?.publicKey.rawRepresentation }
 
     // MARK: - Registration persistence
 
@@ -58,9 +70,11 @@ final class IdentityManager {
         rootIdentity = nil
         deviceEndorsement = nil
         deviceKey = nil
+        kemPrivateKey = nil
         KeychainStore.delete(Self.identityKey)
         KeychainStore.delete(Self.endorsementKey)
         KeychainStore.delete(Self.deviceKeyTag)
+        KeychainStore.delete(Self.kemKeyTag)
     }
 
     private func load() {
@@ -73,17 +87,36 @@ final class IdentityManager {
         if let data = KeychainStore.load(Self.deviceKeyTag) {
             deviceKey = try? SecureEnclave.P256.Signing.PrivateKey(dataRepresentation: data)
         }
+        if let data = KeychainStore.load(Self.kemKeyTag) {
+            kemPrivateKey = try? Curve25519.KeyAgreement.PrivateKey(rawRepresentation: data)
+        }
     }
 
     // MARK: - Verification
 
-    /// Verify a full chain: root key → device endorsement → record signature.
+    /// Returns the device public keys + KEM keys from `endorsements` whose
+    /// signature chain back to `root` actually verifies. Everything else is
+    /// dropped — the server is untrusted for integrity (SDS §7).
+    static func verifiedDevices(root: RootIdentity, endorsements: [DeviceEndorsement]) -> [DeviceEndorsement] {
+        guard let rootPub = try? P256.Signing.PublicKey(rawRepresentation: root.publicKey) else { return [] }
+        return endorsements.filter { e in
+            guard e.revokedAt == nil,
+                  let assertion = try? JSONDecoder().decode(WebAuthnAssertion.self, from: e.assertion),
+                  assertion.verify(with: rootPub) else { return false }
+            let commitment = Data(SHA256.hash(data: Data("seal.endorse.v1".utf8) + e.devicePublicKey))
+            return CeremonyManager.clientDataChallengeMatches(assertion.clientDataJSON, expected: commitment)
+        }
+    }
+
+    /// Verify a full chain: root key → device endorsement → payload signature.
     /// Every inbound record passes through this before reaching the model layer.
-    func verify(signature: Data, over payload: Data, deviceKey: Data, claimedRoot: RootIdentity) -> Bool {
-        // TODO: 1. find unrevoked DeviceEndorsement for deviceKey in claimedRoot
-        //       2. verify endorsement assertion against claimedRoot.publicKey
-        //          (WebAuthnAssertion.verify + challenge commitment check)
-        //       3. verify signature over payload with deviceKey
-        false
+    func verify(signature: Data, over payload: Data, deviceKey: Data,
+                claimedRoot: RootIdentity, endorsements: [DeviceEndorsement]) -> Bool {
+        let trusted = Self.verifiedDevices(root: claimedRoot, endorsements: endorsements)
+        guard trusted.contains(where: { $0.devicePublicKey == deviceKey }),
+              let pub = try? P256.Signing.PublicKey(x963Representation: deviceKey),
+              let sig = try? P256.Signing.ECDSASignature(derRepresentation: signature)
+        else { return false }
+        return pub.isValidSignature(sig, for: payload)
     }
 }

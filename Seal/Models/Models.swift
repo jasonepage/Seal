@@ -13,6 +13,17 @@ struct RootIdentity: Codable, Identifiable, Hashable {
     let publicKey: Data                 // P-256, raw representation
     let tier: IdentityTier
     var displayName: String
+    /// Raw WebAuthn credential ID — needed to request assertions from this
+    /// identity's authenticator (friend ceremony). Public, not secret.
+    var rawCredentialID: Data?
+}
+
+/// The verifiable payload inside Friendship.attestation: enough to recompute
+/// the challenge commitment and re-verify the friend's signature at any time.
+struct FriendshipAttestation: Codable, Hashable {
+    let nonce: Data
+    let timestamp: Date
+    let assertion: WebAuthnAssertion
 }
 
 /// Hardware/passkey-signed certificate binding a device key to a root identity (SDS §2).

@@ -11,6 +11,7 @@ Group chat where friendships are forged in person. Your identity is rooted in a 
 ## Docs
 | Doc | Contents |
 |---|---|
+| [docs/VISION.md](docs/VISION.md) | Positioning: the wedge, the Square, retention loops, monetization, why it helps |
 | [docs/SRS.md](docs/SRS.md) | Requirements: identity tiers, ceremonies, groups, demo/review mode, risks |
 | [docs/SDS.md](docs/SDS.md) | Architecture: key hierarchy, crypto design, CloudKit data model, core flows, threat model |
 | [docs/UI.md](docs/UI.md) | "Vault Warmth" design language, screen specs, ceremony choreography |

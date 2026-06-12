@@ -33,12 +33,16 @@ final class CeremonyManager: NSObject {
         case cancelled
         case unexpectedCredential
         case keyUnreadable
+        case verificationFailed
+        case missingCredentialID
 
         var errorDescription: String? {
             switch self {
             case .cancelled: "The ceremony was cancelled. Tap to try again."
             case .unexpectedCredential: "That wasn't the response we expected. Tap to try again."
             case .keyUnreadable: "Couldn't read the key's response. Try holding it still against the top of your phone."
+            case .verificationFailed: "That key doesn't match this person's identity. The forge was NOT completed."
+            case .missingCredentialID: "This person registered before credential publishing — they need to update their identity."
             }
         }
     }
@@ -68,7 +72,8 @@ final class CeremonyManager: NSObject {
                 credentialIDHash: Data(SHA256.hash(data: registration.credentialID)).hexString,
                 publicKey: parsed.publicKey.rawRepresentation,
                 tier: tier,
-                displayName: displayName
+                displayName: displayName,
+                rawCredentialID: registration.credentialID
             )
 
             // 3. Create this device's Secure Enclave signing key.
@@ -92,7 +97,7 @@ final class CeremonyManager: NSObject {
             )
             let endorsement = DeviceEndorsement(
                 devicePublicKey: devicePub,
-                kemBundlePublicKeys: Data(),    // TODO: HybridKEM bundle (SDS §2)
+                kemBundlePublicKeys: identity.kemPublicKeyData ?? Data(),
                 assertion: try JSONEncoder().encode(stored),
                 createdAt: .now,
                 revokedAt: nil
@@ -116,10 +121,92 @@ final class CeremonyManager: NSObject {
 
     // MARK: - Friend forge & device add (next milestones)
 
-    /// Friend forge (U2): challenge commits to (our root, their claimed root,
-    /// timestamp); the friend taps THEIR key on THIS phone (SDS §5).
-    func forgeFriendship(claimedFriend: RootIdentity) async throws -> Friendship {
-        fatalError("unimplemented — next milestone")
+    /// Friend forge (U2): the friend taps THEIR key on THIS phone, signing a
+    /// challenge that commits to both identities + a fresh nonce (SDS §5).
+    /// We verify the signature against the friend's public key as fetched
+    /// from the directory — proof they control the identity they claim.
+    func forgeFriendship(myRoot: RootIdentity, friend: RootIdentity) async throws -> Friendship {
+        guard let friendCredentialID = friend.rawCredentialID else {
+            throw CeremonyError.missingCredentialID
+        }
+        phase = .searching
+        do {
+            let nonce = Self.randomChallenge()
+            let challenge = Self.friendChallenge(
+                myHash: myRoot.credentialIDHash,
+                theirHash: friend.credentialIDHash,
+                nonce: nonce
+            )
+            let credential = try await performRequests(
+                makeFriendAssertionRequests(friendCredentialID: friendCredentialID, challenge: challenge)
+            )
+            guard let assertion = credential as? ASAuthorizationPublicKeyCredentialAssertion else {
+                throw CeremonyError.unexpectedCredential
+            }
+            phase = .reading
+
+            let stored = WebAuthnAssertion(
+                credentialID: assertion.credentialID,
+                clientDataJSON: assertion.rawClientDataJSON,
+                authenticatorData: assertion.rawAuthenticatorData,
+                signature: assertion.signature
+            )
+
+            // Verify: right key (directory public key) over the right challenge.
+            let friendPublicKey = try P256.Signing.PublicKey(rawRepresentation: friend.publicKey)
+            guard stored.verify(with: friendPublicKey),
+                  Self.clientDataChallengeMatches(stored.clientDataJSON, expected: challenge) else {
+                throw CeremonyError.verificationFailed
+            }
+
+            let attestation = FriendshipAttestation(nonce: nonce, timestamp: .now, assertion: stored)
+            let friendship = Friendship(
+                friendRootID: friend.credentialIDHash,
+                attestation: try JSONEncoder().encode(attestation),
+                reverseAttestation: nil,    // their phone runs the mirror ceremony
+                forgedAt: .now
+            )
+            phase = .sealed
+            SealTheme.sealHaptic()
+            return friendship
+        } catch let error as ASAuthorizationError where error.code == .canceled {
+            phase = .failed(CeremonyError.cancelled.localizedDescription)
+            throw CeremonyError.cancelled
+        } catch {
+            phase = .failed((error as? LocalizedError)?.errorDescription ?? "Something went wrong. Tap to try again.")
+            throw error
+        }
+    }
+
+    /// Domain-separated commitment binding both identities + a fresh nonce.
+    static func friendChallenge(myHash: String, theirHash: String, nonce: Data) -> Data {
+        Data(SHA256.hash(data: Data("seal.friend.v1".utf8) + Data(myHash.utf8) + Data(theirHash.utf8) + nonce))
+    }
+
+    static func clientDataChallengeMatches(_ clientDataJSON: Data, expected: Data) -> Bool {
+        guard let obj = try? JSONSerialization.jsonObject(with: clientDataJSON) as? [String: Any],
+              let challenge = obj["challenge"] as? String else { return false }
+        return challenge == expected.base64URLEncodedString()
+    }
+
+    /// Both providers with the same challenge: a hardware key answers via
+    /// NFC/USB-C; a passkey friend answers via the nearby-device (hybrid) flow.
+    private func makeFriendAssertionRequests(friendCredentialID: Data, challenge: Data) -> [ASAuthorizationRequest] {
+        let securityKey = ASAuthorizationSecurityKeyPublicKeyCredentialProvider(
+            relyingPartyIdentifier: Self.relyingPartyID)
+        let skRequest = securityKey.createCredentialAssertionRequest(challenge: challenge)
+        skRequest.allowedCredentials = [
+            ASAuthorizationSecurityKeyPublicKeyCredentialDescriptor(
+                credentialID: friendCredentialID,
+                transports: ASAuthorizationSecurityKeyPublicKeyCredentialDescriptor.Transport.allSupported)
+        ]
+        let platform = ASAuthorizationPlatformPublicKeyCredentialProvider(
+            relyingPartyIdentifier: Self.relyingPartyID)
+        let pkRequest = platform.createCredentialAssertionRequest(challenge: challenge)
+        pkRequest.allowedCredentials = [
+            ASAuthorizationPlatformPublicKeyCredentialDescriptor(credentialID: friendCredentialID)
+        ]
+        return [skRequest, pkRequest]
     }
 
     /// Device add (U4): hardware-key assertion commits to the new device's key.
@@ -143,7 +230,9 @@ final class CeremonyManager: NSObject {
                 challenge: challenge, displayName: name, name: name, userID: userID)
             request.credentialParameters = [ASAuthorizationPublicKeyCredentialParameters(algorithm: .ES256)]
             request.residentKeyPreference = .discouraged
-            request.userVerificationPreference = .preferred
+            // .discouraged avoids iOS forcing PIN setup on PIN-less keys mid-ceremony.
+            // Revisit for Verified tier policy (key presence is still required).
+            request.userVerificationPreference = .discouraged
             request.attestationPreference = .direct   // SDS §6: request, don't enforce
             return request
         }
@@ -173,9 +262,13 @@ final class CeremonyManager: NSObject {
     }
 
     private func performRequest(_ request: ASAuthorizationRequest) async throws -> ASAuthorizationCredential {
+        try await performRequests([request])
+    }
+
+    private func performRequests(_ requests: [ASAuthorizationRequest]) async throws -> ASAuthorizationCredential {
         try await withCheckedThrowingContinuation { continuation in
             self.continuation = continuation
-            let controller = ASAuthorizationController(authorizationRequests: [request])
+            let controller = ASAuthorizationController(authorizationRequests: requests)
             controller.delegate = self
             controller.presentationContextProvider = self
             controller.performRequests()
@@ -213,4 +306,11 @@ extension CeremonyManager: ASAuthorizationControllerDelegate, ASAuthorizationCon
 
 extension Data {
     var hexString: String { map { String(format: "%02x", $0) }.joined() }
+
+    func base64URLEncodedString() -> String {
+        base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+    }
 }
