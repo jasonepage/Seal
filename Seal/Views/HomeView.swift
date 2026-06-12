@@ -9,6 +9,7 @@ struct HomeView: View {
     let sync: SyncEngine
     @Bindable var friendStore: FriendStore
     @Bindable var chatEngine: ChatEngine
+    @Bindable var appLock: AppLock
     let onReset: () -> Void
     @Environment(\.scenePhase) private var scenePhase
 
@@ -26,7 +27,7 @@ struct HomeView: View {
             }
             Tab("You", systemImage: "checkmark.seal.fill") {
                 ProfileView(myRoot: myRoot, identity: identity, sync: sync,
-                            ceremony: ceremony, onReset: onReset)
+                            ceremony: ceremony, appLock: appLock, onReset: onReset)
             }
         }
         .tint(SealTheme.brass)
@@ -45,6 +46,7 @@ struct HomeView: View {
                 await MainActor.run { UIApplication.shared.registerForRemoteNotifications() }
             }
             await sync.ensureMessageSubscription(for: myRoot.credentialIDHash)
+            await sync.ensureInviteSubscription(for: myRoot.credentialIDHash)
             await chatEngine.refreshAll(myRoot: myRoot, friendStore: friendStore)
         }
         .onReceive(NotificationCenter.default.publisher(for: AppDelegate.messageArrived)) { _ in

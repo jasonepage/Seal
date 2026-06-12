@@ -28,7 +28,8 @@ Types: Identity (publicKey, tier, displayName, credentialID, deviceEndorsements,
 ## Feature status vs SRS
 DONE: registration both tiers, directory, friend ceremony (QR + tap, fingerprint phrases "🦭 noon jade pebble"), E2EE text+photos (camera tab, encrypted CKAssets, key inside payload), groups + invites, disappearing messages (TTL inside ciphertext), push, transcript chain, epoch rotation/removal (admin = creator, UI in verification drawer), device revocation + device list UI, sign-in, forge log, app icon (brass wax seal), drawn vector seal mascot + colony bar (member count in chat header → taps into verification drawer).
 PARTIAL: FR-5/6 mutuality not enforced + friendships local-only; FR-11 (no video/reactions/replies, no 64 cap); no offline outbox.
-TODO: FR-3 backup keys, ML-KEM spike, demo mode + review video (FR-22/23/24, needed for App Store), key transparency gossip, FaceID app-lock, shared-zone migration (SDS §8).
+TODO: FR-3 backup keys, ML-KEM spike, review video (FR-24), FR-22 review-account demo gating, key transparency gossip, shared-zone migration (SDS §8), offline outbox.
+DONE 6/12 PM: demo mode (launch-arg), 1-key-1-identity excludedCredentials, group-invite push (ensureInviteSubscription), Face ID app lock (AppLock.swift — per-identity keychain flag, deviceOwnerAuthentication w/ passcode fallback, toggle in ProfileView, NSFaceIDUsageDescription added to pbxproj INFOPLIST_KEYs).
 
 ## Known issues / gotchas
 - PIN'd security keys: "wrong PIN" failures were from discoverable-credential creation (CTAP2 clientPIN over NFC); fixed by residentKey .discouraged. Root cause unconfirmed — wanted: USB-C test + Yubico Authenticator retry count.

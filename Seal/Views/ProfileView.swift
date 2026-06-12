@@ -6,6 +6,7 @@ struct ProfileView: View {
     @Bindable var identity: IdentityManager
     let sync: SyncEngine
     @Bindable var ceremony: CeremonyManager
+    @Bindable var appLock: AppLock
     let onReset: () -> Void
 
     @State private var confirmReset = false
@@ -41,6 +42,31 @@ struct ProfileView: View {
                     .padding(16)
                     .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
                     .padding(.horizontal, 24)
+
+                    if appLock.isAvailable {
+                        HStack {
+                            Image(systemName: "faceid")
+                                .foregroundStyle(SealTheme.brass)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("Require Face ID")
+                                    .font(.callout)
+                                    .foregroundStyle(.white.opacity(0.9))
+                                Text("Lock Seal when you leave the app")
+                                    .font(.caption2)
+                                    .foregroundStyle(.white.opacity(0.4))
+                            }
+                            Spacer()
+                            Toggle("", isOn: .init(
+                                get: { appLock.isEnabled },
+                                set: { value in Task { await appLock.setEnabled(value) } }
+                            ))
+                            .labelsHidden()
+                            .tint(SealTheme.brass)
+                        }
+                        .padding(16)
+                        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
+                        .padding(.horizontal, 24)
+                    }
 
                     if devices.count > 1 || devices.contains(where: { revokedKeys.contains($0.devicePublicKey) }) {
                         VStack(alignment: .leading, spacing: 10) {

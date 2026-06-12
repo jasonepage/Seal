@@ -236,6 +236,25 @@ final class SyncEngine {
         catch { status = .error("Push setup failed: \(error.localizedDescription)") }
     }
 
+    /// Same pattern for group invites: without this, an invite sits unseen
+    /// until the recipient happens to foreground the app. The push handler
+    /// path (messageArrived → refreshAll → checkInvites) already processes it.
+    func ensureInviteSubscription(for myHash: String) async {
+        let subID = "seal.invsub.\(myHash)"
+        if (try? await publicDB.subscription(for: subID)) != nil { return }
+        let subscription = CKQuerySubscription(
+            recordType: "GroupInvite",
+            predicate: NSPredicate(format: "recipient == %@", myHash),
+            subscriptionID: subID,
+            options: .firesOnRecordCreation)
+        let info = CKSubscription.NotificationInfo()
+        info.alertBody = "You've been invited to a new colony"
+        info.soundName = "default"
+        subscription.notificationInfo = info
+        do { _ = try await publicDB.save(subscription) }
+        catch { status = .error("Push setup failed: \(error.localizedDescription)") }
+    }
+
     // MARK: - Media (encrypted blobs as CKAssets)
 
     /// Store an already-encrypted media blob. The content key never comes
