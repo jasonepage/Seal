@@ -21,18 +21,31 @@ final class ChatEngine {
         let sentAt: Date
         var delivered: Bool             // round-tripped through CloudKit
         var expiresAt: Date?            // client-enforced (NFR-7: best-effort, disclosed)
+        var mediaRef: String?           // MediaAsset record name (encrypted blob)
+        var mediaKey: Data?             // content key — arrived inside E2EE payload
     }
 
-    /// What actually gets encrypted — TTL travels inside the sealed payload
-    /// so receivers honor it without the server ever seeing it.
+    /// What actually gets encrypted — TTL and the media content key travel
+    /// inside the sealed payload, invisible to the server.
     private struct MessagePayload: Codable {
         let text: String
         let ttl: TimeInterval?
+        var mediaRef: String?
+        var mediaKey: Data?
     }
 
     private struct ChainState: Codable {
         var chainKey: Data
         var index: UInt64
+        /// Transcript chain (SDS §2): hash of this sender's previous ciphertext.
+        /// Bound into the AAD and signature of the next message, so the server
+        /// can't substitute, drop, or reorder a sender's messages undetected.
+        var lastMessageHash: Data?
+    }
+
+    /// AAD v2 binds group, sender, index, AND the previous message hash.
+    private static func messageAAD(groupID: String, sender: String, index: UInt64, prevHash: Data?) -> Data {
+        Data("seal.msg.v2|\(groupID)|\(sender)|\(index)|\((prevHash ?? Data()).hexString)".utf8)
     }
 
     private(set) var chats: [Chat] = []
@@ -177,6 +190,28 @@ final class ChatEngine {
     // MARK: - Send
 
     func send(_ text: String, in chat: Chat, from myRoot: RootIdentity) async {
+        let ttl = chats.first(where: { $0.id == chat.id })?.ttl
+        await sendPayload(MessagePayload(text: text, ttl: ttl), in: chat, from: myRoot)
+    }
+
+    /// Encrypt a photo with a fresh content key, park the blob in CloudKit,
+    /// and send a message carrying the key inside the E2EE payload.
+    func sendPhoto(_ jpeg: Data, in chat: Chat, from myRoot: RootIdentity) async {
+        do {
+            let contentKey = SymmetricKey(size: .bits256)
+            let sealed = try AES.GCM.seal(jpeg, using: contentKey).combined!
+            let mediaRef = try await sync.saveMediaAsset(sealed)
+            let ttl = chats.first(where: { $0.id == chat.id })?.ttl
+            await sendPayload(MessagePayload(
+                text: "", ttl: ttl, mediaRef: mediaRef,
+                mediaKey: contentKey.withUnsafeBytes { Data($0) }
+            ), in: chat, from: myRoot)
+        } catch {
+            lastError = "Photo failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func sendPayload(_ payloadValue: MessagePayload, in chat: Chat, from myRoot: RootIdentity) async {
         lastError = nil
         guard let deviceKey = identity.deviceKey,
               let devicePub = identity.deviceKey?.publicKey.x963Representation else {
@@ -208,11 +243,10 @@ final class ChatEngine {
             // 2. Ratchet: derive this message's key, advance the chain.
             let (messageKey, index) = Self.ratchet(&state)
 
-            // 3. Encrypt. AAD binds group, sender, and index (SDS §2).
-            //    TTL rides inside the ciphertext — invisible to the server.
-            let currentTTL = chats.first(where: { $0.id == chat.id })?.ttl
-            let payload = try JSONEncoder().encode(MessagePayload(text: text, ttl: currentTTL))
-            let aad = Data("seal.msg.v1|\(groupID)|\(myHash)|\(index)".utf8)
+            // 3. Encrypt. AAD binds group, sender, index, and prev-message hash.
+            let payload = try JSONEncoder().encode(payloadValue)
+            let aad = Self.messageAAD(groupID: groupID, sender: myHash,
+                                      index: index, prevHash: state.lastMessageHash)
             let sealed = try AES.GCM.seal(payload, using: messageKey, authenticating: aad)
             let ciphertext = sealed.combined!
 
@@ -228,11 +262,15 @@ final class ChatEngine {
                                sentAt: .now),
                 recipients: chat.memberHashes.filter { $0 != myHash })
 
+            // Advance the transcript chain.
+            state.lastMessageHash = Data(SHA256.hash(data: ciphertext))
             chains["send.\(chat.id)"] = state
             var local = messagesByChat[chat.id] ?? []
-            local.append(ChatMessage(id: UUID(), senderHash: myHash, text: text,
+            local.append(ChatMessage(id: UUID(), senderHash: myHash, text: payloadValue.text,
                                      sentAt: .now, delivered: true,
-                                     expiresAt: currentTTL.map { Date.now.addingTimeInterval($0) }))
+                                     expiresAt: payloadValue.ttl.map { Date.now.addingTimeInterval($0) },
+                                     mediaRef: payloadValue.mediaRef,
+                                     mediaKey: payloadValue.mediaKey))
             messagesByChat[chat.id] = local
             persist()
         } catch {
@@ -264,7 +302,11 @@ final class ChatEngine {
                 while let wire = try await sync.fetchMessage(
                     groupID: groupID, senderHash: sender, chainIndex: chain.index) {
 
-                    let aad = Data("seal.msg.v1|\(groupID)|\(sender)|\(chain.index)".utf8)
+                    // Our own tracked prev-hash goes into the expected AAD —
+                    // if the server swapped any earlier message, this (and the
+                    // signature) stop matching and the transcript visibly breaks.
+                    let aad = Self.messageAAD(groupID: groupID, sender: sender,
+                                              index: chain.index, prevHash: chain.lastMessageHash)
 
                     // Full verification chain before decryption is even attempted.
                     guard let (root, endorsements) = try await directoryEntry(for: sender),
@@ -289,8 +331,11 @@ final class ChatEngine {
                         id: UUID(), senderHash: sender,
                         text: payload.text,
                         sentAt: wire.sentAt, delivered: true,
-                        expiresAt: payload.ttl.map { wire.sentAt.addingTimeInterval($0) }))
+                        expiresAt: payload.ttl.map { wire.sentAt.addingTimeInterval($0) },
+                        mediaRef: payload.mediaRef,
+                        mediaKey: payload.mediaKey))
                     messagesByChat[chat.id] = local
+                    chain.lastMessageHash = Data(SHA256.hash(data: wire.ciphertext))
                     _ = idx
                 }
                 chains["recv.\(chat.id).\(sender)"] = chain
@@ -314,6 +359,22 @@ final class ChatEngine {
             }
         }
         if changed { persist() }
+    }
+
+    // MARK: - Media decryption (in-memory cache)
+
+    private var imageCache: [String: Data] = [:]
+
+    /// Fetch + decrypt a message's photo. Returns decrypted JPEG data.
+    func mediaData(for message: ChatMessage) async -> Data? {
+        guard let ref = message.mediaRef, let keyData = message.mediaKey else { return nil }
+        if let cached = imageCache[ref] { return cached }
+        guard let encrypted = try? await sync.fetchMediaAsset(ref),
+              let box = try? AES.GCM.SealedBox(combined: encrypted),
+              let plain = try? AES.GCM.open(box, using: SymmetricKey(data: keyData))
+        else { return nil }
+        imageCache[ref] = plain
+        return plain
     }
 
     // MARK: - Helpers

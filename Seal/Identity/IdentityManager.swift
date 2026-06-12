@@ -103,7 +103,10 @@ final class IdentityManager {
             guard e.revokedAt == nil,
                   let assertion = try? JSONDecoder().decode(WebAuthnAssertion.self, from: e.assertion),
                   assertion.verify(with: rootPub) else { return false }
-            let commitment = Data(SHA256.hash(data: Data("seal.endorse.v1".utf8) + e.devicePublicKey))
+            // v2 commitment binds signing AND KEM keys — a directory that
+            // swaps either one fails verification.
+            let commitment = Data(SHA256.hash(data:
+                Data("seal.endorse.v2".utf8) + e.devicePublicKey + e.kemBundlePublicKeys))
             return CeremonyManager.clientDataChallengeMatches(assertion.clientDataJSON, expected: commitment)
         }
     }

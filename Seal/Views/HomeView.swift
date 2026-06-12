@@ -17,6 +17,9 @@ struct HomeView: View {
             Tab("Chats", systemImage: "bubble.left.and.bubble.right.fill") {
                 ChatsView(myRoot: myRoot, chatEngine: chatEngine, friendStore: friendStore)
             }
+            Tab("Camera", systemImage: "camera.fill") {
+                CameraTab(myRoot: myRoot, chatEngine: chatEngine, friendStore: friendStore)
+            }
             Tab("Circle", systemImage: "person.2.fill") {
                 FriendsView(myRoot: myRoot, ceremony: ceremony, sync: sync,
                             friendStore: friendStore, chatEngine: chatEngine)

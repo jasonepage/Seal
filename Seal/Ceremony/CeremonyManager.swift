@@ -80,10 +80,14 @@ final class CeremonyManager: NSObject {
             let deviceKey = try identity.createDeviceKey()
             let devicePub = deviceKey.publicKey.x963Representation
 
-            // 4. Endorsement: root credential signs a challenge that commits
-            //    to the device public key — "this root vouches for this device."
+            // 4. Endorsement: root credential signs a challenge committing to
+            //    BOTH the signing key and the KEM key — binding authentication
+            //    and encryption together. Committing to only the signing key
+            //    would let a tampered directory swap the KEM key and MITM
+            //    every sender-key envelope.
             phase = .endorsing
-            let commitment = Data(SHA256.hash(data: Data("seal.endorse.v1".utf8) + devicePub))
+            let kemPub = identity.kemPublicKeyData ?? Data()
+            let commitment = Data(SHA256.hash(data: Data("seal.endorse.v2".utf8) + devicePub + kemPub))
             let assertion = try await performRequest(
                 makeAssertionRequest(tier: tier, challenge: commitment, allowedCredentialID: registration.credentialID)
             ) as? ASAuthorizationPublicKeyCredentialAssertion

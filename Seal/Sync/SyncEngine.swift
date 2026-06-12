@@ -126,7 +126,11 @@ final class SyncEngine {
         record["devicePub"] = message.senderDevicePublicKey
         record["signature"] = message.signature
         record["sentAt"] = message.sentAt
-        record["recipients"] = recipients   // drives the push subscription
+        // Drives the push subscription. CloudKit can't type an empty list
+        // (Note to self has no recipients), so only set it when non-empty.
+        if !recipients.isEmpty {
+            record["recipients"] = recipients
+        }
         try await publicDB.save(record)
     }
 
@@ -148,6 +152,31 @@ final class SyncEngine {
         subscription.notificationInfo = info
         do { _ = try await publicDB.save(subscription) }
         catch { status = .error("Push setup failed: \(error.localizedDescription)") }
+    }
+
+    // MARK: - Media (encrypted blobs as CKAssets)
+
+    /// Store an already-encrypted media blob. The content key never comes
+    /// near this function — it travels inside the E2EE message payload.
+    func saveMediaAsset(_ encrypted: Data) async throws -> String {
+        let name = "media.\(UUID().uuidString)"
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(name)
+        try encrypted.write(to: tempURL)
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+        let record = CKRecord(recordType: "MediaAsset", recordID: CKRecord.ID(recordName: name))
+        record["blob"] = CKAsset(fileURL: tempURL)
+        try await publicDB.save(record)
+        return name
+    }
+
+    func fetchMediaAsset(_ name: String) async throws -> Data? {
+        do {
+            let record = try await publicDB.record(for: CKRecord.ID(recordName: name))
+            guard let asset = record["blob"] as? CKAsset, let url = asset.fileURL else { return nil }
+            return try Data(contentsOf: url)
+        } catch let error as CKError where error.code == .unknownItem {
+            return nil
+        }
     }
 
     // MARK: - Group invites

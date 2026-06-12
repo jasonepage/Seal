@@ -119,13 +119,17 @@ struct ChatView: View {
         HStack {
             if mine { Spacer(minLength: 48) }
             VStack(alignment: .trailing, spacing: 2) {
-                Text(message.text)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 9)
-                    .background(
-                        mine ? SealTheme.brass.opacity(0.25) : Color.white.opacity(0.08),
-                        in: RoundedRectangle(cornerRadius: 18))
+                if message.mediaRef != nil {
+                    MediaBubble(message: message, engine: engine)
+                } else {
+                    Text(message.text)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 9)
+                        .background(
+                            mine ? SealTheme.brass.opacity(0.25) : Color.white.opacity(0.08),
+                            in: RoundedRectangle(cornerRadius: 18))
+                }
                 HStack(spacing: 4) {
                     if message.expiresAt != nil {
                         Image(systemName: "hourglass")
@@ -140,6 +144,58 @@ struct ChatView: View {
                 }
             }
             if !mine { Spacer(minLength: 48) }
+        }
+    }
+}
+
+/// Encrypted photo: fetches the blob, decrypts with the key that arrived
+/// inside the E2EE payload, shimmers while working.
+struct MediaBubble: View {
+    let message: ChatEngine.ChatMessage
+    @Bindable var engine: ChatEngine
+    @State private var imageData: Data?
+    @State private var failed = false
+    @State private var fullscreen = false
+
+    var body: some View {
+        Group {
+            if let imageData, let uiImage = UIImage(data: imageData) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: 240, maxHeight: 320)
+                    .clipShape(RoundedRectangle(cornerRadius: 18))
+                    .onTapGesture { fullscreen = true }
+                    .fullScreenCover(isPresented: $fullscreen) {
+                        ZStack {
+                            Color.black.ignoresSafeArea()
+                            Image(uiImage: uiImage).resizable().scaledToFit()
+                        }
+                        .onTapGesture { fullscreen = false }
+                    }
+            } else if failed {
+                Label("Photo unavailable", systemImage: "photo.badge.exclamationmark")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.5))
+                    .padding(12)
+                    .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 18))
+            } else {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 18)
+                        .fill(.white.opacity(0.06))
+                        .frame(width: 240, height: 240)
+                    VStack(spacing: 6) {
+                        ProgressView().tint(SealTheme.brass)
+                        Text("Unsealing…")
+                            .font(.caption2)
+                            .foregroundStyle(SealTheme.brass.opacity(0.8))
+                    }
+                }
+            }
+        }
+        .task {
+            imageData = await engine.mediaData(for: message)
+            if imageData == nil { failed = true }
         }
     }
 }

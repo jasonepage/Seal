@@ -39,6 +39,16 @@ struct FriendsView: View {
             }
             .navigationTitle("Circle")
             .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink {
+                        ForgeLogView(myRoot: myRoot, friendStore: friendStore)
+                    } label: {
+                        Image(systemName: "book.closed.fill")
+                            .foregroundStyle(SealTheme.brass)
+                    }
+                }
+            }
         }
         .preferredColorScheme(.dark)
     }

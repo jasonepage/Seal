@@ -73,8 +73,10 @@ struct ChatsView: View {
                 Text(chat.name)
                     .foregroundStyle(.white)
                     .font(.system(.body, design: .rounded, weight: .medium))
-                Text(last.map { $0.senderHash == myRoot.credentialIDHash ? "You: \($0.text)" : $0.text }
-                     ?? "Sealed and ready")
+                Text(last.map { m in
+                    let body = m.mediaRef != nil ? "📷 Photo" : m.text
+                    return m.senderHash == myRoot.credentialIDHash ? "You: \(body)" : body
+                } ?? "Sealed and ready")
                     .font(.caption)
                     .foregroundStyle(.white.opacity(0.45))
                     .lineLimit(1)
