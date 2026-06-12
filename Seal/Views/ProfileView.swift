@@ -9,11 +9,15 @@ struct ProfileView: View {
     let onReset: () -> Void
 
     @State private var confirmReset = false
+    @State private var devices: [DeviceEndorsement] = []
+    @State private var revokedKeys: Set<Data> = []
+    @State private var revoking: DeviceEndorsement?
 
     var body: some View {
         NavigationStack {
             ZStack {
                 SealTheme.ink.ignoresSafeArea()
+                ScrollView {
                 VStack(spacing: 20) {
                     IdentityRing(displayName: myRoot.displayName, tier: myRoot.tier, size: 96)
                         .padding(.top, 32)
@@ -38,30 +42,104 @@ struct ProfileView: View {
                     .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
                     .padding(.horizontal, 24)
 
-                    Spacer()
+                    if devices.count > 1 || devices.contains(where: { revokedKeys.contains($0.devicePublicKey) }) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Devices")
+                                .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                                .foregroundStyle(.white.opacity(0.6))
+                            ForEach(devices, id: \.devicePublicKey) { device in
+                                deviceRow(device)
+                            }
+                        }
+                        .padding(16)
+                        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
+                        .padding(.horizontal, 24)
+                    }
 
                     Button(role: .destructive) { confirmReset = true } label: {
-                        Text("Reset identity")
+                        Text("Sign out")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
                     .tint(.orange)
                     .padding(.horizontal, 24)
-                    .padding(.bottom, 16)
+                    .padding(.top, 16)
+
+                    Text("Signing out deletes this device's keys, chats, and friends. Your identity stays in the directory — sign back in with your key or Face ID.")
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.4))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
+                        .padding(.bottom, 24)
+                }
                 }
             }
             .navigationTitle("You")
             .toolbarColorScheme(.dark, for: .navigationBar)
             .confirmationDialog(
-                "This deletes your identity, keys, friends, and chats from this device. Nothing can recover it.",
+                "This deletes this device's keys, chats, and friends — they don't come back. Your identity survives; sign in again with your key or Face ID.",
                 isPresented: $confirmReset, titleVisibility: .visible
             ) {
-                Button("Delete everything", role: .destructive) {
+                Button("Sign out and delete local data", role: .destructive) {
                     onReset()
                 }
             }
+            .confirmationDialog(
+                "Revoke this device? It can never sign or decrypt again. Your key signs the revocation — one more tap.",
+                isPresented: .init(get: { revoking != nil }, set: { if !$0 { revoking = nil } }),
+                titleVisibility: .visible
+            ) {
+                Button("Revoke device", role: .destructive) {
+                    if let device = revoking {
+                        Task {
+                            try? await ceremony.revokeDevice(
+                                devicePublicKey: device.devicePublicKey,
+                                myRoot: myRoot, directory: sync)
+                            await loadDevices()
+                        }
+                    }
+                    revoking = nil
+                }
+            }
+            .task { await loadDevices() }
         }
         .preferredColorScheme(.dark)
+    }
+
+    private func deviceRow(_ device: DeviceEndorsement) -> some View {
+        let isThisDevice = device.devicePublicKey == identity.deviceEndorsement?.devicePublicKey
+        let isRevoked = revokedKeys.contains(device.devicePublicKey)
+        return HStack {
+            Image(systemName: isRevoked ? "iphone.slash" : "iphone")
+                .foregroundStyle(isRevoked ? .orange.opacity(0.7) : SealTheme.silver)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(isThisDevice ? "This device" : "Device \(device.devicePublicKey.hexString.prefix(8))")
+                    .font(.callout)
+                    .foregroundStyle(.white.opacity(isRevoked ? 0.4 : 0.9))
+                    .strikethrough(isRevoked)
+                Text(device.createdAt, format: .dateTime.month(.abbreviated).day().year())
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.35))
+            }
+            Spacer()
+            if isRevoked {
+                Text("Revoked")
+                    .font(.caption2)
+                    .foregroundStyle(.orange.opacity(0.7))
+            } else if !isThisDevice {
+                Button { revoking = device } label: {
+                    Image(systemName: "minus.circle")
+                        .foregroundStyle(.orange.opacity(0.8))
+                }
+            }
+        }
+    }
+
+    private func loadDevices() async {
+        guard let (endorsements, revocations) = try? await sync.fetchDeviceList(
+            credentialIDHash: myRoot.credentialIDHash) else { return }
+        devices = endorsements
+        revokedKeys = IdentityManager.revokedDevicePublicKeys(root: myRoot, revocations: revocations)
     }
 
     private var directoryStatus: String {

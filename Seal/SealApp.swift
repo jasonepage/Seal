@@ -34,6 +34,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 struct SealApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
+    init() {
+        // FR-22: must run before ContentView creates the stores.
+        DemoFixtures.prepare()
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()

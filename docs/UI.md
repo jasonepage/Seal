@@ -12,6 +12,12 @@ The tension to resolve: hardware-key security reads as cold and corporate; Snapc
 - **Motion:** physical metaphors only. Keys *click* into place (haptic `rigid`), endorsements *stamp* (scale-down + heavy haptic), new friendships *forge* (two rings fuse with a brass glow). 120 Hz spring animations, no fades for trust events — security actions deserve mass.
 - **Sound + haptics:** the NFC tap success is the signature moment: triple haptic pulse + a short brass chime. It should feel like a wax seal.
 
+### 1.1 The Seal (character)
+
+The app has a mascot: a seal 🦭. The pun carries the brand's dual nature — the *animal* is the warmth, the *wax seal* is the trust. Strict separation rule: the mascot lives only on **social surfaces** (empty states, onboarding coaching, celebrations, group counts); it never appears on **security surfaces** (verification drawer, key management, revocation, ceremony confirmation), which stay machined and serious. Voice: dry, brief, a little proud of you ("Seals make friends in person. So do you.").
+
+**Colonies:** a group of seals is called a colony, and so is a Seal group chat. Member visibility is ambient: every chat header shows the colony — overlapping identity rings plus "🦭 n" — and tapping it opens the verification drawer, so the playful surface is literally the doorway to the serious one. Group rows in the chat list carry a 🦭 count badge.
+
 ## 2. Information Architecture
 
 ```

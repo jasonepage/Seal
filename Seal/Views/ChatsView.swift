@@ -12,16 +12,9 @@ struct ChatsView: View {
             ZStack {
                 SealTheme.ink.ignoresSafeArea()
                 if chatEngine.chats.isEmpty {
-                    VStack(spacing: 12) {
-                        Image(systemName: "seal")
-                            .font(.system(size: 44))
-                            .foregroundStyle(.white.opacity(0.25))
-                        Text("No sealed chats yet.")
-                            .foregroundStyle(.white.opacity(0.5))
-                        Text("Forge a friend in Circle, then tap them to chat.")
-                            .font(.caption)
-                            .foregroundStyle(.white.opacity(0.35))
-                    }
+                    SealMascot(size: 64,
+                               line: "No colonies yet.",
+                               sub: "Forge a friend in Circle,\nthen haul out here together.")
                 } else {
                     List {
                         ForEach(chatEngine.chats) { chat in
@@ -70,9 +63,23 @@ struct ChatsView: View {
         return HStack(spacing: 12) {
             IdentityRing(displayName: chat.name, tier: tier, size: 44)
             VStack(alignment: .leading, spacing: 2) {
-                Text(chat.name)
-                    .foregroundStyle(.white)
-                    .font(.system(.body, design: .rounded, weight: .medium))
+                HStack(spacing: 6) {
+                    Text(chat.name)
+                        .foregroundStyle(.white)
+                        .font(.system(.body, design: .rounded, weight: .medium))
+                    if chat.memberHashes.count > 2 {
+                        HStack(spacing: 3) {
+                            SealFigure(detailed: false, tint: .white.opacity(0.5))
+                                .frame(height: 9)
+                            Text("\(chat.memberHashes.count)")
+                                .font(.system(.caption2, design: .rounded, weight: .semibold))
+                                .foregroundStyle(.white.opacity(0.5))
+                        }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.white.opacity(0.08), in: Capsule())
+                    }
+                }
                 Text(last.map { m in
                     let body = m.mediaRef != nil ? "📷 Photo" : m.text
                     return m.senderHash == myRoot.credentialIDHash ? "You: \(body)" : body

@@ -12,6 +12,10 @@ final class ChatEngine {
         var name: String
         var memberHashes: [String]      // root credentialIDHashes, including me
         var ttl: TimeInterval?          // disappearing messages (FR-12), nil = keep
+        var epoch: UInt64?              // key epoch; bumps on removal (FR-13)
+        var creatorHash: String?        // group admin (FR-9); nil for 1:1
+
+        var currentEpoch: UInt64 { epoch ?? 0 }
     }
 
     struct ChatMessage: Codable, Identifiable, Hashable {
@@ -43,9 +47,13 @@ final class ChatEngine {
         var lastMessageHash: Data?
     }
 
-    /// AAD v2 binds group, sender, index, AND the previous message hash.
-    private static func messageAAD(groupID: String, sender: String, index: UInt64, prevHash: Data?) -> Data {
-        Data("seal.msg.v2|\(groupID)|\(sender)|\(index)|\((prevHash ?? Data()).hexString)".utf8)
+    /// AAD binds group, epoch, sender, index, AND the previous message hash.
+    /// Epoch 0 keeps the v2 (no-epoch) format for compatibility.
+    private static func messageAAD(groupID: String, epoch: UInt64, sender: String, index: UInt64, prevHash: Data?) -> Data {
+        let prev = (prevHash ?? Data()).hexString
+        return epoch == 0
+            ? Data("seal.msg.v2|\(groupID)|\(sender)|\(index)|\(prev)".utf8)
+            : Data("seal.msg.v3|\(groupID)|\(epoch)|\(sender)|\(index)|\(prev)".utf8)
     }
 
     private(set) var chats: [Chat] = []
@@ -112,6 +120,43 @@ final class ChatEngine {
         let senderHash: String
         let senderDevicePub: Data
         let signature: Data             // device-key signature over chatData
+        let kind: String?               // nil = invite, "update" = membership change
+    }
+
+    /// Remove a member (creator only, FR-13). Bumps the epoch — every sender's
+    /// next message starts a fresh chain wrapped only to remaining members,
+    /// so the removed member cannot read anything after this point.
+    func removeMember(_ memberHash: String, from chat: Chat, myRoot: RootIdentity) async {
+        guard chat.creatorHash == myRoot.credentialIDHash,
+              memberHash != myRoot.credentialIDHash,
+              let idx = chats.firstIndex(where: { $0.id == chat.id }),
+              let deviceKey = identity.deviceKey,
+              let devicePub = identity.deviceKey?.publicKey.x963Representation else { return }
+
+        let previousMembers = chats[idx].memberHashes
+        var updated = chats[idx]
+        updated.memberHashes.removeAll { $0 == memberHash }
+        updated.epoch = updated.currentEpoch + 1
+        chats[idx] = updated
+        persist()
+
+        do {
+            let chatData = try JSONEncoder().encode(updated)
+            let signature = try deviceKey.signature(for: chatData)
+            let update = GroupInvite(chatData: chatData,
+                                     senderHash: myRoot.credentialIDHash,
+                                     senderDevicePub: devicePub,
+                                     signature: signature.derRepresentation,
+                                     kind: "update")
+            let payload = try JSONEncoder().encode(update)
+            // Everyone who was a member learns of the change — including the
+            // removed member, whose client drops the chat.
+            for member in previousMembers where member != myRoot.credentialIDHash {
+                try? await sync.saveGroupInvite(recipientHash: member, payload: payload)
+            }
+        } catch {
+            lastError = "Rotation notice failed: \(error.localizedDescription)"
+        }
     }
 
     func createGroup(name: String, friendHashes: [String], myRoot: RootIdentity) async -> Chat? {
@@ -120,7 +165,8 @@ final class ChatEngine {
             lastError = "No device key — re-register."; return nil
         }
         let chat = Chat(id: UUID(), name: name,
-                        memberHashes: [myRoot.credentialIDHash] + friendHashes, ttl: nil)
+                        memberHashes: [myRoot.credentialIDHash] + friendHashes, ttl: nil,
+                        epoch: 0, creatorHash: myRoot.credentialIDHash)
         chats.append(chat)
         persist()
         do {
@@ -129,7 +175,8 @@ final class ChatEngine {
             let invite = GroupInvite(chatData: chatData,
                                      senderHash: myRoot.credentialIDHash,
                                      senderDevicePub: devicePub,
-                                     signature: signature.derRepresentation)
+                                     signature: signature.derRepresentation,
+                                     kind: nil)
             let payload = try JSONEncoder().encode(invite)
             for friend in friendHashes {
                 try await sync.saveGroupInvite(recipientHash: friend, payload: payload)
@@ -145,22 +192,41 @@ final class ChatEngine {
     func checkInvites(myRoot: RootIdentity, friendStore: FriendStore) async {
         guard let payloads = try? await sync.fetchGroupInvites(
             recipientHash: myRoot.credentialIDHash) else { return }
-        var added = false
+        var changed = false
         for payload in payloads {
             guard let invite = try? JSONDecoder().decode(GroupInvite.self, from: payload),
                   let chat = try? JSONDecoder().decode(Chat.self, from: invite.chatData),
-                  !chats.contains(where: { $0.id == chat.id }),
-                  chat.memberHashes.contains(myRoot.credentialIDHash),
-                  friendStore.isFriend(invite.senderHash),
                   let (root, endorsements) = try? await directoryEntry(for: invite.senderHash),
                   identity.verify(signature: invite.signature, over: invite.chatData,
                                   deviceKey: invite.senderDevicePub,
                                   claimedRoot: root, endorsements: endorsements)
             else { continue }
-            chats.append(chat)
-            added = true
+
+            if let existingIdx = chats.firstIndex(where: { $0.id == chat.id }) {
+                // Membership update: only the creator may issue it, and only
+                // forward in epoch (no replaying old membership).
+                guard invite.kind == "update",
+                      invite.senderHash == (chats[existingIdx].creatorHash ?? ""),
+                      chat.currentEpoch > chats[existingIdx].currentEpoch
+                else { continue }
+                if chat.memberHashes.contains(myRoot.credentialIDHash) {
+                    chats[existingIdx] = chat
+                } else {
+                    // That's us removed — drop the chat and its messages.
+                    messagesByChat[chat.id] = nil
+                    chats.remove(at: existingIdx)
+                }
+                changed = true
+            } else {
+                guard invite.kind == nil,
+                      chat.memberHashes.contains(myRoot.credentialIDHash),
+                      friendStore.isFriend(invite.senderHash)
+                else { continue }
+                chats.append(chat)
+                changed = true
+            }
         }
-        if added { persist() }
+        if changed { persist() }
     }
 
     /// Full sync pass: surface 1:1 chats for every friend, accept invites,
@@ -197,6 +263,15 @@ final class ChatEngine {
     /// Encrypt a photo with a fresh content key, park the blob in CloudKit,
     /// and send a message carrying the key inside the E2EE payload.
     func sendPhoto(_ jpeg: Data, in chat: Chat, from myRoot: RootIdentity) async {
+        // Demo mode: park the photo in the in-memory cache, skip CloudKit.
+        if DemoFixtures.isActive {
+            let ref = "demo.media.\(UUID().uuidString)"
+            imageCache[ref] = jpeg
+            let ttl = chats.first(where: { $0.id == chat.id })?.ttl
+            await sendPayload(MessagePayload(text: "", ttl: ttl, mediaRef: ref,
+                                             mediaKey: Data(count: 32)), in: chat, from: myRoot)
+            return
+        }
         do {
             let contentKey = SymmetricKey(size: .bits256)
             let sealed = try AES.GCM.seal(jpeg, using: contentKey).combined!
@@ -213,27 +288,46 @@ final class ChatEngine {
 
     private func sendPayload(_ payloadValue: MessagePayload, in chat: Chat, from myRoot: RootIdentity) async {
         lastError = nil
+        // FR-23: demo identities cannot message real users — demo sends are
+        // appended locally and never leave the device.
+        if DemoFixtures.isActive {
+            var local = messagesByChat[chat.id] ?? []
+            local.append(ChatMessage(id: UUID(), senderHash: myRoot.credentialIDHash,
+                                     text: payloadValue.text, sentAt: .now, delivered: true,
+                                     expiresAt: payloadValue.ttl.map { Date.now.addingTimeInterval($0) },
+                                     mediaRef: payloadValue.mediaRef,
+                                     mediaKey: payloadValue.mediaKey))
+            messagesByChat[chat.id] = local
+            persist()
+            return
+        }
         guard let deviceKey = identity.deviceKey,
               let devicePub = identity.deviceKey?.publicKey.x963Representation else {
             lastError = "No device key — re-register."; return
         }
         let myHash = myRoot.credentialIDHash
         let groupID = chat.id.uuidString
+        // Always send in the chat's CURRENT epoch (post-removal, that's a
+        // fresh chain the removed member never gets an envelope for).
+        let liveChat = chats.first(where: { $0.id == chat.id }) ?? chat
+        let epoch = liveChat.currentEpoch
         do {
-            // 1. Sending chain: create + distribute on first message.
-            var chain = chains["send.\(chat.id)"]
+            // 1. Sending chain for this epoch: create + distribute on first use.
+            var chain = chains["send.\(chat.id).e\(epoch)"]
             if chain == nil {
                 let fresh = ChainState(chainKey: Self.randomBytes(32), index: 0)
-                for member in chat.memberHashes where member != myHash {
+                for member in liveChat.memberHashes where member != myHash {
+                    // .last = most recently endorsed device (after a sign-in
+                    // on a new phone, that's the active one).
                     guard let (_, endorsements) = try await directoryEntry(for: member),
-                          let recipientKEM = endorsements.first?.kemBundlePublicKeys,
+                          let recipientKEM = endorsements.last?.kemBundlePublicKeys,
                           !recipientKEM.isEmpty else {
                         lastError = "A member's identity has no message keys — they need to re-register."
                         return
                     }
                     let envelope = try HybridKEM.wrap(fresh.chainKey, to: recipientKEM)
                     try await sync.saveKeyEnvelope(
-                        groupID: groupID, senderHash: myHash,
+                        groupID: groupID, epoch: epoch, senderHash: myHash,
                         recipientHash: member, envelope: envelope)
                 }
                 chain = fresh
@@ -243,9 +337,9 @@ final class ChatEngine {
             // 2. Ratchet: derive this message's key, advance the chain.
             let (messageKey, index) = Self.ratchet(&state)
 
-            // 3. Encrypt. AAD binds group, sender, index, and prev-message hash.
+            // 3. Encrypt. AAD binds group, epoch, sender, index, prev-hash.
             let payload = try JSONEncoder().encode(payloadValue)
-            let aad = Self.messageAAD(groupID: groupID, sender: myHash,
+            let aad = Self.messageAAD(groupID: groupID, epoch: epoch, sender: myHash,
                                       index: index, prevHash: state.lastMessageHash)
             let sealed = try AES.GCM.seal(payload, using: messageKey, authenticating: aad)
             let ciphertext = sealed.combined!
@@ -255,16 +349,16 @@ final class ChatEngine {
 
             // 5. Ship it.
             try await sync.saveMessage(
-                groupID: groupID, senderHash: myHash, chainIndex: index,
+                groupID: groupID, epoch: epoch, senderHash: myHash, chainIndex: index,
                 message: .init(ciphertext: ciphertext,
                                senderDevicePublicKey: devicePub,
                                signature: signature.derRepresentation,
                                sentAt: .now),
-                recipients: chat.memberHashes.filter { $0 != myHash })
+                recipients: liveChat.memberHashes.filter { $0 != myHash })
 
             // Advance the transcript chain.
             state.lastMessageHash = Data(SHA256.hash(data: ciphertext))
-            chains["send.\(chat.id)"] = state
+            chains["send.\(chat.id).e\(epoch)"] = state
             var local = messagesByChat[chat.id] ?? []
             local.append(ChatMessage(id: UUID(), senderHash: myHash, text: payloadValue.text,
                                      sentAt: .now, delivered: true,
@@ -282,17 +376,20 @@ final class ChatEngine {
 
     /// Pull new messages from every other member, in chain order.
     func refresh(_ chat: Chat, myRoot: RootIdentity) async {
+        if DemoFixtures.isActive { purgeExpired(); return }   // fully local (FR-22)
         let myHash = myRoot.credentialIDHash
         let groupID = chat.id.uuidString
-        for sender in chat.memberHashes where sender != myHash {
+        let liveChat = chats.first(where: { $0.id == chat.id }) ?? chat
+        let epoch = liveChat.currentEpoch
+        for sender in liveChat.memberHashes where sender != myHash {
             do {
-                // Receiving chain: unwrap their envelope once.
-                var state = chains["recv.\(chat.id).\(sender)"]
+                // Receiving chain for this epoch: unwrap their envelope once.
+                var state = chains["recv.\(chat.id).\(sender).e\(epoch)"]
                 if state == nil {
                     guard let kemKey = identity.kemPrivateKey,
                           let envelope = try await sync.fetchKeyEnvelope(
-                            groupID: groupID, senderHash: sender, recipientHash: myHash)
-                    else { continue }   // they haven't sent anything yet
+                            groupID: groupID, epoch: epoch, senderHash: sender, recipientHash: myHash)
+                    else { continue }   // they haven't sent in this epoch yet
                     let chainKey = try HybridKEM.unwrap(envelope, with: kemKey)
                     state = ChainState(chainKey: chainKey, index: 0)
                 }
@@ -300,12 +397,12 @@ final class ChatEngine {
 
                 // Fetch next expected index until there are no more.
                 while let wire = try await sync.fetchMessage(
-                    groupID: groupID, senderHash: sender, chainIndex: chain.index) {
+                    groupID: groupID, epoch: epoch, senderHash: sender, chainIndex: chain.index) {
 
                     // Our own tracked prev-hash goes into the expected AAD —
                     // if the server swapped any earlier message, this (and the
                     // signature) stop matching and the transcript visibly breaks.
-                    let aad = Self.messageAAD(groupID: groupID, sender: sender,
+                    let aad = Self.messageAAD(groupID: groupID, epoch: epoch, sender: sender,
                                               index: chain.index, prevHash: chain.lastMessageHash)
 
                     // Full verification chain before decryption is even attempted.
@@ -338,7 +435,7 @@ final class ChatEngine {
                     chain.lastMessageHash = Data(SHA256.hash(data: wire.ciphertext))
                     _ = idx
                 }
-                chains["recv.\(chat.id).\(sender)"] = chain
+                chains["recv.\(chat.id).\(sender).e\(epoch)"] = chain
                 persist()
             } catch {
                 lastError = "Sync failed: \(error.localizedDescription)"

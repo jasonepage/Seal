@@ -35,6 +35,14 @@ struct DeviceEndorsement: Codable, Hashable {
     var revokedAt: Date?
 }
 
+/// Root-key-signed revocation of a device (FR-19). Clients treat the device
+/// as invalid; its endorsement is dropped from every verification path.
+struct DeviceRevocation: Codable, Hashable {
+    let devicePublicKey: Data
+    let assertion: Data                 // WebAuthnAssertion committing to the device key
+    let revokedAt: Date
+}
+
 /// Mutual, in-person friendship attestation (SRS FR-5/FR-6).
 struct Friendship: Codable, Identifiable, Hashable {
     var id: String { friendRootID }

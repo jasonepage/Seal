@@ -10,8 +10,8 @@ final class IdentityManager {
 
     private static let deviceKeyTag = "seal.deviceKey"
     private static let kemKeyTag = "seal.kemKey"
-    private static let identityKey = "seal.rootIdentity"
-    private static let endorsementKey = "seal.deviceEndorsement"
+    static let identityKey = "seal.rootIdentity"        // internal: DemoFixtures swaps/restores it
+    static let endorsementKey = "seal.deviceEndorsement"
 
     var isRegistered: Bool { rootIdentity != nil }
 
@@ -109,6 +109,23 @@ final class IdentityManager {
                 Data("seal.endorse.v2".utf8) + e.devicePublicKey + e.kemBundlePublicKeys))
             return CeremonyManager.clientDataChallengeMatches(assertion.clientDataJSON, expected: commitment)
         }
+    }
+
+    /// Device public keys with a VALID revocation (assertion verifies under
+    /// the root key and commits to that device key). Forged revocations are
+    /// ignored — only the root key can kill a device.
+    static func revokedDevicePublicKeys(root: RootIdentity, revocations: [DeviceRevocation]) -> Set<Data> {
+        guard let rootPub = try? P256.Signing.PublicKey(rawRepresentation: root.publicKey) else { return [] }
+        var revoked: Set<Data> = []
+        for revocation in revocations {
+            guard let assertion = try? JSONDecoder().decode(WebAuthnAssertion.self, from: revocation.assertion),
+                  assertion.verify(with: rootPub) else { continue }
+            let commitment = Data(SHA256.hash(data: Data("seal.revoke.v1".utf8) + revocation.devicePublicKey))
+            if CeremonyManager.clientDataChallengeMatches(assertion.clientDataJSON, expected: commitment) {
+                revoked.insert(revocation.devicePublicKey)
+            }
+        }
+        return revoked
     }
 
     /// Verify a full chain: root key → device endorsement → payload signature.

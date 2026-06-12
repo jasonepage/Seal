@@ -35,6 +35,7 @@ final class CeremonyManager: NSObject {
         case keyUnreadable
         case verificationFailed
         case missingCredentialID
+        case identityNotFound
 
         var errorDescription: String? {
             switch self {
@@ -43,6 +44,7 @@ final class CeremonyManager: NSObject {
             case .keyUnreadable: "Couldn't read the key's response. Try holding it still against the top of your phone."
             case .verificationFailed: "That key doesn't match this person's identity. The forge was NOT completed."
             case .missingCredentialID: "This person registered before credential publishing — they need to update their identity."
+            case .identityNotFound: "No identity in the directory matches that key. Register instead?"
             }
         }
     }
@@ -122,6 +124,85 @@ final class CeremonyManager: NSObject {
     }
 
     func resetPhase() { phase = .idle }
+
+    // MARK: - Sign in (existing identity, this or a new device)
+
+    /// Assert with any credential for our RP (passkey via Face ID, or a
+    /// discoverable security-key credential), look the identity up in the
+    /// directory, verify the assertion against its public key, then endorse
+    /// THIS device with a second tap. Chats/friends are device-local and do
+    /// not follow the identity — the UI says so.
+    func signIn(directory: SyncEngine) async throws -> RootIdentity {
+        phase = .searching
+        do {
+            // 1. Who are you? Empty allow-lists: any credential for this RP.
+            let challenge = Self.randomChallenge()
+            let platform = ASAuthorizationPlatformPublicKeyCredentialProvider(
+                relyingPartyIdentifier: Self.relyingPartyID)
+            let security = ASAuthorizationSecurityKeyPublicKeyCredentialProvider(
+                relyingPartyIdentifier: Self.relyingPartyID)
+            let credential = try await performRequests([
+                platform.createCredentialAssertionRequest(challenge: challenge),
+                security.createCredentialAssertionRequest(challenge: challenge),
+            ])
+            guard let assertion = credential as? ASAuthorizationPublicKeyCredentialAssertion else {
+                throw CeremonyError.unexpectedCredential
+            }
+            phase = .reading
+
+            // 2. Directory lookup by credential hash.
+            let hash = Data(SHA256.hash(data: assertion.credentialID)).hexString
+            guard let (root, _) = try await directory.fetchIdentity(credentialIDHash: hash) else {
+                throw CeremonyError.identityNotFound
+            }
+
+            // 3. Verify the assertion against the directory's public key —
+            //    proves the tapper controls the identity they're claiming.
+            let stored = WebAuthnAssertion(
+                credentialID: assertion.credentialID,
+                clientDataJSON: assertion.rawClientDataJSON,
+                authenticatorData: assertion.rawAuthenticatorData,
+                signature: assertion.signature)
+            let rootPub = try P256.Signing.PublicKey(rawRepresentation: root.publicKey)
+            guard stored.verify(with: rootPub),
+                  Self.clientDataChallengeMatches(stored.clientDataJSON, expected: challenge) else {
+                throw CeremonyError.verificationFailed
+            }
+
+            // 4. Endorse this device (same as registration steps 3–4).
+            let deviceKey = try identity.createDeviceKey()
+            let devicePub = deviceKey.publicKey.x963Representation
+            phase = .endorsing
+            let kemPub = identity.kemPublicKeyData ?? Data()
+            let commitment = Data(SHA256.hash(data: Data("seal.endorse.v2".utf8) + devicePub + kemPub))
+            let endorseCredential = try await performRequests(
+                makeFriendAssertionRequests(friendCredentialID: assertion.credentialID, challenge: commitment))
+            guard let endorseAssertion = endorseCredential as? ASAuthorizationPublicKeyCredentialAssertion else {
+                throw CeremonyError.unexpectedCredential
+            }
+            let endorsement = DeviceEndorsement(
+                devicePublicKey: devicePub,
+                kemBundlePublicKeys: kemPub,
+                assertion: try JSONEncoder().encode(WebAuthnAssertion(
+                    credentialID: endorseAssertion.credentialID,
+                    clientDataJSON: endorseAssertion.rawClientDataJSON,
+                    authenticatorData: endorseAssertion.rawAuthenticatorData,
+                    signature: endorseAssertion.signature)),
+                createdAt: .now,
+                revokedAt: nil)
+
+            identity.completeRegistration(identity: root, endorsement: endorsement)
+            phase = .sealed
+            SealTheme.sealHaptic()
+            return root
+        } catch let error as ASAuthorizationError where error.code == .canceled {
+            phase = .failed(CeremonyError.cancelled.localizedDescription)
+            throw CeremonyError.cancelled
+        } catch {
+            phase = .failed((error as? LocalizedError)?.errorDescription ?? "Sign-in failed. Tap to try again.")
+            throw error
+        }
+    }
 
     // MARK: - Friend forge & device add (next milestones)
 
@@ -213,9 +294,37 @@ final class CeremonyManager: NSObject {
         return [skRequest, pkRequest]
     }
 
-    /// Device add (U4): hardware-key assertion commits to the new device's key.
-    func endorseNewDevice(devicePublicKey: Data) async throws -> DeviceEndorsement {
-        fatalError("unimplemented — next milestone")
+    /// Revoke a device (FR-19): the ROOT key signs a challenge committing to
+    /// the device being killed. Only the root key holder can do this.
+    func revokeDevice(devicePublicKey: Data, myRoot: RootIdentity, directory: SyncEngine) async throws {
+        guard let credentialID = myRoot.rawCredentialID else { throw CeremonyError.missingCredentialID }
+        phase = .searching
+        do {
+            let commitment = Data(SHA256.hash(data: Data("seal.revoke.v1".utf8) + devicePublicKey))
+            let credential = try await performRequests(
+                makeFriendAssertionRequests(friendCredentialID: credentialID, challenge: commitment))
+            guard let assertion = credential as? ASAuthorizationPublicKeyCredentialAssertion else {
+                throw CeremonyError.unexpectedCredential
+            }
+            let stored = WebAuthnAssertion(
+                credentialID: assertion.credentialID,
+                clientDataJSON: assertion.rawClientDataJSON,
+                authenticatorData: assertion.rawAuthenticatorData,
+                signature: assertion.signature)
+            let revocation = DeviceRevocation(
+                devicePublicKey: devicePublicKey,
+                assertion: try JSONEncoder().encode(stored),
+                revokedAt: .now)
+            try await directory.publishRevocation(revocation, for: myRoot.credentialIDHash)
+            phase = .sealed
+            SealTheme.sealHaptic()
+        } catch let error as ASAuthorizationError where error.code == .canceled {
+            phase = .failed(CeremonyError.cancelled.localizedDescription)
+            throw CeremonyError.cancelled
+        } catch {
+            phase = .failed((error as? LocalizedError)?.errorDescription ?? "Revocation failed.")
+            throw error
+        }
     }
 
     // MARK: - Request building
@@ -233,6 +342,12 @@ final class CeremonyManager: NSObject {
             let request = provider.createCredentialRegistrationRequest(
                 challenge: challenge, displayName: name, name: name, userID: userID)
             request.credentialParameters = [ASAuthorizationPublicKeyCredentialParameters(algorithm: .ES256)]
+            // Non-discoverable: discoverable credentials force the CTAP2
+            // clientPIN ceremony on PIN-protected keys, which fails on some
+            // firmware/NFC combinations ("wrong PIN" despite correct PIN).
+            // Trade-off: key-only sign-in needs discoverable credentials, so
+            // security-key sign-in is parked until this is resolved upstream;
+            // passkey sign-in is unaffected.
             request.residentKeyPreference = .discouraged
             // .discouraged avoids iOS forcing PIN setup on PIN-less keys mid-ceremony.
             // Revisit for Verified tier policy (key presence is still required).

@@ -4,6 +4,7 @@ import SwiftUI
 /// the brand moment. Brass appears only at trust moments.
 struct RegistrationView: View {
     @Bindable var ceremony: CeremonyManager
+    let sync: SyncEngine
     @State private var displayName = ""
     @State private var busy = false
 
@@ -66,6 +67,16 @@ struct RegistrationView: View {
                 .padding(.horizontal, 24)
                 .disabled(busy || displayName.trimmingCharacters(in: .whitespaces).isEmpty)
 
+                Button {
+                    Task { await signIn() }
+                } label: {
+                    Text("Already have a seal? Sign in")
+                        .font(.footnote)
+                        .foregroundStyle(SealTheme.brass.opacity(0.9))
+                }
+                .disabled(busy)
+                .padding(.top, 4)
+
                 Text("Your key is your identity. Friends are made in person.\nNothing is recoverable — by design.")
                     .font(.caption2)
                     .foregroundStyle(.white.opacity(0.45))
@@ -101,5 +112,14 @@ struct RegistrationView: View {
             tier: tier,
             displayName: displayName.trimmingCharacters(in: .whitespaces)
         )
+    }
+
+    private func signIn() async {
+        busy = true
+        defer { busy = false }
+        ceremony.resetPhase()
+        _ = try? await ceremony.signIn(directory: sync)
+        // Honest note: identity returns; chats/friends are device-local and
+        // may not (they survive reinstalls via keychain, not resets).
     }
 }

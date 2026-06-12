@@ -32,6 +32,9 @@ struct HomeView: View {
         .tint(SealTheme.brass)
         .preferredColorScheme(.dark)
         .task(id: myRoot.credentialIDHash) {
+            // Demo mode is fully local: no publishing, no push prompt, no sync
+            // (FR-22/23 — demo identities never touch CloudKit or real users).
+            guard !DemoFixtures.isActive else { return }
             if let endorsement = identity.deviceEndorsement, sync.status == .idle {
                 await sync.publishIdentity(myRoot, endorsement: endorsement)
             }
@@ -45,10 +48,11 @@ struct HomeView: View {
             await chatEngine.refreshAll(myRoot: myRoot, friendStore: friendStore)
         }
         .onReceive(NotificationCenter.default.publisher(for: AppDelegate.messageArrived)) { _ in
+            guard !DemoFixtures.isActive else { return }
             Task { await chatEngine.refreshAll(myRoot: myRoot, friendStore: friendStore) }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active {
+            if phase == .active, !DemoFixtures.isActive {
                 Task { await chatEngine.refreshAll(myRoot: myRoot, friendStore: friendStore) }
             }
         }

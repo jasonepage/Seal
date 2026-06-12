@@ -19,11 +19,14 @@ struct ContentView: View {
                          sync: sync, friendStore: friendStore, chatEngine: chatEngine,
                          onReset: performReset)
             } else if let ceremony {
-                RegistrationView(ceremony: ceremony)
+                RegistrationView(ceremony: ceremony, sync: sync)
             }
         }
         .onAppear { setupEngines() }
         .onChange(of: identity.rootIdentity?.credentialIDHash) { setupEngines() }
+        .overlay(alignment: .topTrailing) {
+            if DemoFixtures.showWatermark { DemoWatermark() }   // FR-23
+        }
     }
 
     /// Stores are namespaced per identity — a new identity sees no data

@@ -63,6 +63,17 @@ struct ChatView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbar {
+            ToolbarItem(placement: .principal) {
+                Button { showVerification = true } label: {
+                    VStack(spacing: 1) {
+                        Text(chat.name)
+                            .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                            .foregroundStyle(.white)
+                        ColonyBar(chat: chat, myRoot: myRoot, friendStore: friendStore)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Section("Disappearing messages") {
@@ -84,8 +95,9 @@ struct ChatView: View {
             }
         }
         .sheet(isPresented: $showVerification) {
-            VerificationSheet(chat: chat, myRoot: myRoot, friendStore: friendStore)
-                .presentationDetents([.medium])
+            VerificationSheet(chat: engine.chats.first(where: { $0.id == chat.id }) ?? chat,
+                              myRoot: myRoot, friendStore: friendStore, engine: engine)
+                .presentationDetents([.medium, .large])
         }
         .task {
             // Poll for inbound messages while the chat is open.
@@ -205,6 +217,13 @@ struct VerificationSheet: View {
     let chat: ChatEngine.Chat
     let myRoot: RootIdentity
     let friendStore: FriendStore?
+    var engine: ChatEngine? = nil
+    @State private var removing: RootIdentity?
+    @Environment(\.dismiss) private var dismiss
+
+    private var iAmAdmin: Bool {
+        chat.creatorHash == myRoot.credentialIDHash && chat.memberHashes.count > 2
+    }
 
     var body: some View {
         ZStack {
@@ -224,7 +243,15 @@ struct VerificationSheet: View {
                 VStack(spacing: 14) {
                     memberRow(name: "\(myRoot.displayName) (you)", tier: myRoot.tier, publicKey: myRoot.publicKey)
                     ForEach(otherMembers, id: \.credentialIDHash) { member in
-                        memberRow(name: member.displayName, tier: member.tier, publicKey: member.publicKey)
+                        HStack {
+                            memberRow(name: member.displayName, tier: member.tier, publicKey: member.publicKey)
+                            if iAmAdmin {
+                                Button { removing = member } label: {
+                                    Image(systemName: "minus.circle")
+                                        .foregroundStyle(.orange.opacity(0.8))
+                                }
+                            }
+                        }
                     }
                 }
                 .padding(16)
@@ -244,10 +271,32 @@ struct VerificationSheet: View {
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 40)
                 }
+                if chat.currentEpoch > 0 {
+                    Text("Keys rotated \(chat.currentEpoch) time\(chat.currentEpoch == 1 ? "" : "s") — removed members can't read anything sent after their removal.")
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.4))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
+                }
                 Spacer()
             }
         }
         .preferredColorScheme(.dark)
+        .confirmationDialog(
+            "Remove \(removing?.displayName ?? "")? Group keys rotate — they can't read anything sent after this.",
+            isPresented: .init(get: { removing != nil }, set: { if !$0 { removing = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Remove and rotate keys", role: .destructive) {
+                if let member = removing, let engine {
+                    Task {
+                        await engine.removeMember(member.credentialIDHash, from: chat, myRoot: myRoot)
+                        dismiss()
+                    }
+                }
+                removing = nil
+            }
+        }
     }
 
     private var otherMembers: [RootIdentity] {

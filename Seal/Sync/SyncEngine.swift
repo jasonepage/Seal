@@ -41,8 +41,19 @@ final class SyncEngine {
             record["publicKey"] = root.publicKey
             record["tier"] = root.tier.rawValue
             record["displayName"] = root.displayName
-            record["credentialID"] = root.rawCredentialID
-            record["deviceEndorsements"] = try JSONEncoder().encode([endorsement])
+            if let credID = root.rawCredentialID {
+                record["credentialID"] = credID
+            }
+            // Merge, don't overwrite: sign-in on a new device APPENDS its
+            // endorsement; existing devices stay valid (FR-18 groundwork).
+            var endorsements: [DeviceEndorsement] = []
+            if let existing = record["deviceEndorsements"] as? Data,
+               let decoded = try? JSONDecoder().decode([DeviceEndorsement].self, from: existing) {
+                endorsements = decoded
+            }
+            endorsements.removeAll { $0.devicePublicKey == endorsement.devicePublicKey }
+            endorsements.append(endorsement)
+            record["deviceEndorsements"] = try JSONEncoder().encode(endorsements)
             // TODO: revocations list, backup-key endorsements, head-hash chain
             //       for peer-to-peer key transparency (SDS §2)
 
@@ -82,26 +93,72 @@ final class SyncEngine {
             displayName: displayName,
             rawCredentialID: record["credentialID"] as? Data
         )
-        return (root, endorsements)
+
+        // Filter out revoked devices before anyone trusts them (FR-19).
+        var live = endorsements
+        if let revocationData = record["revocations"] as? Data,
+           let revocations = try? JSONDecoder().decode([DeviceRevocation].self, from: revocationData) {
+            let revoked = IdentityManager.revokedDevicePublicKeys(root: root, revocations: revocations)
+            live.removeAll { revoked.contains($0.devicePublicKey) }
+        }
+        return (root, live)
+    }
+
+    /// Append a (root-key-signed) device revocation to our directory record.
+    func publishRevocation(_ revocation: DeviceRevocation, for credentialIDHash: String) async throws {
+        let recordID = CKRecord.ID(recordName: credentialIDHash)
+        let record = try await publicDB.record(for: recordID)
+        var revocations: [DeviceRevocation] = []
+        if let existing = record["revocations"] as? Data,
+           let decoded = try? JSONDecoder().decode([DeviceRevocation].self, from: existing) {
+            revocations = decoded
+        }
+        revocations.append(revocation)
+        record["revocations"] = try JSONEncoder().encode(revocations)
+        try await publicDB.save(record)
+    }
+
+    /// Raw device list (including revoked) for the profile UI.
+    func fetchDeviceList(credentialIDHash: String) async throws -> ([DeviceEndorsement], [DeviceRevocation]) {
+        let record = try await publicDB.record(for: CKRecord.ID(recordName: credentialIDHash))
+        var endorsements: [DeviceEndorsement] = []
+        var revocations: [DeviceRevocation] = []
+        if let data = record["deviceEndorsements"] as? Data,
+           let decoded = try? JSONDecoder().decode([DeviceEndorsement].self, from: data) {
+            endorsements = decoded
+        }
+        if let data = record["revocations"] as? Data,
+           let decoded = try? JSONDecoder().decode([DeviceRevocation].self, from: data) {
+            revocations = decoded
+        }
+        return (endorsements, revocations)
     }
 
     // MARK: - Message transport (deterministic record names — no queries)
     //
-    // KeyEnvelope: "kenv.<groupID>.<senderHash>.<recipientHash>"
-    // Message:     "msg.<groupID>.<senderHash>.<chainIndex>"
-    // Receivers fetch the next expected index per sender; CKError.unknownItem
-    // means "no more messages." E2EE: CloudKit only ever sees ciphertext.
+    // KeyEnvelope: "kenv.<groupID>[.e<epoch>].<senderHash>.<recipientHash>"
+    // Message:     "msg.<groupID>[.e<epoch>].<senderHash>.<chainIndex>"
+    // Epoch 0 keeps the legacy (no-epoch) names for compatibility; rotation
+    // (FR-13) bumps the epoch, giving every sender fresh chains that removed
+    // members never receive envelopes for.
 
-    func saveKeyEnvelope(groupID: String, senderHash: String, recipientHash: String, envelope: Data) async throws {
+    private static func envelopeName(_ g: String, _ e: UInt64, _ s: String, _ r: String) -> String {
+        e == 0 ? "kenv.\(g).\(s).\(r)" : "kenv.\(g).e\(e).\(s).\(r)"
+    }
+    private static func messageName(_ g: String, _ e: UInt64, _ s: String, _ i: UInt64) -> String {
+        e == 0 ? "msg.\(g).\(s).\(i)" : "msg.\(g).e\(e).\(s).\(i)"
+    }
+
+    func saveKeyEnvelope(groupID: String, epoch: UInt64, senderHash: String, recipientHash: String, envelope: Data) async throws {
         let record = CKRecord(
             recordType: "KeyEnvelope",
-            recordID: CKRecord.ID(recordName: "kenv.\(groupID).\(senderHash).\(recipientHash)"))
+            recordID: CKRecord.ID(recordName: Self.envelopeName(groupID, epoch, senderHash, recipientHash)))
         record["envelope"] = envelope
         try await publicDB.save(record)
     }
 
-    func fetchKeyEnvelope(groupID: String, senderHash: String, recipientHash: String) async throws -> Data? {
-        let id = CKRecord.ID(recordName: "kenv.\(groupID).\(senderHash).\(recipientHash)")
+    func fetchKeyEnvelope(groupID: String, epoch: UInt64, senderHash: String, recipientHash: String) async throws -> Data? {
+        let id = CKRecord.ID(recordName: Self.envelopeName(groupID, epoch, senderHash, recipientHash))
         do {
             let record = try await publicDB.record(for: id)
             return record["envelope"] as? Data
@@ -117,11 +174,11 @@ final class SyncEngine {
         let sentAt: Date
     }
 
-    func saveMessage(groupID: String, senderHash: String, chainIndex: UInt64,
+    func saveMessage(groupID: String, epoch: UInt64, senderHash: String, chainIndex: UInt64,
                      message: WireMessage, recipients: [String]) async throws {
         let record = CKRecord(
             recordType: "Message",
-            recordID: CKRecord.ID(recordName: "msg.\(groupID).\(senderHash).\(chainIndex)"))
+            recordID: CKRecord.ID(recordName: Self.messageName(groupID, epoch, senderHash, chainIndex)))
         record["ciphertext"] = message.ciphertext
         record["devicePub"] = message.senderDevicePublicKey
         record["signature"] = message.signature
@@ -202,8 +259,8 @@ final class SyncEngine {
         return payloads
     }
 
-    func fetchMessage(groupID: String, senderHash: String, chainIndex: UInt64) async throws -> WireMessage? {
-        let id = CKRecord.ID(recordName: "msg.\(groupID).\(senderHash).\(chainIndex)")
+    func fetchMessage(groupID: String, epoch: UInt64, senderHash: String, chainIndex: UInt64) async throws -> WireMessage? {
+        let id = CKRecord.ID(recordName: Self.messageName(groupID, epoch, senderHash, chainIndex))
         do {
             let record = try await publicDB.record(for: id)
             guard let ct = record["ciphertext"] as? Data,

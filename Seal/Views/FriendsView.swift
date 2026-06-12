@@ -81,9 +81,9 @@ struct FriendsView: View {
             .padding(.horizontal, 24)
 
             if friendStore.friends.isEmpty {
-                Text("No friends yet. Find one in real life.")
-                    .font(.footnote)
-                    .foregroundStyle(.white.opacity(0.4))
+                SealMascot(size: 52,
+                           line: "No friends forged yet.",
+                           sub: "Seals make friends in person. So do you.")
             } else {
                 List {
                     ForEach(friendStore.friends) { friend in

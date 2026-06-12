@@ -36,10 +36,9 @@ struct ForgeLogView: View {
 
                 if sorted.isEmpty {
                     Spacer()
-                    Text("Every friendship you forge is recorded here —\nsigned proof that you met.")
-                        .font(.callout)
-                        .foregroundStyle(.white.opacity(0.4))
-                        .multilineTextAlignment(.center)
+                    SealMascot(size: 52,
+                               line: "Your forge log is empty.",
+                               sub: "Every friendship you forge is recorded here —\nsigned proof that you met.")
                     Spacer()
                 } else {
                     List {
