@@ -12,9 +12,17 @@ final class FriendStore {
     }
 
     private(set) var friends: [StoredFriend] = []
-    private static let storageKey = "seal.friends"
+    let ownerHash: String
+    private var storageKey: String { "seal.friends.\(ownerHash)" }
 
-    init() { load() }
+    init(ownerHash: String) {
+        self.ownerHash = ownerHash
+        load()
+    }
+
+    static func wipe(ownerHash: String) {
+        KeychainStore.delete("seal.friends.\(ownerHash)")
+    }
 
     func add(identity: RootIdentity, friendship: Friendship) {
         friends.removeAll { $0.identity.credentialIDHash == identity.credentialIDHash }
@@ -33,12 +41,12 @@ final class FriendStore {
 
     private func save() {
         if let data = try? JSONEncoder().encode(friends) {
-            KeychainStore.save(data, for: Self.storageKey)
+            KeychainStore.save(data, for: storageKey)
         }
     }
 
     private func load() {
-        if let data = KeychainStore.load(Self.storageKey),
+        if let data = KeychainStore.load(storageKey),
            let decoded = try? JSONDecoder().decode([StoredFriend].self, from: data) {
             friends = decoded
         }

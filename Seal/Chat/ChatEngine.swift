@@ -11,6 +11,7 @@ final class ChatEngine {
         let id: UUID
         var name: String
         var memberHashes: [String]      // root credentialIDHashes, including me
+        var ttl: TimeInterval?          // disappearing messages (FR-12), nil = keep
     }
 
     struct ChatMessage: Codable, Identifiable, Hashable {
@@ -19,6 +20,14 @@ final class ChatEngine {
         let text: String
         let sentAt: Date
         var delivered: Bool             // round-tripped through CloudKit
+        var expiresAt: Date?            // client-enforced (NFR-7: best-effort, disclosed)
+    }
+
+    /// What actually gets encrypted — TTL travels inside the sealed payload
+    /// so receivers honor it without the server ever seeing it.
+    private struct MessagePayload: Codable {
+        let text: String
+        let ttl: TimeInterval?
     }
 
     private struct ChainState: Codable {
@@ -38,28 +47,124 @@ final class ChatEngine {
     // directory cache: rootHash → (identity, verified endorsements)
     private var directoryCache: [String: (RootIdentity, [DeviceEndorsement])] = [:]
 
-    init(identity: IdentityManager, sync: SyncEngine) {
+    let ownerHash: String
+
+    init(identity: IdentityManager, sync: SyncEngine, ownerHash: String) {
         self.identity = identity
         self.sync = sync
+        self.ownerHash = ownerHash
         load()
+        purgeExpired()
+    }
+
+    static func wipe(ownerHash: String) {
+        KeychainStore.delete("seal.chats.\(ownerHash)")
+        KeychainStore.delete("seal.messages.\(ownerHash)")
+        KeychainStore.delete("seal.chains.\(ownerHash)")
+    }
+
+    func setTTL(_ ttl: TimeInterval?, for chat: Chat) {
+        guard let idx = chats.firstIndex(where: { $0.id == chat.id }) else { return }
+        chats[idx].ttl = ttl
+        persist()
     }
 
     // MARK: - Chats
 
+    /// 1:1 chat IDs are derived from both members' hashes, so both sides
+    /// independently arrive at the SAME chat — no invite needed for pairs.
+    static func pairChatID(_ a: String, _ b: String) -> UUID {
+        let digest = SHA256.hash(data: Data([a, b].sorted().joined(separator: "|").utf8))
+        let b = Array(digest.prefix(16))
+        return UUID(uuid: (b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
+                           b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]))
+    }
+
     func ensureChat(with friend: RootIdentity, myHash: String) -> Chat {
-        if let existing = chats.first(where: {
-            Set($0.memberHashes) == Set([myHash, friend.credentialIDHash])
-        }) { return existing }
-        let chat = Chat(id: UUID(), name: friend.displayName,
-                        memberHashes: [myHash, friend.credentialIDHash])
+        let id = Self.pairChatID(myHash, friend.credentialIDHash)
+        if let existing = chats.first(where: { $0.id == id }) { return existing }
+        let chat = Chat(id: id, name: friend.displayName,
+                        memberHashes: [myHash, friend.credentialIDHash], ttl: nil)
         chats.append(chat)
         persist()
         return chat
     }
 
+    // MARK: - Groups (FR-9/FR-10)
+
+    /// Signed invite: recipients verify the creator's signature chain AND
+    /// that the creator is already their friend before accepting (FR-10).
+    private struct GroupInvite: Codable {
+        let chatData: Data              // JSON-encoded Chat, what's signed
+        let senderHash: String
+        let senderDevicePub: Data
+        let signature: Data             // device-key signature over chatData
+    }
+
+    func createGroup(name: String, friendHashes: [String], myRoot: RootIdentity) async -> Chat? {
+        guard let deviceKey = identity.deviceKey,
+              let devicePub = identity.deviceKey?.publicKey.x963Representation else {
+            lastError = "No device key — re-register."; return nil
+        }
+        let chat = Chat(id: UUID(), name: name,
+                        memberHashes: [myRoot.credentialIDHash] + friendHashes, ttl: nil)
+        chats.append(chat)
+        persist()
+        do {
+            let chatData = try JSONEncoder().encode(chat)
+            let signature = try deviceKey.signature(for: chatData)
+            let invite = GroupInvite(chatData: chatData,
+                                     senderHash: myRoot.credentialIDHash,
+                                     senderDevicePub: devicePub,
+                                     signature: signature.derRepresentation)
+            let payload = try JSONEncoder().encode(invite)
+            for friend in friendHashes {
+                try await sync.saveGroupInvite(recipientHash: friend, payload: payload)
+            }
+        } catch {
+            lastError = "Invites failed: \(error.localizedDescription)"
+        }
+        return chat
+    }
+
+    /// Accept pending invites — only from verified friends (FR-10), only with
+    /// a valid signature chain. Everything else is silently dropped.
+    func checkInvites(myRoot: RootIdentity, friendStore: FriendStore) async {
+        guard let payloads = try? await sync.fetchGroupInvites(
+            recipientHash: myRoot.credentialIDHash) else { return }
+        var added = false
+        for payload in payloads {
+            guard let invite = try? JSONDecoder().decode(GroupInvite.self, from: payload),
+                  let chat = try? JSONDecoder().decode(Chat.self, from: invite.chatData),
+                  !chats.contains(where: { $0.id == chat.id }),
+                  chat.memberHashes.contains(myRoot.credentialIDHash),
+                  friendStore.isFriend(invite.senderHash),
+                  let (root, endorsements) = try? await directoryEntry(for: invite.senderHash),
+                  identity.verify(signature: invite.signature, over: invite.chatData,
+                                  deviceKey: invite.senderDevicePub,
+                                  claimedRoot: root, endorsements: endorsements)
+            else { continue }
+            chats.append(chat)
+            added = true
+        }
+        if added { persist() }
+    }
+
+    /// Full sync pass: surface 1:1 chats for every friend, accept invites,
+    /// pull new messages everywhere. Called on launch, foreground, and push.
+    func refreshAll(myRoot: RootIdentity, friendStore: FriendStore) async {
+        for friend in friendStore.friends {
+            _ = ensureChat(with: friend.identity, myHash: myRoot.credentialIDHash)
+        }
+        await checkInvites(myRoot: myRoot, friendStore: friendStore)
+        for chat in chats {
+            await refresh(chat, myRoot: myRoot)
+        }
+    }
+
     func ensureNoteToSelf(myHash: String) -> Chat {
         if let existing = chats.first(where: { $0.memberHashes == [myHash] }) { return existing }
-        let chat = Chat(id: UUID(), name: "Note to self", memberHashes: [myHash])
+        let chat = Chat(id: UUID(), name: "Note to self", memberHashes: [myHash], ttl: nil)
         chats.append(chat)
         persist()
         return chat
@@ -104,8 +209,11 @@ final class ChatEngine {
             let (messageKey, index) = Self.ratchet(&state)
 
             // 3. Encrypt. AAD binds group, sender, and index (SDS §2).
+            //    TTL rides inside the ciphertext — invisible to the server.
+            let currentTTL = chats.first(where: { $0.id == chat.id })?.ttl
+            let payload = try JSONEncoder().encode(MessagePayload(text: text, ttl: currentTTL))
             let aad = Data("seal.msg.v1|\(groupID)|\(myHash)|\(index)".utf8)
-            let sealed = try AES.GCM.seal(Data(text.utf8), using: messageKey, authenticating: aad)
+            let sealed = try AES.GCM.seal(payload, using: messageKey, authenticating: aad)
             let ciphertext = sealed.combined!
 
             // 4. Sign ciphertext‖aad with the Secure Enclave device key.
@@ -117,12 +225,14 @@ final class ChatEngine {
                 message: .init(ciphertext: ciphertext,
                                senderDevicePublicKey: devicePub,
                                signature: signature.derRepresentation,
-                               sentAt: .now))
+                               sentAt: .now),
+                recipients: chat.memberHashes.filter { $0 != myHash })
 
             chains["send.\(chat.id)"] = state
             var local = messagesByChat[chat.id] ?? []
             local.append(ChatMessage(id: UUID(), senderHash: myHash, text: text,
-                                     sentAt: .now, delivered: true))
+                                     sentAt: .now, delivered: true,
+                                     expiresAt: currentTTL.map { Date.now.addingTimeInterval($0) }))
             messagesByChat[chat.id] = local
             persist()
         } catch {
@@ -172,11 +282,14 @@ final class ChatEngine {
                     let sealedBox = try AES.GCM.SealedBox(combined: wire.ciphertext)
                     let plaintext = try AES.GCM.open(sealedBox, using: messageKey, authenticating: aad)
 
+                    let payload = (try? JSONDecoder().decode(MessagePayload.self, from: plaintext))
+                        ?? MessagePayload(text: String(decoding: plaintext, as: UTF8.self), ttl: nil)
                     var local = messagesByChat[chat.id] ?? []
                     local.append(ChatMessage(
                         id: UUID(), senderHash: sender,
-                        text: String(decoding: plaintext, as: UTF8.self),
-                        sentAt: wire.sentAt, delivered: true))
+                        text: payload.text,
+                        sentAt: wire.sentAt, delivered: true,
+                        expiresAt: payload.ttl.map { wire.sentAt.addingTimeInterval($0) }))
                     messagesByChat[chat.id] = local
                     _ = idx
                 }
@@ -186,6 +299,21 @@ final class ChatEngine {
                 lastError = "Sync failed: \(error.localizedDescription)"
             }
         }
+        purgeExpired()
+    }
+
+    /// Client-enforced expiry (NFR-7: best-effort by design, disclosed in UI).
+    func purgeExpired() {
+        let now = Date.now
+        var changed = false
+        for (chatID, messages) in messagesByChat {
+            let kept = messages.filter { ($0.expiresAt ?? .distantFuture) > now }
+            if kept.count != messages.count {
+                messagesByChat[chatID] = kept
+                changed = true
+            }
+        }
+        if changed { persist() }
     }
 
     // MARK: - Helpers
@@ -226,17 +354,17 @@ final class ChatEngine {
     // MARK: - Persistence (keychain JSON for now; TODO: encrypted SwiftData)
 
     private func persist() {
-        if let data = try? JSONEncoder().encode(chats) { KeychainStore.save(data, for: "seal.chats") }
-        if let data = try? JSONEncoder().encode(messagesByChat) { KeychainStore.save(data, for: "seal.messages") }
-        if let data = try? JSONEncoder().encode(chains) { KeychainStore.save(data, for: "seal.chains") }
+        if let data = try? JSONEncoder().encode(chats) { KeychainStore.save(data, for: "seal.chats.\(ownerHash)") }
+        if let data = try? JSONEncoder().encode(messagesByChat) { KeychainStore.save(data, for: "seal.messages.\(ownerHash)") }
+        if let data = try? JSONEncoder().encode(chains) { KeychainStore.save(data, for: "seal.chains.\(ownerHash)") }
     }
 
     private func load() {
-        if let data = KeychainStore.load("seal.chats"),
+        if let data = KeychainStore.load("seal.chats.\(ownerHash)"),
            let decoded = try? JSONDecoder().decode([Chat].self, from: data) { chats = decoded }
-        if let data = KeychainStore.load("seal.messages"),
+        if let data = KeychainStore.load("seal.messages.\(ownerHash)"),
            let decoded = try? JSONDecoder().decode([UUID: [ChatMessage]].self, from: data) { messagesByChat = decoded }
-        if let data = KeychainStore.load("seal.chains"),
+        if let data = KeychainStore.load("seal.chains.\(ownerHash)"),
            let decoded = try? JSONDecoder().decode([String: ChainState].self, from: data) { chains = decoded }
     }
 }

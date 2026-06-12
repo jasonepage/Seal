@@ -6,7 +6,9 @@ struct ChatView: View {
     let chat: ChatEngine.Chat
     let myRoot: RootIdentity
     @Bindable var engine: ChatEngine
+    var friendStore: FriendStore? = nil
     @State private var draft = ""
+    @State private var showVerification = false
 
     var body: some View {
         ZStack {
@@ -60,12 +62,53 @@ struct ChatView: View {
         .navigationTitle(chat.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Section("Disappearing messages") {
+                        ttlOption("Off", nil)
+                        ttlOption("1 minute", 60)
+                        ttlOption("1 hour", 3600)
+                        ttlOption("1 day", 86400)
+                    }
+                } label: {
+                    Image(systemName: currentTTL == nil ? "hourglass" : "hourglass.tophalf.filled")
+                        .foregroundStyle(currentTTL == nil ? .white.opacity(0.5) : SealTheme.brass)
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { showVerification = true } label: {
+                    Image(systemName: "checkmark.shield")
+                        .foregroundStyle(SealTheme.brass)
+                }
+            }
+        }
+        .sheet(isPresented: $showVerification) {
+            VerificationSheet(chat: chat, myRoot: myRoot, friendStore: friendStore)
+                .presentationDetents([.medium])
+        }
         .task {
             // Poll for inbound messages while the chat is open.
             // TODO: CKSubscription push instead of polling.
             while !Task.isCancelled {
                 await engine.refresh(chat, myRoot: myRoot)
                 try? await Task.sleep(for: .seconds(4))
+            }
+        }
+    }
+
+    private var currentTTL: TimeInterval? {
+        engine.chats.first(where: { $0.id == chat.id })?.ttl
+    }
+
+    private func ttlOption(_ label: String, _ ttl: TimeInterval?) -> some View {
+        Button {
+            engine.setTTL(ttl, for: chat)
+        } label: {
+            if currentTTL == ttl {
+                Label(label, systemImage: "checkmark")
+            } else {
+                Text(label)
             }
         }
     }
@@ -83,13 +126,92 @@ struct ChatView: View {
                     .background(
                         mine ? SealTheme.brass.opacity(0.25) : Color.white.opacity(0.08),
                         in: RoundedRectangle(cornerRadius: 18))
-                if mine {
-                    Image(systemName: message.delivered ? "checkmark.seal" : "clock")
-                        .font(.system(size: 9))
-                        .foregroundStyle(.white.opacity(0.4))
+                HStack(spacing: 4) {
+                    if message.expiresAt != nil {
+                        Image(systemName: "hourglass")
+                            .font(.system(size: 9))
+                            .foregroundStyle(SealTheme.brass.opacity(0.7))
+                    }
+                    if mine {
+                        Image(systemName: message.delivered ? "checkmark.seal" : "clock")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.white.opacity(0.4))
+                    }
                 }
             }
             if !mine { Spacer(minLength: 48) }
+        }
+    }
+}
+
+/// The verification drawer (UI.md §3.3): security status one gesture away.
+struct VerificationSheet: View {
+    let chat: ChatEngine.Chat
+    let myRoot: RootIdentity
+    let friendStore: FriendStore?
+
+    var body: some View {
+        ZStack {
+            SealTheme.ink.ignoresSafeArea()
+            VStack(spacing: 20) {
+                Label("End-to-end sealed", systemImage: "checkmark.shield.fill")
+                    .font(.system(.headline, design: .rounded))
+                    .foregroundStyle(SealTheme.brass)
+                    .padding(.top, 28)
+
+                Text("Every message is encrypted on-device and its signature chain is verified before display. Unverifiable messages are dropped.")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.6))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+
+                VStack(spacing: 14) {
+                    memberRow(name: "\(myRoot.displayName) (you)", tier: myRoot.tier, publicKey: myRoot.publicKey)
+                    ForEach(otherMembers, id: \.credentialIDHash) { member in
+                        memberRow(name: member.displayName, tier: member.tier, publicKey: member.publicKey)
+                    }
+                }
+                .padding(16)
+                .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
+                .padding(.horizontal, 24)
+
+                Text("Say these phrases out loud together — matching phrases mean matching keys.")
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.4))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 40)
+
+                if chat.ttl != nil {
+                    Text("Disappearing messages are deleted from devices on schedule, but screenshots are always possible.")
+                        .font(.caption2)
+                        .foregroundStyle(.orange.opacity(0.8))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
+                }
+                Spacer()
+            }
+        }
+        .preferredColorScheme(.dark)
+    }
+
+    private var otherMembers: [RootIdentity] {
+        chat.memberHashes
+            .filter { $0 != myRoot.credentialIDHash }
+            .compactMap { hash in friendStore?.friends.first(where: { $0.id == hash })?.identity }
+    }
+
+    private func memberRow(name: String, tier: IdentityTier, publicKey: Data) -> some View {
+        HStack(spacing: 12) {
+            IdentityRing(displayName: name, tier: tier, size: 38)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(name)
+                    .font(.system(.callout, design: .rounded, weight: .medium))
+                    .foregroundStyle(.white)
+                Text(FingerprintPhrase.phrase(for: publicKey))
+                    .font(.callout)
+                    .foregroundStyle(SealTheme.brass)
+            }
+            Spacer()
         }
     }
 }

@@ -1,0 +1,53 @@
+import SwiftUI
+import UserNotifications
+
+/// Tab shell (UI.md §2). Camera tab lands with ephemeral media.
+struct HomeView: View {
+    let myRoot: RootIdentity
+    @Bindable var identity: IdentityManager
+    @Bindable var ceremony: CeremonyManager
+    let sync: SyncEngine
+    @Bindable var friendStore: FriendStore
+    @Bindable var chatEngine: ChatEngine
+    let onReset: () -> Void
+    @Environment(\.scenePhase) private var scenePhase
+
+    var body: some View {
+        TabView {
+            Tab("Chats", systemImage: "bubble.left.and.bubble.right.fill") {
+                ChatsView(myRoot: myRoot, chatEngine: chatEngine, friendStore: friendStore)
+            }
+            Tab("Circle", systemImage: "person.2.fill") {
+                FriendsView(myRoot: myRoot, ceremony: ceremony, sync: sync,
+                            friendStore: friendStore, chatEngine: chatEngine)
+            }
+            Tab("You", systemImage: "checkmark.seal.fill") {
+                ProfileView(myRoot: myRoot, identity: identity, sync: sync,
+                            ceremony: ceremony, onReset: onReset)
+            }
+        }
+        .tint(SealTheme.brass)
+        .preferredColorScheme(.dark)
+        .task(id: myRoot.credentialIDHash) {
+            if let endorsement = identity.deviceEndorsement, sync.status == .idle {
+                await sync.publishIdentity(myRoot, endorsement: endorsement)
+            }
+            // Push: permission → APNs registration → CloudKit subscription.
+            let granted = (try? await UNUserNotificationCenter.current()
+                .requestAuthorization(options: [.alert, .sound, .badge])) ?? false
+            if granted {
+                await MainActor.run { UIApplication.shared.registerForRemoteNotifications() }
+            }
+            await sync.ensureMessageSubscription(for: myRoot.credentialIDHash)
+            await chatEngine.refreshAll(myRoot: myRoot, friendStore: friendStore)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: AppDelegate.messageArrived)) { _ in
+            Task { await chatEngine.refreshAll(myRoot: myRoot, friendStore: friendStore) }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                Task { await chatEngine.refreshAll(myRoot: myRoot, friendStore: friendStore) }
+            }
+        }
+    }
+}

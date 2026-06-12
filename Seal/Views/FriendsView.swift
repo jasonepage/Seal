@@ -81,7 +81,8 @@ struct FriendsView: View {
                             ChatView(
                                 chat: chatEngine.ensureChat(with: friend.identity, myHash: myRoot.credentialIDHash),
                                 myRoot: myRoot,
-                                engine: chatEngine)
+                                engine: chatEngine,
+                                friendStore: friendStore)
                         } label: {
                             HStack {
                                 Image(systemName: "checkmark.seal.fill")
@@ -173,6 +174,12 @@ struct FriendsView: View {
                 .font(.callout)
                 .foregroundStyle(.white.opacity(0.7))
                 .multilineTextAlignment(.center)
+            Text(FingerprintPhrase.phrase(for: friend.publicKey))
+                .font(.title3)
+                .foregroundStyle(SealTheme.brass)
+            Text("Say it out loud to each other — matching phrases, matching keys.")
+                .font(.caption2)
+                .foregroundStyle(.white.opacity(0.4))
             Spacer()
             Button("Done") { stage = .list }
                 .buttonStyle(.borderedProminent)

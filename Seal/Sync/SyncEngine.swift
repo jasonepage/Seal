@@ -16,6 +16,9 @@ final class SyncEngine {
 
     private(set) var status: CloudStatus = .idle
 
+    /// Back to idle so a newly registered identity publishes itself.
+    func resetStatus() { status = .idle }
+
     private var publicDB: CKDatabase {
         CKContainer(identifier: Self.containerID).publicCloudDatabase
     }
@@ -114,7 +117,8 @@ final class SyncEngine {
         let sentAt: Date
     }
 
-    func saveMessage(groupID: String, senderHash: String, chainIndex: UInt64, message: WireMessage) async throws {
+    func saveMessage(groupID: String, senderHash: String, chainIndex: UInt64,
+                     message: WireMessage, recipients: [String]) async throws {
         let record = CKRecord(
             recordType: "Message",
             recordID: CKRecord.ID(recordName: "msg.\(groupID).\(senderHash).\(chainIndex)"))
@@ -122,7 +126,51 @@ final class SyncEngine {
         record["devicePub"] = message.senderDevicePublicKey
         record["signature"] = message.signature
         record["sentAt"] = message.sentAt
+        record["recipients"] = recipients   // drives the push subscription
         try await publicDB.save(record)
+    }
+
+    // MARK: - Push (CKQuerySubscription → APNs)
+
+    /// One subscription per identity: fire when a Message names me a recipient.
+    /// The alert is static — content is ciphertext; there is nothing to preview.
+    func ensureMessageSubscription(for myHash: String) async {
+        let subID = "seal.msgsub.\(myHash)"
+        if (try? await publicDB.subscription(for: subID)) != nil { return }
+        let subscription = CKQuerySubscription(
+            recordType: "Message",
+            predicate: NSPredicate(format: "recipients CONTAINS %@", myHash),
+            subscriptionID: subID,
+            options: .firesOnRecordCreation)
+        let info = CKSubscription.NotificationInfo()
+        info.alertBody = "New sealed message"
+        info.soundName = "default"
+        subscription.notificationInfo = info
+        do { _ = try await publicDB.save(subscription) }
+        catch { status = .error("Push setup failed: \(error.localizedDescription)") }
+    }
+
+    // MARK: - Group invites
+
+    func saveGroupInvite(recipientHash: String, payload: Data) async throws {
+        let record = CKRecord(recordType: "GroupInvite",
+                              recordID: CKRecord.ID(recordName: "ginv.\(UUID().uuidString)"))
+        record["recipient"] = recipientHash
+        record["payload"] = payload
+        try await publicDB.save(record)
+    }
+
+    func fetchGroupInvites(recipientHash: String) async throws -> [Data] {
+        let query = CKQuery(recordType: "GroupInvite",
+                            predicate: NSPredicate(format: "recipient == %@", recipientHash))
+        let (results, _) = try await publicDB.records(matching: query)
+        var payloads: [Data] = []
+        for (_, result) in results {
+            if let record = try? result.get(), let data = record["payload"] as? Data {
+                payloads.append(data)
+            }
+        }
+        return payloads
     }
 
     func fetchMessage(groupID: String, senderHash: String, chainIndex: UInt64) async throws -> WireMessage? {
