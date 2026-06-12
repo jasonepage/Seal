@@ -75,6 +75,39 @@ struct ForgeLogView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .preferredColorScheme(.dark)
+        .toolbar {
+            if let shareCard {
+                ToolbarItem(placement: .topBarTrailing) {
+                    ShareLink(
+                        item: shareCard,
+                        preview: SharePreview("My forge log", image: shareCard)
+                    ) {
+                        Image(systemName: "square.and.arrow.up")
+                            .foregroundStyle(SealTheme.brass)
+                    }
+                }
+            }
+        }
+        .onAppear { renderShareCard() }
+        .onChange(of: friendStore.friends.count) { renderShareCard() }
+    }
+
+    // MARK: - Share card (growth surface: the forge log as a postable object)
+
+    @State private var shareCard: Image?
+
+    @MainActor
+    private func renderShareCard() {
+        guard !friendStore.friends.isEmpty else { shareCard = nil; return }
+        let renderer = ImageRenderer(content: ForgeShareCard(
+            name: myRoot.displayName,
+            forged: friendStore.friends.count,
+            verified: verifiedCount,
+            months: monthsActive))
+        renderer.scale = 3
+        if let ui = renderer.uiImage {
+            shareCard = Image(uiImage: ui)
+        }
     }
 
     private func stat(_ value: String, _ label: String) -> some View {
@@ -89,5 +122,60 @@ struct ForgeLogView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 12)
         .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
+    }
+}
+
+/// The shareable forge log: real-world social life as a verifiable brag.
+/// Rendered offscreen via ImageRenderer — keep it fixed-size and self-contained.
+struct ForgeShareCard: View {
+    let name: String
+    let forged: Int
+    let verified: Int
+    let months: Int
+
+    var body: some View {
+        VStack(spacing: 0) {
+            SealFigure(detailed: true, animated: false, tint: SealTheme.brass)
+                .frame(width: 110, height: 70)
+                .padding(.top, 36)
+
+            Text("\(forged)")
+                .font(.system(size: 88, weight: .bold, design: .rounded))
+                .foregroundStyle(SealTheme.brass)
+                .padding(.top, 12)
+            Text(forged == 1 ? "human forged" : "humans forged")
+                .font(.system(.title3, design: .rounded, weight: .medium))
+                .foregroundStyle(.white)
+
+            HStack(spacing: 14) {
+                if verified > 0 {
+                    Label("\(verified) verified", systemImage: "key.radiowaves.forward.fill")
+                }
+                Label(months == 1 ? "1 month" : "\(months) months", systemImage: "calendar")
+            }
+            .font(.system(.footnote, design: .rounded, weight: .medium))
+            .foregroundStyle(.white.opacity(0.55))
+            .padding(.top, 14)
+
+            Spacer()
+
+            VStack(spacing: 3) {
+                Text("\(name)'s forge log")
+                    .font(.system(.footnote, design: .rounded, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.8))
+                Text("Every friendship forged in person · sealmessenger.com")
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.4))
+            }
+            .padding(.bottom, 28)
+        }
+        .frame(width: 340, height: 400)
+        .background(SealTheme.ink)
+        .overlay(
+            RoundedRectangle(cornerRadius: 28)
+                .strokeBorder(SealTheme.brass.opacity(0.5), lineWidth: 2)
+                .padding(10)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 24))
     }
 }

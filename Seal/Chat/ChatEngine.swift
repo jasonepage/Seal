@@ -1,4 +1,5 @@
 import Foundation
+import CloudKit
 import CryptoKit
 
 /// E2EE chat over CloudKit (SDS §2, §5). Each member has a per-chat sender
@@ -27,6 +28,7 @@ final class ChatEngine {
         var expiresAt: Date?            // client-enforced (NFR-7: best-effort, disclosed)
         var mediaRef: String?           // MediaAsset record name (encrypted blob)
         var mediaKey: Data?             // content key — arrived inside E2EE payload
+        var kind: String?               // nil = normal, "screenshot" = NFR-7 notice
     }
 
     /// What actually gets encrypted — TTL and the media content key travel
@@ -36,6 +38,7 @@ final class ChatEngine {
         let ttl: TimeInterval?
         var mediaRef: String?
         var mediaKey: Data?
+        var kind: String?               // "screenshot" = disclosure notice (NFR-7)
     }
 
     private struct ChainState: Codable {
@@ -55,6 +58,30 @@ final class ChatEngine {
             ? Data("seal.msg.v2|\(groupID)|\(sender)|\(index)|\(prev)".utf8)
             : Data("seal.msg.v3|\(groupID)|\(epoch)|\(sender)|\(index)|\(prev)".utf8)
     }
+
+    /// Offline outbox (NFR-5): fully built wire records that failed to save.
+    /// Chain state is committed BEFORE the save attempt, so a retry re-ships
+    /// the exact same bytes — message keys and indices are never reused.
+    /// Deterministic record names make retries idempotent (an "already
+    /// exists" error counts as delivered).
+    private struct PendingRecord: Codable {
+        enum Kind: String, Codable { case message, envelope }
+        let kind: Kind
+        let groupID: String
+        let epoch: UInt64
+        let senderHash: String
+        var recipientHash: String?
+        var envelope: Data?
+        var chainIndex: UInt64?
+        var ciphertext: Data?
+        var devicePub: Data?
+        var signature: Data?
+        var sentAt: Date?
+        var recipients: [String]?
+        var localMessageID: UUID?
+    }
+
+    private var outbox: [PendingRecord] = []
 
     private(set) var chats: [Chat] = []
     private(set) var messagesByChat: [UUID: [ChatMessage]] = [:]
@@ -82,6 +109,7 @@ final class ChatEngine {
         KeychainStore.delete("seal.chats.\(ownerHash)")
         KeychainStore.delete("seal.messages.\(ownerHash)")
         KeychainStore.delete("seal.chains.\(ownerHash)")
+        KeychainStore.delete("seal.outbox.\(ownerHash)")
     }
 
     func setTTL(_ ttl: TimeInterval?, for chat: Chat) {
@@ -232,6 +260,7 @@ final class ChatEngine {
     /// Full sync pass: surface 1:1 chats for every friend, accept invites,
     /// pull new messages everywhere. Called on launch, foreground, and push.
     func refreshAll(myRoot: RootIdentity, friendStore: FriendStore) async {
+        await flushOutbox()
         for friend in friendStore.friends {
             _ = ensureChat(with: friend.identity, myHash: myRoot.credentialIDHash)
         }
@@ -258,6 +287,15 @@ final class ChatEngine {
     func send(_ text: String, in chat: Chat, from myRoot: RootIdentity) async {
         let ttl = chats.first(where: { $0.id == chat.id })?.ttl
         await sendPayload(MessagePayload(text: text, ttl: ttl), in: chat, from: myRoot)
+    }
+
+    /// NFR-7 disclosure, Snapchat-standard: best-effort, sent through the
+    /// normal E2EE pipeline so every member sees it. Skipped for Note to self.
+    func sendScreenshotNotice(in chat: Chat, from myRoot: RootIdentity) async {
+        guard chat.memberHashes.count > 1 else { return }
+        let ttl = chats.first(where: { $0.id == chat.id })?.ttl
+        await sendPayload(MessagePayload(text: "", ttl: ttl, kind: "screenshot"),
+                          in: chat, from: myRoot)
     }
 
     /// Encrypt a photo with a fresh content key, park the blob in CloudKit,
@@ -296,7 +334,8 @@ final class ChatEngine {
                                      text: payloadValue.text, sentAt: .now, delivered: true,
                                      expiresAt: payloadValue.ttl.map { Date.now.addingTimeInterval($0) },
                                      mediaRef: payloadValue.mediaRef,
-                                     mediaKey: payloadValue.mediaKey))
+                                     mediaKey: payloadValue.mediaKey,
+                                     kind: payloadValue.kind))
             messagesByChat[chat.id] = local
             persist()
             return
@@ -312,6 +351,9 @@ final class ChatEngine {
         let liveChat = chats.first(where: { $0.id == chat.id }) ?? chat
         let epoch = liveChat.currentEpoch
         do {
+            // 0. Older queued records ship first — keeps per-sender chain order.
+            await flushOutbox()
+
             // 1. Sending chain for this epoch: create + distribute on first use.
             var chain = chains["send.\(chat.id).e\(epoch)"]
             if chain == nil {
@@ -319,6 +361,9 @@ final class ChatEngine {
                 for member in liveChat.memberHashes where member != myHash {
                     // .last = most recently endorsed device (after a sign-in
                     // on a new phone, that's the active one).
+                    // NOTE: first message of an epoch needs the directory
+                    // (recipient KEM keys) — fully-offline sends only work
+                    // once a chain exists or the directory entry is cached.
                     guard let (_, endorsements) = try await directoryEntry(for: member),
                           let recipientKEM = endorsements.last?.kemBundlePublicKeys,
                           !recipientKEM.isEmpty else {
@@ -326,9 +371,15 @@ final class ChatEngine {
                         return
                     }
                     let envelope = try HybridKEM.wrap(fresh.chainKey, to: recipientKEM)
-                    try await sync.saveKeyEnvelope(
-                        groupID: groupID, epoch: epoch, senderHash: myHash,
-                        recipientHash: member, envelope: envelope)
+                    do {
+                        try await sync.saveKeyEnvelope(
+                            groupID: groupID, epoch: epoch, senderHash: myHash,
+                            recipientHash: member, envelope: envelope)
+                    } catch {
+                        outbox.append(PendingRecord(
+                            kind: .envelope, groupID: groupID, epoch: epoch,
+                            senderHash: myHash, recipientHash: member, envelope: envelope))
+                    }
                 }
                 chain = fresh
             }
@@ -347,29 +398,91 @@ final class ChatEngine {
             // 4. Sign ciphertext‖aad with the Secure Enclave device key.
             let signature = try deviceKey.signature(for: ciphertext + aad)
 
-            // 5. Ship it.
-            try await sync.saveMessage(
-                groupID: groupID, epoch: epoch, senderHash: myHash, chainIndex: index,
-                message: .init(ciphertext: ciphertext,
-                               senderDevicePublicKey: devicePub,
-                               signature: signature.derRepresentation,
-                               sentAt: .now),
-                recipients: liveChat.memberHashes.filter { $0 != myHash })
+            // 5. Ship it — or queue it. Chain state commits either way (the
+            //    ciphertext exists; a retry must never reuse key or index).
+            let localID = UUID()
+            let recipients = liveChat.memberHashes.filter { $0 != myHash }
+            var deliveredNow = true
+            do {
+                try await sync.saveMessage(
+                    groupID: groupID, epoch: epoch, senderHash: myHash, chainIndex: index,
+                    message: .init(ciphertext: ciphertext,
+                                   senderDevicePublicKey: devicePub,
+                                   signature: signature.derRepresentation,
+                                   sentAt: .now),
+                    recipients: recipients)
+            } catch {
+                deliveredNow = false
+                outbox.append(PendingRecord(
+                    kind: .message, groupID: groupID, epoch: epoch, senderHash: myHash,
+                    chainIndex: index, ciphertext: ciphertext, devicePub: devicePub,
+                    signature: signature.derRepresentation, sentAt: .now,
+                    recipients: recipients, localMessageID: localID))
+                lastError = "Offline — message queued, sends when you're connected."
+            }
 
             // Advance the transcript chain.
             state.lastMessageHash = Data(SHA256.hash(data: ciphertext))
             chains["send.\(chat.id).e\(epoch)"] = state
             var local = messagesByChat[chat.id] ?? []
-            local.append(ChatMessage(id: UUID(), senderHash: myHash, text: payloadValue.text,
-                                     sentAt: .now, delivered: true,
+            local.append(ChatMessage(id: localID, senderHash: myHash, text: payloadValue.text,
+                                     sentAt: .now, delivered: deliveredNow,
                                      expiresAt: payloadValue.ttl.map { Date.now.addingTimeInterval($0) },
                                      mediaRef: payloadValue.mediaRef,
-                                     mediaKey: payloadValue.mediaKey))
+                                     mediaKey: payloadValue.mediaKey,
+                                     kind: payloadValue.kind))
             messagesByChat[chat.id] = local
             persist()
         } catch {
             lastError = "Send failed: \(error.localizedDescription)"
         }
+    }
+
+    /// Retry everything queued. Called before each send, and from refreshAll
+    /// (launch / foreground / push). "Record already exists" = an earlier
+    /// attempt half-landed = delivered.
+    func flushOutbox() async {
+        guard !outbox.isEmpty, !DemoFixtures.isActive else { return }
+        var remaining: [PendingRecord] = []
+        var deliveredIDs: Set<UUID> = []
+        for record in outbox {
+            do {
+                switch record.kind {
+                case .envelope:
+                    try await sync.saveKeyEnvelope(
+                        groupID: record.groupID, epoch: record.epoch,
+                        senderHash: record.senderHash,
+                        recipientHash: record.recipientHash ?? "",
+                        envelope: record.envelope ?? Data())
+                case .message:
+                    try await sync.saveMessage(
+                        groupID: record.groupID, epoch: record.epoch,
+                        senderHash: record.senderHash, chainIndex: record.chainIndex ?? 0,
+                        message: .init(ciphertext: record.ciphertext ?? Data(),
+                                       senderDevicePublicKey: record.devicePub ?? Data(),
+                                       signature: record.signature ?? Data(),
+                                       sentAt: record.sentAt ?? .now),
+                        recipients: record.recipients ?? [])
+                    if let id = record.localMessageID { deliveredIDs.insert(id) }
+                }
+            } catch let error as CKError where error.code == .serverRecordChanged {
+                if let id = record.localMessageID { deliveredIDs.insert(id) }
+            } catch {
+                remaining.append(record)
+            }
+        }
+        guard outbox.count != remaining.count else { return }
+        outbox = remaining
+        if !deliveredIDs.isEmpty {
+            for (chatID, msgs) in messagesByChat {
+                messagesByChat[chatID] = msgs.map { message in
+                    var message = message
+                    if deliveredIDs.contains(message.id) { message.delivered = true }
+                    return message
+                }
+            }
+        }
+        persist()
     }
 
     // MARK: - Receive
@@ -430,7 +543,8 @@ final class ChatEngine {
                         sentAt: wire.sentAt, delivered: true,
                         expiresAt: payload.ttl.map { wire.sentAt.addingTimeInterval($0) },
                         mediaRef: payload.mediaRef,
-                        mediaKey: payload.mediaKey))
+                        mediaKey: payload.mediaKey,
+                        kind: payload.kind))
                     messagesByChat[chat.id] = local
                     chain.lastMessageHash = Data(SHA256.hash(data: wire.ciphertext))
                     _ = idx
@@ -515,6 +629,7 @@ final class ChatEngine {
         if let data = try? JSONEncoder().encode(chats) { KeychainStore.save(data, for: "seal.chats.\(ownerHash)") }
         if let data = try? JSONEncoder().encode(messagesByChat) { KeychainStore.save(data, for: "seal.messages.\(ownerHash)") }
         if let data = try? JSONEncoder().encode(chains) { KeychainStore.save(data, for: "seal.chains.\(ownerHash)") }
+        if let data = try? JSONEncoder().encode(outbox) { KeychainStore.save(data, for: "seal.outbox.\(ownerHash)") }
     }
 
     private func load() {
@@ -524,5 +639,7 @@ final class ChatEngine {
            let decoded = try? JSONDecoder().decode([UUID: [ChatMessage]].self, from: data) { messagesByChat = decoded }
         if let data = KeychainStore.load("seal.chains.\(ownerHash)"),
            let decoded = try? JSONDecoder().decode([String: ChainState].self, from: data) { chains = decoded }
+        if let data = KeychainStore.load("seal.outbox.\(ownerHash)"),
+           let decoded = try? JSONDecoder().decode([PendingRecord].self, from: data) { outbox = decoded }
     }
 }

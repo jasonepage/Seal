@@ -107,6 +107,12 @@ struct ChatView: View {
                 try? await Task.sleep(for: .seconds(4))
             }
         }
+        // NFR-7: best-effort screenshot disclosure, Snapchat-standard.
+        // Only fires while this chat is open and frontmost.
+        .onReceive(NotificationCenter.default.publisher(
+            for: UIApplication.userDidTakeScreenshotNotification)) { _ in
+            Task { await engine.sendScreenshotNotice(in: chat, from: myRoot) }
+        }
     }
 
     private var currentTTL: TimeInterval? {
@@ -128,6 +134,29 @@ struct ChatView: View {
     @ViewBuilder
     private func bubble(_ message: ChatEngine.ChatMessage) -> some View {
         let mine = message.senderHash == myRoot.credentialIDHash
+        if message.kind == "screenshot" {
+            HStack(spacing: 5) {
+                Image(systemName: "camera.viewfinder")
+                    .font(.system(size: 10))
+                Text(mine ? "You took a screenshot"
+                          : "\(senderName(message)) took a screenshot")
+                    .font(.caption2)
+            }
+            .foregroundStyle(.orange.opacity(0.75))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 2)
+        } else {
+            messageBubble(message, mine: mine)
+        }
+    }
+
+    private func senderName(_ message: ChatEngine.ChatMessage) -> String {
+        friendStore?.friends.first { $0.id == message.senderHash }?
+            .identity.displayName ?? "Someone"
+    }
+
+    @ViewBuilder
+    private func messageBubble(_ message: ChatEngine.ChatMessage, mine: Bool) -> some View {
         HStack {
             if mine { Spacer(minLength: 48) }
             VStack(alignment: .trailing, spacing: 2) {

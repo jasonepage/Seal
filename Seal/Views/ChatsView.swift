@@ -59,7 +59,7 @@ struct ChatsView: View {
 
     private func row(_ chat: ChatEngine.Chat) -> some View {
         let tier = tierFor(chat)
-        let last = chatEngine.messages(for: chat).last
+        let last = chatEngine.messages(for: chat).last { $0.kind != "screenshot" }
         return HStack(spacing: 12) {
             IdentityRing(displayName: chat.name, tier: tier, size: 44)
             VStack(alignment: .leading, spacing: 2) {
