@@ -22,11 +22,27 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         return .newData
     }
 
-    /// Foreground pushes: refresh silently, no banner — the open chat updates live.
+    /// Foreground pushes: refresh the open chat live AND surface a banner, so
+    /// activity in OTHER chats is noticeable while the app is open (the single
+    /// most-requested gap — previously all foreground banners were suppressed).
+    /// TODO: suppress the banner when the user is actively viewing that chat
+    /// (needs the group id in the push payload via desiredKeys).
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
         NotificationCenter.default.post(name: Self.messageArrived, object: nil)
-        return []
+        return [.banner, .sound, .list]
+    }
+
+    // APNs registration diagnostics — surfaced for triaging "push didn't work"
+    // (HANDOFF). A failure here means CloudKit can't deliver via APNs at all.
+    func application(_ application: UIApplication,
+                     didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        NSLog("Seal: APNs registered (%d-byte token)", deviceToken.count)
+    }
+
+    func application(_ application: UIApplication,
+                     didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        NSLog("Seal: APNs registration FAILED: %@", error.localizedDescription)
     }
 }
 

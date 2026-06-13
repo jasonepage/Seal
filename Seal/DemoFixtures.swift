@@ -108,12 +108,15 @@ enum DemoFixtures {
             KeychainStore.save(data, for: "seal.friends.\(owner)")   // FriendStore format
         }
 
-        let (chats, messages) = seedConversations(owner: owner)
+        let (chats, messages, readMarks) = seedConversations(owner: owner)
         if let data = try? JSONEncoder().encode(chats) {
             KeychainStore.save(data, for: "seal.chats.\(owner)")     // ChatEngine format
         }
         if let data = try? JSONEncoder().encode(messages) {
             KeychainStore.save(data, for: "seal.messages.\(owner)")  // ChatEngine format
+        }
+        if let data = try? JSONEncoder().encode(readMarks) {
+            KeychainStore.save(data, for: "seal.readmarks.\(owner)") // ChatEngine format
         }
     }
 
@@ -137,67 +140,98 @@ enum DemoFixtures {
 
     // MARK: - Conversations
 
-    private static func seedConversations(owner: String)
-        -> ([ChatEngine.Chat], [UUID: [ChatEngine.ChatMessage]]) {
+    /// One scripted line. `reactions` (reactorHash → emoji) and `replyTo`
+    /// (index of an earlier line in the same chat) drive the reaction pills and
+    /// quoted headers in screenshots.
+    private struct Line {
+        let sender: String
+        let text: String
+        let minutesAgo: TimeInterval
+        var reactions: [String: String]? = nil
+        var replyTo: Int? = nil
+    }
 
-        let maya = friendIdentity("Maya"), sam = friendIdentity("Sam")
-        let alex = friendIdentity("Alex"), mom = friendIdentity("Mom")
-        let dad = friendIdentity("Dad")
+    private static func seedConversations(owner: String)
+        -> ([ChatEngine.Chat], [UUID: [ChatEngine.ChatMessage]], [UUID: [String: Date]]) {
+
+        let maya = friendIdentity("Maya").credentialIDHash
+        let sam = friendIdentity("Sam").credentialIDHash
+        let alex = friendIdentity("Alex").credentialIDHash
+        let mom = friendIdentity("Mom").credentialIDHash
+        let dad = friendIdentity("Dad").credentialIDHash
 
         var chats: [ChatEngine.Chat] = []
         var messages: [UUID: [ChatEngine.ChatMessage]] = [:]
+        var readMarks: [UUID: [String: Date]] = [:]
 
-        func add(_ chat: ChatEngine.Chat, _ lines: [(String, String, TimeInterval)]) {
+        func add(_ chat: ChatEngine.Chat, _ lines: [Line]) {
             chats.append(chat)
-            messages[chat.id] = lines.map { senderHash, text, minutesAgo in
-                ChatEngine.ChatMessage(
-                    id: UUID(), senderHash: senderHash, text: text,
-                    sentAt: Date.now.addingTimeInterval(-minutesAgo * 60),
+            let cid = chat.id.uuidString
+            messages[chat.id] = lines.enumerated().map { i, line in
+                var replyTo: String?, replyPreview: String?, replySender: String?
+                if let r = line.replyTo {
+                    replyTo = "demo.\(cid).\(r)"
+                    replyPreview = String(lines[r].text.prefix(80))
+                    replySender = lines[r].sender
+                }
+                return ChatEngine.ChatMessage(
+                    id: UUID(), senderHash: line.sender, text: line.text,
+                    sentAt: Date.now.addingTimeInterval(-line.minutesAgo * 60),
                     delivered: true,
                     expiresAt: chat.ttl.map { Date.now.addingTimeInterval($0) },
-                    mediaRef: nil, mediaKey: nil)
+                    mediaRef: nil, mediaKey: nil, kind: nil,
+                    wireID: "demo.\(cid).\(i)",
+                    reactions: line.reactions,
+                    replyTo: replyTo, replyPreview: replyPreview, replySenderHash: replySender)
             }
+            // Everyone else has caught up — drives the "Read" / "Read by N" labels.
+            readMarks[chat.id] = Dictionary(uniqueKeysWithValues:
+                chat.memberHashes.filter { $0 != owner }.map { ($0, Date.now) })
         }
 
-        // Group: friends planning to meet (the product in one screenshot).
+        // Group: friends planning to meet — reactions + a quote-reply in the
+        // hero screenshot (the product in one frame).
         add(ChatEngine.Chat(id: UUID(), name: "haul out 🦭",
-                            memberHashes: [owner, maya.credentialIDHash, alex.credentialIDHash, sam.credentialIDHash],
+                            memberHashes: [owner, maya, alex, sam],
                             ttl: nil, epoch: 0, creatorHash: owner),
-            [(maya.credentialIDHash, "who's in for the climbing gym saturday", 38),
-             (alex.credentialIDHash, "in. bringing my brother — he wants his ring forged after", 31),
-             (owner, "I'll bring the spare key for him", 24),
-             (sam.credentialIDHash, "another one joins the colony 🦭", 17),
-             (maya.credentialIDHash, "10am. don't be late nathan", 6)])
+            [Line(sender: maya, text: "who's in for the climbing gym saturday", minutesAgo: 38),
+             Line(sender: alex, text: "in. bringing my brother — he wants his ring forged after",
+                  minutesAgo: 31, reactions: [maya: "🔥", owner: "👍"]),
+             Line(sender: owner, text: "I'll bring the spare key for him", minutesAgo: 24),
+             Line(sender: sam, text: "another one joins the colony 🦭",
+                  minutesAgo: 17, reactions: [owner: "❤️", maya: "🦭"]),
+             Line(sender: maya, text: "10am. don't be late nathan", minutesAgo: 6, replyTo: 2)])
 
         // 1:1 with disappearing messages on (FR-12 visible in the chat).
-        add(ChatEngine.Chat(id: ChatEngine.pairChatID(owner, maya.credentialIDHash),
+        add(ChatEngine.Chat(id: ChatEngine.pairChatID(owner, maya),
                             name: "Maya",
-                            memberHashes: [owner, maya.credentialIDHash], ttl: 86_400),
-            [(maya.credentialIDHash, "ok the new place on 5th is actually good", 47),
-             (owner, "told you", 45),
-             (maya.credentialIDHash, "their oat latte >>>", 25)])
+                            memberHashes: [owner, maya], ttl: 86_400),
+            [Line(sender: maya, text: "ok the new place on 5th is actually good", minutesAgo: 47),
+             Line(sender: owner, text: "told you", minutesAgo: 45),
+             Line(sender: maya, text: "their oat latte >>>", minutesAgo: 25, reactions: [owner: "❤️"])])
 
         // Family group.
         add(ChatEngine.Chat(id: UUID(), name: "family",
-                            memberHashes: [owner, mom.credentialIDHash, dad.credentialIDHash],
+                            memberHashes: [owner, mom, dad],
                             ttl: nil, epoch: 0, creatorHash: owner),
-            [(mom.credentialIDHash, "Dinner sunday? Grandma's coming", 130),
-             (dad.credentialIDHash, "I'll grill", 122),
-             (owner, "I'll be there at 5", 118),
-             (mom.credentialIDHash, "Bring that photo from the lake!", 112)])
+            [Line(sender: mom, text: "Dinner sunday? Grandma's coming", minutesAgo: 130),
+             Line(sender: dad, text: "I'll grill", minutesAgo: 122, reactions: [owner: "👍", mom: "❤️"]),
+             Line(sender: owner, text: "I'll be there at 5", minutesAgo: 118),
+             Line(sender: mom, text: "Bring that photo from the lake!", minutesAgo: 112)])
 
-        add(ChatEngine.Chat(id: ChatEngine.pairChatID(owner, alex.credentialIDHash),
+        add(ChatEngine.Chat(id: ChatEngine.pairChatID(owner, alex),
                             name: "Alex",
-                            memberHashes: [owner, alex.credentialIDHash], ttl: nil),
-            [(alex.credentialIDHash, "forged with two people at the meetup last night", 1_320),
-             (owner, "your forge log is growing fast", 1_290)])
+                            memberHashes: [owner, alex], ttl: nil),
+            [Line(sender: alex, text: "forged with two people at the meetup last night",
+                  minutesAgo: 1_320, reactions: [owner: "🔥"]),
+             Line(sender: owner, text: "your forge log is growing fast", minutesAgo: 1_290)])
 
-        add(ChatEngine.Chat(id: ChatEngine.pairChatID(owner, sam.credentialIDHash),
+        add(ChatEngine.Chat(id: ChatEngine.pairChatID(owner, sam),
                             name: "Sam",
-                            memberHashes: [owner, sam.credentialIDHash], ttl: nil),
-            [(sam.credentialIDHash, "see you saturday 🦭", 2_700)])
+                            memberHashes: [owner, sam], ttl: nil),
+            [Line(sender: sam, text: "see you saturday 🦭", minutesAgo: 2_700)])
 
-        return (chats, messages)
+        return (chats, messages, readMarks)
     }
 
     private static func daysAgo(_ days: Int) -> Date {

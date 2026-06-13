@@ -41,12 +41,14 @@ struct HomeView: View {
             if let endorsement = identity.deviceEndorsement, sync.status == .idle {
                 await sync.publishIdentity(myRoot, endorsement: endorsement)
             }
-            // Push: permission → APNs registration → CloudKit subscription.
-            let granted = (try? await UNUserNotificationCenter.current()
-                .requestAuthorization(options: [.alert, .sound, .badge])) ?? false
-            if granted {
-                await MainActor.run { UIApplication.shared.registerForRemoteNotifications() }
-            }
+            // Push: ask for alert/sound/badge permission for visible banners…
+            _ = try? await UNUserNotificationCenter.current()
+                .requestAuthorization(options: [.alert, .sound, .badge])
+            // …but register for remote notifications regardless. CloudKit push
+            // delivery and silent background refresh don't require the user to
+            // have granted alerts, so registering unconditionally keeps sync
+            // working even if they tapped "Don't Allow".
+            await MainActor.run { UIApplication.shared.registerForRemoteNotifications() }
             await sync.ensureMessageSubscription(for: myRoot.credentialIDHash)
             await sync.ensureInviteSubscription(for: myRoot.credentialIDHash)
             await chatEngine.refreshAll(myRoot: myRoot, friendStore: friendStore)
@@ -57,7 +59,11 @@ struct HomeView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active, !DemoFixtures.isActive {
-                Task { await chatEngine.refreshAll(myRoot: myRoot, friendStore: friendStore) }
+                Task {
+                    // Coming back to the app clears the unread badge.
+                    try? await UNUserNotificationCenter.current().setBadgeCount(0)
+                    await chatEngine.refreshAll(myRoot: myRoot, friendStore: friendStore)
+                }
             }
         }
     }

@@ -15,6 +15,8 @@ Group chat where friendships are forged in person. Your identity is rooted in a 
 | [docs/SRS.md](docs/SRS.md) | Requirements: identity tiers, ceremonies, groups, demo/review mode, risks |
 | [docs/SDS.md](docs/SDS.md) | Architecture: key hierarchy, crypto design, CloudKit data model, core flows, threat model |
 | [docs/UI.md](docs/UI.md) | "Vault Warmth" design language, screen specs, ceremony choreography |
+| [docs/TRUST.md](docs/TRUST.md) | ForgeRank: proof-of-humanity score (EigenTrust/PageRank/SybilRank), badges, Square posting gates, open decisions |
+| [docs/RETENTION.md](docs/RETENTION.md) | Week-1 family retention punch list: push, reactions, replies, presence, video, daily hook — mapped to files |
 
 ## Project structure
 ```

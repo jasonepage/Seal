@@ -9,6 +9,7 @@ struct ChatView: View {
     var friendStore: FriendStore? = nil
     @State private var draft = ""
     @State private var showVerification = false
+    @State private var replyingTo: ChatEngine.ChatMessage?
 
     var body: some View {
         ZStack {
@@ -39,6 +40,42 @@ struct ChatView: View {
                         .padding(.horizontal)
                 }
 
+                let typing = engine.typingMembers(in: chat, myRoot: myRoot)
+                if !typing.isEmpty {
+                    HStack {
+                        Text(typingText(typing))
+                            .font(.caption2)
+                            .foregroundStyle(.white.opacity(0.5))
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 2)
+                }
+
+                if let replyingTo {
+                    HStack(spacing: 8) {
+                        Image(systemName: "arrowshape.turn.up.left.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(SealTheme.brass.opacity(0.8))
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Replying to \(authorName(replyingTo.senderHash))")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(.white.opacity(0.7))
+                            Text(ChatEngine.replyPreview(replyingTo))
+                                .font(.system(size: 11))
+                                .foregroundStyle(.white.opacity(0.45))
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                        Button { self.replyingTo = nil } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.white.opacity(0.4))
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                }
+
                 HStack(spacing: 12) {
                     TextField("Sealed message…", text: $draft)
                         .textFieldStyle(.plain)
@@ -49,7 +86,9 @@ struct ChatView: View {
                         let text = draft.trimmingCharacters(in: .whitespaces)
                         guard !text.isEmpty else { return }
                         draft = ""
-                        Task { await engine.send(text, in: chat, from: myRoot) }
+                        let reply = replyingTo
+                        replyingTo = nil
+                        Task { await engine.send(text, in: chat, from: myRoot, replyingTo: reply) }
                     } label: {
                         Image(systemName: "arrow.up.circle.fill")
                             .font(.system(size: 30))
@@ -104,6 +143,7 @@ struct ChatView: View {
             // TODO: CKSubscription push instead of polling.
             while !Task.isCancelled {
                 await engine.refresh(chat, myRoot: myRoot)
+                await engine.markRead(in: chat, from: myRoot)   // ack what I've now seen
                 try? await Task.sleep(for: .seconds(4))
             }
         }
@@ -113,10 +153,27 @@ struct ChatView: View {
             for: UIApplication.userDidTakeScreenshotNotification)) { _ in
             Task { await engine.sendScreenshotNotice(in: chat, from: myRoot) }
         }
+        // Best-effort typing ping while composing (throttled in the engine).
+        .onChange(of: draft) { _, newValue in
+            guard !newValue.isEmpty else { return }
+            Task { await engine.sendTyping(in: chat, from: myRoot) }
+        }
     }
 
     private var currentTTL: TimeInterval? {
         engine.chats.first(where: { $0.id == chat.id })?.ttl
+    }
+
+    /// The most recent message I sent — the only one that carries a read label.
+    private var lastMyMessageID: UUID? {
+        engine.messages(for: chat).last { $0.senderHash == myRoot.credentialIDHash }?.id
+    }
+
+    private func typingText(_ hashes: [String]) -> String {
+        let names = hashes.map { hash in
+            friendStore?.friends.first { $0.id == hash }?.identity.displayName ?? "Someone"
+        }
+        return names.count == 1 ? "\(names[0]) is typing…" : "\(names.count) people are typing…"
     }
 
     private func ttlOption(_ label: String, _ ttl: TimeInterval?) -> some View {
@@ -155,22 +212,46 @@ struct ChatView: View {
             .identity.displayName ?? "Someone"
     }
 
+    /// Quick-pick reactions surfaced on long-press (FR-11).
+    private static let reactionEmojis = ["❤️", "😂", "👍", "🔥", "😮", "😢"]
+
     @ViewBuilder
     private func messageBubble(_ message: ChatEngine.ChatMessage, mine: Bool) -> some View {
         HStack {
             if mine { Spacer(minLength: 48) }
             VStack(alignment: .trailing, spacing: 2) {
-                if message.mediaRef != nil {
-                    MediaBubble(message: message, engine: engine)
-                } else {
-                    Text(message.text)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 9)
-                        .background(
-                            mine ? SealTheme.brass.opacity(0.25) : Color.white.opacity(0.08),
-                            in: RoundedRectangle(cornerRadius: 18))
+                if message.replyPreview != nil {
+                    replyQuote(message)
                 }
+                Group {
+                    if message.mediaRef != nil {
+                        MediaBubble(message: message, engine: engine)
+                    } else {
+                        Text(message.text)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 9)
+                            .background(
+                                mine ? SealTheme.brass.opacity(0.25) : Color.white.opacity(0.08),
+                                in: RoundedRectangle(cornerRadius: 18))
+                    }
+                }
+                .contextMenu {
+                    ForEach(Self.reactionEmojis, id: \.self) { emoji in
+                        Button {
+                            Task { await engine.react(emoji, to: message, in: chat, from: myRoot) }
+                        } label: {
+                            Text("\(emoji)  React")
+                        }
+                    }
+                    Divider()
+                    Button {
+                        replyingTo = message
+                    } label: {
+                        Label("Reply", systemImage: "arrowshape.turn.up.left")
+                    }
+                }
+                reactionChips(message)
                 HStack(spacing: 4) {
                     if message.expiresAt != nil {
                         Image(systemName: "hourglass")
@@ -182,9 +263,71 @@ struct ChatView: View {
                             .font(.system(size: 9))
                             .foregroundStyle(.white.opacity(0.4))
                     }
+                    if mine, message.id == lastMyMessageID {
+                        let readers = engine.readerCount(of: message, in: chat)
+                        if readers > 0 {
+                            Text(chat.memberHashes.count > 2 ? "Read by \(readers)" : "Read")
+                                .font(.system(size: 9))
+                                .foregroundStyle(SealTheme.brass.opacity(0.7))
+                        }
+                    }
                 }
             }
             if !mine { Spacer(minLength: 48) }
+        }
+    }
+
+    /// Quoted snippet shown above a reply bubble. Renders from the snippet the
+    /// reply carries, so it works even when the original message isn't loaded.
+    @ViewBuilder
+    private func replyQuote(_ message: ChatEngine.ChatMessage) -> some View {
+        HStack(spacing: 6) {
+            RoundedRectangle(cornerRadius: 1)
+                .fill(SealTheme.brass.opacity(0.6))
+                .frame(width: 2)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(authorName(message.replySenderHash))
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(SealTheme.brass.opacity(0.8))
+                Text(message.replyPreview ?? "")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.white.opacity(0.5))
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    /// Display name for a member hash ("You" for self).
+    private func authorName(_ hash: String?) -> String {
+        guard let hash else { return "Reply" }
+        if hash == myRoot.credentialIDHash { return "You" }
+        return friendStore?.friends.first { $0.id == hash }?.identity.displayName ?? "Someone"
+    }
+
+    /// Aggregated reaction pills under a bubble: one capsule per distinct emoji,
+    /// with a count when more than one person reacted the same way.
+    @ViewBuilder
+    private func reactionChips(_ message: ChatEngine.ChatMessage) -> some View {
+        if let reactions = message.reactions, !reactions.isEmpty {
+            let counts = Dictionary(grouping: reactions.values, by: { $0 }).mapValues(\.count)
+            HStack(spacing: 4) {
+                ForEach(counts.sorted { $0.key < $1.key }, id: \.key) { emoji, count in
+                    HStack(spacing: 2) {
+                        Text(emoji).font(.system(size: 11))
+                        if count > 1 {
+                            Text("\(count)")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.white.opacity(0.6))
+                        }
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(.white.opacity(0.08), in: Capsule())
+                }
+            }
         }
     }
 }

@@ -314,16 +314,27 @@ final class SyncEngine {
     /// One subscription per identity: fire when a Message names me a recipient.
     /// The alert is static — content is ciphertext; there is nothing to preview.
     func ensureMessageSubscription(for myHash: String) async {
-        let subID = "seal.msgsub.\(myHash)"
+        // v2 = badge + content-available + title. Bumped because an existing
+        // subscription is never reconfigured in place; the version forces a
+        // fresh one and we retire v1 so the two don't double-fire.
+        let subID = "seal.msgsub.v2.\(myHash)"
         if (try? await publicDB.subscription(for: subID)) != nil { return }
+        try? await publicDB.deleteSubscription(withID: "seal.msgsub.\(myHash)")  // retire v1
         let subscription = CKQuerySubscription(
             recordType: "Message",
             predicate: NSPredicate(format: "recipients CONTAINS %@", myHash),
             subscriptionID: subID,
             options: .firesOnRecordCreation)
         let info = CKSubscription.NotificationInfo()
+        info.title = "Seal"
         info.alertBody = "New sealed message"
         info.soundName = "default"
+        info.shouldBadge = true                     // app-icon badge: "something's waiting"
+        // Also wake the app in the background to pre-fetch, so the message is
+        // decrypted and waiting the instant they open it. Requires the
+        // "remote-notification" background mode (UIBackgroundModes) — without
+        // that capability the alert still fires; only the silent wake no-ops.
+        info.shouldSendContentAvailable = true
         subscription.notificationInfo = info
         do { _ = try await publicDB.save(subscription) }
         catch { status = .error("Push setup failed: \(error.localizedDescription)") }
@@ -333,16 +344,20 @@ final class SyncEngine {
     /// until the recipient happens to foreground the app. The push handler
     /// path (messageArrived → refreshAll → checkInvites) already processes it.
     func ensureInviteSubscription(for myHash: String) async {
-        let subID = "seal.invsub.\(myHash)"
+        let subID = "seal.invsub.v2.\(myHash)"
         if (try? await publicDB.subscription(for: subID)) != nil { return }
+        try? await publicDB.deleteSubscription(withID: "seal.invsub.\(myHash)")  // retire v1
         let subscription = CKQuerySubscription(
             recordType: "GroupInvite",
             predicate: NSPredicate(format: "recipient == %@", myHash),
             subscriptionID: subID,
             options: .firesOnRecordCreation)
         let info = CKSubscription.NotificationInfo()
+        info.title = "Seal"
         info.alertBody = "You've been invited to a new colony"
         info.soundName = "default"
+        info.shouldBadge = true
+        info.shouldSendContentAvailable = true      // pre-process the invite in the background
         subscription.notificationInfo = info
         do { _ = try await publicDB.save(subscription) }
         catch { status = .error("Push setup failed: \(error.localizedDescription)") }

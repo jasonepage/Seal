@@ -29,6 +29,13 @@ final class ChatEngine {
         var mediaRef: String?           // MediaAsset record name (encrypted blob)
         var mediaKey: Data?             // content key — arrived inside E2EE payload
         var kind: String?               // nil = normal, "screenshot" = NFR-7 notice
+        var wireID: String?             // stable cross-device id "<sender>.e<epoch>.<index>";
+                                        // reactions point at this, not the local `id`
+        var reactions: [String: String]? // reactorHash → emoji (one reaction per person)
+        var replyTo: String?            // wireID of the quoted message (nil if it
+                                        // predates wireID — still rendered as a reply)
+        var replyPreview: String?       // one-line snippet of the quoted message
+        var replySenderHash: String?    // author of the quoted message
     }
 
     /// What actually gets encrypted — TTL and the media content key travel
@@ -38,7 +45,14 @@ final class ChatEngine {
         let ttl: TimeInterval?
         var mediaRef: String?
         var mediaKey: Data?
-        var kind: String?               // "screenshot" = disclosure notice (NFR-7)
+        var kind: String?               // "screenshot" = disclosure notice (NFR-7),
+                                        // "reaction" = emoji reaction (no bubble)
+        var reactTo: String?            // reaction: target message wireID
+        var emoji: String?              // reaction: emoji to apply; "" clears mine
+        var replyTo: String?            // reply: quoted message wireID (may be nil)
+        var replyPreview: String?       // reply: quoted snippet
+        var replySenderHash: String?    // reply: quoted author
+        var readUpTo: Date?             // read receipt: sentAt of latest message seen
     }
 
     private struct ChainState: Codable {
@@ -89,6 +103,13 @@ final class ChatEngine {
     private(set) var messagesByChat: [UUID: [ChatMessage]] = [:]
     private(set) var lastError: String?
 
+    // Presence. readMarks persists ("Read" survives relaunch); the rest is
+    // transient throttling/expiry state rebuilt each session.
+    private(set) var readMarks: [UUID: [String: Date]] = [:]   // chat → reader → latest seen sentAt
+    private(set) var typingBy: [UUID: [String: Date]] = [:]    // chat → member → typing-until
+    private var lastReadAck: [UUID: Date] = [:]                // throttle outbound read receipts
+    private var lastTypingSent: [UUID: Date] = [:]             // throttle outbound typing pings
+
     private let identity: IdentityManager
     let sync: SyncEngine
     // chains["send.<chatID>"] = my sending chain
@@ -112,6 +133,7 @@ final class ChatEngine {
         KeychainStore.delete("seal.messages.\(ownerHash)")
         KeychainStore.delete("seal.chains.\(ownerHash)")
         KeychainStore.delete("seal.outbox.\(ownerHash)")
+        KeychainStore.delete("seal.readmarks.\(ownerHash)")
     }
 
     func setTTL(_ ttl: TimeInterval?, for chat: Chat) {
@@ -286,9 +308,21 @@ final class ChatEngine {
 
     // MARK: - Send
 
-    func send(_ text: String, in chat: Chat, from myRoot: RootIdentity) async {
+    func send(_ text: String, in chat: Chat, from myRoot: RootIdentity,
+              replyingTo: ChatMessage? = nil) async {
         let ttl = chats.first(where: { $0.id == chat.id })?.ttl
-        await sendPayload(MessagePayload(text: text, ttl: ttl), in: chat, from: myRoot)
+        await sendPayload(MessagePayload(text: text, ttl: ttl,
+                                         replyTo: replyingTo?.wireID,
+                                         replyPreview: replyingTo.map(Self.replyPreview),
+                                         replySenderHash: replyingTo?.senderHash),
+                          in: chat, from: myRoot)
+    }
+
+    /// One-line quote shown above a reply bubble.
+    static func replyPreview(_ m: ChatMessage) -> String {
+        if m.mediaRef != nil { return "📷 Photo" }
+        let t = m.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return t.count > 80 ? String(t.prefix(80)) + "…" : t
     }
 
     /// NFR-7 disclosure, Snapchat-standard: best-effort, sent through the
@@ -298,6 +332,101 @@ final class ChatEngine {
         let ttl = chats.first(where: { $0.id == chat.id })?.ttl
         await sendPayload(MessagePayload(text: "", ttl: ttl, kind: "screenshot"),
                           in: chat, from: myRoot)
+    }
+
+    /// Emoji reaction (FR-11). Travels through the normal E2EE pipeline as a
+    /// kind:"reaction" payload pointing at the target's stable `wireID`; on every
+    /// device it mutates the target bubble instead of rendering its own. Tapping
+    /// the same emoji again clears your reaction. One reaction per person.
+    func react(_ emoji: String, to message: ChatMessage, in chat: Chat, from myRoot: RootIdentity) async {
+        guard let target = message.wireID else { return }   // pre-wireID message: not reactable
+        let myHash = myRoot.credentialIDHash
+        let existing = messagesByChat[chat.id]?.first { $0.wireID == target }?.reactions?[myHash]
+        let cleared = (existing == emoji)                   // toggle off if same emoji
+        applyReaction(chatID: chat.id, reactorHash: myHash, reactTo: target,
+                      emoji: cleared ? nil : emoji)         // optimistic local apply
+        let ttl = chats.first(where: { $0.id == chat.id })?.ttl
+        await sendPayload(MessagePayload(text: "", ttl: ttl, kind: "reaction",
+                                         reactTo: target, emoji: cleared ? "" : emoji),
+                          in: chat, from: myRoot)
+    }
+
+    /// Apply a reaction to its target bubble. Empty/nil emoji removes the
+    /// reactor's entry. No-op if the target message isn't present yet (a
+    /// reaction that arrives before its message is simply dropped).
+    private func applyReaction(chatID: UUID, reactorHash: String, reactTo: String, emoji: String?) {
+        guard var msgs = messagesByChat[chatID],
+              let i = msgs.firstIndex(where: { $0.wireID == reactTo }) else { return }
+        var set = msgs[i].reactions ?? [:]
+        if let emoji, !emoji.isEmpty { set[reactorHash] = emoji } else { set[reactorHash] = nil }
+        msgs[i].reactions = set.isEmpty ? nil : set
+        messagesByChat[chatID] = msgs
+        persist()
+    }
+
+    // MARK: - Presence (read receipts + typing)
+
+    /// Tell the others I've seen everything up to the latest inbound message.
+    /// Throttled so we only emit when the high-water mark actually advances.
+    /// Carries a timestamp (comparable across senders) rather than a wireID.
+    func markRead(in chat: Chat, from myRoot: RootIdentity) async {
+        let myHash = myRoot.credentialIDHash
+        let inbound = (messagesByChat[chat.id] ?? []).filter { $0.senderHash != myHash }
+        guard let latest = inbound.map(\.sentAt).max() else { return }   // nothing to ack
+        if let acked = lastReadAck[chat.id], acked >= latest { return }  // nothing new
+        lastReadAck[chat.id] = latest
+        await sendPayload(MessagePayload(text: "", ttl: nil, kind: "read", readUpTo: latest),
+                          in: chat, from: myRoot)
+    }
+
+    /// Best-effort "is typing" ping (throttled to one per ~4s). NOTE: over the
+    /// current 4s poll transport this is laggy by design — it's a nicety, not
+    /// real-time. Never persisted.
+    func sendTyping(in chat: Chat, from myRoot: RootIdentity) async {
+        guard chat.memberHashes.count > 1 else { return }
+        let now = Date()
+        if let last = lastTypingSent[chat.id], now.timeIntervalSince(last) < 4 { return }
+        lastTypingSent[chat.id] = now
+        await sendPayload(MessagePayload(text: "", ttl: nil, kind: "typing"), in: chat, from: myRoot)
+    }
+
+    /// How many OTHER members have read up to a given message (by timestamp).
+    func readerCount(of message: ChatMessage, in chat: Chat) -> Int {
+        let marks = readMarks[chat.id] ?? [:]
+        return chat.memberHashes
+            .filter { $0 != message.senderHash }
+            .filter { (marks[$0] ?? .distantPast) >= message.sentAt }
+            .count
+    }
+
+    /// Members currently typing (un-expired), excluding me.
+    func typingMembers(in chat: Chat, myRoot: RootIdentity) -> [String] {
+        let now = Date()
+        return (typingBy[chat.id] ?? [:])
+            .filter { $0.key != myRoot.credentialIDHash && $0.value > now }
+            .map(\.key)
+    }
+
+    private func applyRead(chatID: UUID, readerHash: String, upTo: Date?) {
+        guard let upTo else { return }
+        var marks = readMarks[chatID] ?? [:]
+        if let existing = marks[readerHash], existing >= upTo { return }
+        marks[readerHash] = upTo
+        readMarks[chatID] = marks
+        persist()
+    }
+
+    private func markTyping(chatID: UUID, memberHash: String) {
+        var t = typingBy[chatID] ?? [:]
+        t[memberHash] = Date().addingTimeInterval(6)   // shown until this passes
+        typingBy[chatID] = t                            // transient, not persisted
+    }
+
+    /// Kinds that ship over the wire but never render their own bubble — they
+    /// mutate other state (a reaction, a read mark, a typing flag) instead.
+    /// "screenshot" is NOT here: it renders a visible notice.
+    private static func isNonBubble(_ kind: String?) -> Bool {
+        kind == "reaction" || kind == "read" || kind == "typing"
     }
 
     /// Encrypt a photo with a fresh content key, park the blob in CloudKit,
@@ -342,13 +471,19 @@ final class ChatEngine {
         // FR-23: demo identities cannot message real users — demo sends are
         // appended locally and never leave the device.
         if DemoFixtures.isActive {
+            if Self.isNonBubble(payloadValue.kind) { return }   // presence/reactions: no local bubble
+            let localID = UUID()
             var local = messagesByChat[chat.id] ?? []
-            local.append(ChatMessage(id: UUID(), senderHash: myRoot.credentialIDHash,
+            local.append(ChatMessage(id: localID, senderHash: myRoot.credentialIDHash,
                                      text: payloadValue.text, sentAt: .now, delivered: true,
                                      expiresAt: payloadValue.ttl.map { Date.now.addingTimeInterval($0) },
                                      mediaRef: payloadValue.mediaRef,
                                      mediaKey: payloadValue.mediaKey,
-                                     kind: payloadValue.kind))
+                                     kind: payloadValue.kind,
+                                     wireID: "demo.\(localID)",
+                                     replyTo: payloadValue.replyTo,
+                                     replyPreview: payloadValue.replyPreview,
+                                     replySenderHash: payloadValue.replySenderHash))
             messagesByChat[chat.id] = local
             persist()
             return
@@ -437,15 +572,25 @@ final class ChatEngine {
             // Advance the transcript chain.
             state.lastMessageHash = Data(SHA256.hash(data: ciphertext))
             chains["send.\(chat.id).e\(epoch)"] = state
-            var local = messagesByChat[chat.id] ?? []
-            local.append(ChatMessage(id: localID, senderHash: myHash, text: payloadValue.text,
-                                     sentAt: .now, delivered: deliveredNow,
-                                     expiresAt: payloadValue.ttl.map { Date.now.addingTimeInterval($0) },
-                                     mediaRef: payloadValue.mediaRef,
-                                     mediaKey: payloadValue.mediaKey,
-                                     kind: payloadValue.kind))
-            messagesByChat[chat.id] = local
-            persist()
+            // Reactions/read/typing ship over the wire but never render a
+            // bubble (reactions were already applied to their target locally).
+            if Self.isNonBubble(payloadValue.kind) {
+                persist()
+            } else {
+                var local = messagesByChat[chat.id] ?? []
+                local.append(ChatMessage(id: localID, senderHash: myHash, text: payloadValue.text,
+                                         sentAt: .now, delivered: deliveredNow,
+                                         expiresAt: payloadValue.ttl.map { Date.now.addingTimeInterval($0) },
+                                         mediaRef: payloadValue.mediaRef,
+                                         mediaKey: payloadValue.mediaKey,
+                                         kind: payloadValue.kind,
+                                         wireID: "\(myHash).e\(epoch).\(index)",
+                                         replyTo: payloadValue.replyTo,
+                                         replyPreview: payloadValue.replyPreview,
+                                         replySenderHash: payloadValue.replySenderHash))
+                messagesByChat[chat.id] = local
+                persist()
+            }
         } catch {
             lastError = "Send failed: \(error.localizedDescription)"
         }
@@ -553,18 +698,34 @@ final class ChatEngine {
 
                     let payload = (try? JSONDecoder().decode(MessagePayload.self, from: plaintext))
                         ?? MessagePayload(text: String(decoding: plaintext, as: UTF8.self), ttl: nil)
-                    var local = messagesByChat[chat.id] ?? []
-                    local.append(ChatMessage(
-                        id: UUID(), senderHash: sender,
-                        text: payload.text,
-                        sentAt: wire.sentAt, delivered: true,
-                        expiresAt: payload.ttl.map { wire.sentAt.addingTimeInterval($0) },
-                        mediaRef: payload.mediaRef,
-                        mediaKey: payload.mediaKey,
-                        kind: payload.kind))
-                    messagesByChat[chat.id] = local
+                    switch payload.kind ?? "" {
+                    case "reaction":
+                        // Mutates an existing bubble; never appended as its own.
+                        applyReaction(chatID: chat.id, reactorHash: sender,
+                                      reactTo: payload.reactTo ?? "", emoji: payload.emoji)
+                    case "read":
+                        applyRead(chatID: chat.id, readerHash: sender, upTo: payload.readUpTo)
+                    case "typing":
+                        markTyping(chatID: chat.id, memberHash: sender)
+                    default:
+                        // A real message from them ends any "typing" state.
+                        typingBy[chat.id]?[sender] = nil
+                        var local = messagesByChat[chat.id] ?? []
+                        local.append(ChatMessage(
+                            id: UUID(), senderHash: sender,
+                            text: payload.text,
+                            sentAt: wire.sentAt, delivered: true,
+                            expiresAt: payload.ttl.map { wire.sentAt.addingTimeInterval($0) },
+                            mediaRef: payload.mediaRef,
+                            mediaKey: payload.mediaKey,
+                            kind: payload.kind,
+                            wireID: "\(sender).e\(epoch).\(idx)",
+                            replyTo: payload.replyTo,
+                            replyPreview: payload.replyPreview,
+                            replySenderHash: payload.replySenderHash))
+                        messagesByChat[chat.id] = local
+                    }
                     chain.lastMessageHash = Data(SHA256.hash(data: wire.ciphertext))
-                    _ = idx
                 }
                 chains["recv.\(chat.id).\(sender).e\(epoch)"] = chain
                 persist()
@@ -655,6 +816,7 @@ final class ChatEngine {
         if let data = try? JSONEncoder().encode(messagesByChat) { KeychainStore.save(data, for: "seal.messages.\(ownerHash)") }
         if let data = try? JSONEncoder().encode(chains) { KeychainStore.save(data, for: "seal.chains.\(ownerHash)") }
         if let data = try? JSONEncoder().encode(outbox) { KeychainStore.save(data, for: "seal.outbox.\(ownerHash)") }
+        if let data = try? JSONEncoder().encode(readMarks) { KeychainStore.save(data, for: "seal.readmarks.\(ownerHash)") }
     }
 
     private func load() {
@@ -666,5 +828,7 @@ final class ChatEngine {
            let decoded = try? JSONDecoder().decode([String: ChainState].self, from: data) { chains = decoded }
         if let data = KeychainStore.load("seal.outbox.\(ownerHash)"),
            let decoded = try? JSONDecoder().decode([PendingRecord].self, from: data) { outbox = decoded }
+        if let data = KeychainStore.load("seal.readmarks.\(ownerHash)"),
+           let decoded = try? JSONDecoder().decode([UUID: [String: Date]].self, from: data) { readMarks = decoded }
     }
 }
