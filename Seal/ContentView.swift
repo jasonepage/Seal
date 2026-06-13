@@ -34,7 +34,8 @@ struct ContentView: View {
             setupEngines()
             // Fresh ceremony THIS session (not an app relaunch) → offer the
             // claim-code prompt once; forge-pack codes ship in the box.
-            if new != nil, ceremony?.phase == .sealed, !DemoFixtures.isActive {
+            if new != nil, ceremony?.phase == .sealed, !DemoFixtures.isActive,
+               PerkAuthority.isConfigured {
                 showPostRegistrationRedeem = true
             }
         }

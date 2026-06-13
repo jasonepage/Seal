@@ -93,7 +93,7 @@ struct ProfileView: View {
                         .padding(.horizontal, 24)
                     }
 
-                    if verifiedPerks.isEmpty {
+                    if PerkAuthority.isConfigured, verifiedPerks.isEmpty {
                         Button { showRedeem = true } label: {
                             HStack {
                                 Image(systemName: "ticket")

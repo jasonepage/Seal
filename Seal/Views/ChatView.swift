@@ -366,6 +366,7 @@ struct VerificationSheet: View {
     /// Seed from cache, then refresh each member's perks from the directory
     /// and verify the full chain before anything renders.
     private func refreshPerks() async {
+        guard PerkAuthority.isConfigured else { return }   // dormant: no fetches, no rendering
         // Cached (already-verified) perks render immediately.
         for friend in friendStore?.friends ?? [] {
             if let cached = friend.perks { perksByMember[friend.id] = cached }

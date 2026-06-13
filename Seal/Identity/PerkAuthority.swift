@@ -12,7 +12,14 @@ enum PerkAuthority {
     /// The Seal founder public key (P-256, X9.63 uncompressed hex — 65 bytes,
     /// "04…"). Printed by `tools/mint_perks.py keygen`; paste it here.
     /// EMPTY = fail closed: all grants rejected.
+    /// Deliberately blank 6/12 — perk system shipped dormant (HANDOFF).
+    /// The hex is re-derivable from tools/founder_private.pem (keep that PEM!).
     static let founderPublicKeyHex = ""
+
+    /// DORMANT until a founder key is pasted above: every user-facing perk
+    /// surface (redeem row, post-registration prompt) is hidden, and
+    /// verification fails closed — the system is invisible until activated.
+    static var isConfigured: Bool { founderPublicKey != nil }
 
     static var founderPublicKey: P256.Signing.PublicKey? {
         guard let data = Data(hexString: founderPublicKeyHex), data.count == 65 else { return nil }
