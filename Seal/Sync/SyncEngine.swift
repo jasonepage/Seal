@@ -143,6 +143,18 @@ final class SyncEngine {
         try await publicDB.save(record)
     }
 
+    /// Account deletion (App Review 5.1.1(v)): remove our Identity record
+    /// from the public directory. Friends' clients can no longer fetch or
+    /// verify us; leftover Message/KeyEnvelope records are ciphertext that
+    /// becomes permanently unreadable once local keys are wiped.
+    func deleteIdentity(credentialIDHash: String) async throws {
+        do {
+            try await publicDB.deleteRecord(withID: CKRecord.ID(recordName: credentialIDHash))
+        } catch let error as CKError where error.code == .unknownItem {
+            // Already gone — deletion is idempotent.
+        }
+    }
+
     /// Raw device list (including revoked) for the profile UI.
     func fetchDeviceList(credentialIDHash: String) async throws -> ([DeviceEndorsement], [DeviceRevocation]) {
         let record = try await publicDB.record(for: CKRecord.ID(recordName: credentialIDHash))

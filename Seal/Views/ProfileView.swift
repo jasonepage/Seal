@@ -11,6 +11,9 @@ struct ProfileView: View {
     let onReset: () -> Void
 
     @State private var confirmReset = false
+    @State private var confirmDelete = false
+    @State private var deleting = false
+    @State private var deleteError: String?
     @State private var showRedeem = false
     @State private var devices: [DeviceEndorsement] = []
     @State private var revokedKeys: Set<Data> = []
@@ -126,6 +129,33 @@ struct ProfileView: View {
                         .foregroundStyle(.white.opacity(0.4))
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 40)
+
+                    // Account deletion (App Review 5.1.1(v)): directory record
+                    // removed first, then the full local wipe.
+                    Button(role: .destructive) { confirmDelete = true } label: {
+                        Group {
+                            if deleting { ProgressView() } else { Text("Delete identity") }
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.red)
+                    .disabled(deleting)
+                    .padding(.horizontal, 24)
+
+                    if let deleteError {
+                        Text(deleteError)
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 40)
+                    }
+
+                    Text("Deleting removes your identity from the directory permanently — friends can no longer verify you, and your forge log is gone for good. There is no recovery.")
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.4))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
                         .padding(.bottom, 24)
                 }
                 }
@@ -138,6 +168,14 @@ struct ProfileView: View {
             ) {
                 Button("Sign out and delete local data", role: .destructive) {
                     onReset()
+                }
+            }
+            .confirmationDialog(
+                "Permanently delete your identity? It's removed from the directory, friends can no longer verify you, and ALL data is destroyed. This cannot be undone — not by you, not by us.",
+                isPresented: $confirmDelete, titleVisibility: .visible
+            ) {
+                Button("Delete identity forever", role: .destructive) {
+                    Task { await deleteIdentity() }
                 }
             }
             .confirmationDialog(
@@ -205,6 +243,24 @@ struct ProfileView: View {
                 }
             }
         }
+    }
+
+    /// Directory record first, local wipe second — if the network call fails
+    /// we keep local state so the user can retry (an orphaned directory
+    /// record with no keys behind it would defeat the point of deletion).
+    private func deleteIdentity() async {
+        deleting = true
+        deleteError = nil
+        defer { deleting = false }
+        if !DemoFixtures.isActive {
+            do {
+                try await sync.deleteIdentity(credentialIDHash: myRoot.credentialIDHash)
+            } catch {
+                deleteError = "Couldn't reach iCloud to remove your directory entry — check your connection and try again."
+                return
+            }
+        }
+        onReset()
     }
 
     private func loadDevices() async {
