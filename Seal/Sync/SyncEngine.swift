@@ -159,6 +159,87 @@ final class SyncEngine {
         return (endorsements, revocations)
     }
 
+    // MARK: - Founder perks (SDS §10 — deterministic names, no queries)
+    //
+    // PerkGrant: "perk.<SHA256(code)>"   — minted offline, world-readable.
+    // PerkClaim: "pclaim.<SHA256(code)>" — created by the claimant; CloudKit
+    // record creation is atomic, so the FIRST creator wins and (creator-only
+    // write) nobody can stomp an existing claim. Honest residual: Apple could
+    // HIDE a claim record (denial), but cannot forge one — clients only honor
+    // claims whose signature chain verifies (PerkAuthority).
+
+    /// Fetch a (claimed) grant. Caller MUST verify the founder signature —
+    /// the server is untrusted for integrity.
+    func fetchPerkGrant(codeHashHex: String) async throws -> PerkGrant? {
+        let id = CKRecord.ID(recordName: PerkAuthority.grantRecordName(codeHashHex: codeHashHex))
+        do {
+            let record = try await publicDB.record(for: id)
+            guard let data = record["grant"] as? Data else { return nil }
+            return try? JSONDecoder().decode(PerkGrant.self, from: data)
+        } catch let error as CKError where error.code == .unknownItem {
+            return nil
+        }
+    }
+
+    /// First-create-wins claim. Returns nil on success; on "already claimed"
+    /// returns the existing claim (so redemption can tell "you already
+    /// redeemed this" from "someone else got here first"). The race window is
+    /// two simultaneous redeemers of the SAME code — the loser gets a clean
+    /// error here, never a silent half-claim.
+    func createPerkClaim(_ claim: PerkClaim) async throws -> PerkClaim? {
+        let id = CKRecord.ID(recordName: PerkAuthority.claimRecordName(codeHashHex: claim.codeHashHex))
+        let record = CKRecord(recordType: "PerkClaim", recordID: id)
+        record["claim"] = try JSONEncoder().encode(claim)
+        do {
+            try await publicDB.save(record)
+            return nil
+        } catch let error as CKError where error.code == .serverRecordChanged {
+            return try await fetchPerkClaim(codeHashHex: claim.codeHashHex)
+        }
+    }
+
+    func fetchPerkClaim(codeHashHex: String) async throws -> PerkClaim? {
+        let id = CKRecord.ID(recordName: PerkAuthority.claimRecordName(codeHashHex: codeHashHex))
+        do {
+            let record = try await publicDB.record(for: id)
+            guard let data = record["claim"] as? Data else { return nil }
+            return try? JSONDecoder().decode(PerkClaim.self, from: data)
+        } catch let error as CKError where error.code == .unknownItem {
+            return nil
+        }
+    }
+
+    /// Append a perk attestation to our Identity record so friends' clients
+    /// can fetch and verify it (same merge-don't-overwrite pattern as
+    /// endorsements).
+    func publishPerk(_ attestation: PerkAttestation, for credentialIDHash: String) async throws {
+        let record = try await publicDB.record(for: CKRecord.ID(recordName: credentialIDHash))
+        var perks: [PerkAttestation] = []
+        if let existing = record["perks"] as? Data,
+           let decoded = try? JSONDecoder().decode([PerkAttestation].self, from: existing) {
+            perks = decoded
+        }
+        perks.removeAll { $0.grant.codeHashHex == attestation.grant.codeHashHex }
+        perks.append(attestation)
+        record["perks"] = try JSONEncoder().encode(perks)
+        try await publicDB.save(record)
+    }
+
+    /// Raw (unverified) perk attestations from an Identity record. Callers
+    /// MUST run PerkAuthority.verifiedPerks before display.
+    func fetchPerks(credentialIDHash: String) async throws -> [PerkAttestation] {
+        let record: CKRecord
+        do {
+            record = try await publicDB.record(for: CKRecord.ID(recordName: credentialIDHash))
+        } catch let error as CKError where error.code == .unknownItem {
+            return []
+        }
+        guard let data = record["perks"] as? Data,
+              let decoded = try? JSONDecoder().decode([PerkAttestation].self, from: data)
+        else { return [] }
+        return decoded
+    }
+
     // MARK: - Message transport (deterministic record names — no queries)
     //
     // KeyEnvelope: "kenv.<groupID>[.e<epoch>].<senderHash>.<recipientHash>"
@@ -261,13 +342,19 @@ final class SyncEngine {
     /// near this function — it travels inside the E2EE message payload.
     func saveMediaAsset(_ encrypted: Data) async throws -> String {
         let name = "media.\(UUID().uuidString)"
+        try await saveMediaAsset(encrypted, name: name)
+        return name
+    }
+
+    /// Caller-supplied record name — lets the offline outbox reserve the name
+    /// up front and retry the exact same record later.
+    func saveMediaAsset(_ encrypted: Data, name: String) async throws {
         let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(name)
         try encrypted.write(to: tempURL)
         defer { try? FileManager.default.removeItem(at: tempURL) }
         let record = CKRecord(recordType: "MediaAsset", recordID: CKRecord.ID(recordName: name))
         record["blob"] = CKAsset(fileURL: tempURL)
         try await publicDB.save(record)
-        return name
     }
 
     func fetchMediaAsset(_ name: String) async throws -> Data? {

@@ -10,6 +10,7 @@ struct HomeView: View {
     @Bindable var friendStore: FriendStore
     @Bindable var chatEngine: ChatEngine
     @Bindable var appLock: AppLock
+    @Bindable var perkRedeemer: PerkRedeemer
     let onReset: () -> Void
     @Environment(\.scenePhase) private var scenePhase
 
@@ -27,7 +28,8 @@ struct HomeView: View {
             }
             Tab("You", systemImage: "checkmark.seal.fill") {
                 ProfileView(myRoot: myRoot, identity: identity, sync: sync,
-                            ceremony: ceremony, appLock: appLock, onReset: onReset)
+                            ceremony: ceremony, appLock: appLock,
+                            perkRedeemer: perkRedeemer, onReset: onReset)
             }
         }
         .tint(SealTheme.brass)

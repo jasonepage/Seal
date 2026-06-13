@@ -248,6 +248,9 @@ struct VerificationSheet: View {
     let friendStore: FriendStore?
     var engine: ChatEngine? = nil
     @State private var removing: RootIdentity?
+    /// Verified perks per member hash — seeded from the FriendStore cache,
+    /// refreshed from the directory while the drawer is open.
+    @State private var perksByMember: [String: [PerkAttestation]] = [:]
     @Environment(\.dismiss) private var dismiss
 
     private var iAmAdmin: Bool {
@@ -270,10 +273,12 @@ struct VerificationSheet: View {
                     .padding(.horizontal, 32)
 
                 VStack(spacing: 14) {
-                    memberRow(name: "\(myRoot.displayName) (you)", tier: myRoot.tier, publicKey: myRoot.publicKey)
+                    memberRow(name: "\(myRoot.displayName) (you)", tier: myRoot.tier, publicKey: myRoot.publicKey,
+                              perks: perksByMember[myRoot.credentialIDHash] ?? [])
                     ForEach(otherMembers, id: \.credentialIDHash) { member in
                         HStack {
-                            memberRow(name: member.displayName, tier: member.tier, publicKey: member.publicKey)
+                            memberRow(name: member.displayName, tier: member.tier, publicKey: member.publicKey,
+                                      perks: perksByMember[member.credentialIDHash] ?? [])
                             if iAmAdmin {
                                 Button { removing = member } label: {
                                     Image(systemName: "minus.circle")
@@ -311,6 +316,7 @@ struct VerificationSheet: View {
             }
         }
         .preferredColorScheme(.dark)
+        .task { await refreshPerks() }
         .confirmationDialog(
             "Remove \(removing?.displayName ?? "")? Group keys rotate — they can't read anything sent after this.",
             isPresented: .init(get: { removing != nil }, set: { if !$0 { removing = nil } }),
@@ -334,7 +340,8 @@ struct VerificationSheet: View {
             .compactMap { hash in friendStore?.friends.first(where: { $0.id == hash })?.identity }
     }
 
-    private func memberRow(name: String, tier: IdentityTier, publicKey: Data) -> some View {
+    private func memberRow(name: String, tier: IdentityTier, publicKey: Data,
+                           perks: [PerkAttestation] = []) -> some View {
         HStack(spacing: 12) {
             IdentityRing(displayName: name, tier: tier, size: 38)
             VStack(alignment: .leading, spacing: 2) {
@@ -344,8 +351,34 @@ struct VerificationSheet: View {
                 Text(FingerprintPhrase.phrase(for: publicKey))
                     .font(.callout)
                     .foregroundStyle(SealTheme.brass)
+                // Founder EDITION line (never a tier change): only rendered
+                // after the full grant+claim chain verified (PerkAuthority).
+                ForEach(perks, id: \.grant.codeHashHex) { perk in
+                    Text(perk.grant.kind.displayLabel(number: perk.grant.number))
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(SealTheme.brass.opacity(0.85))
+                }
             }
             Spacer()
+        }
+    }
+
+    /// Seed from cache, then refresh each member's perks from the directory
+    /// and verify the full chain before anything renders.
+    private func refreshPerks() async {
+        // Cached (already-verified) perks render immediately.
+        for friend in friendStore?.friends ?? [] {
+            if let cached = friend.perks { perksByMember[friend.id] = cached }
+        }
+        guard let sync = engine?.sync, !DemoFixtures.isActive else { return }
+        for hash in chat.memberHashes {
+            guard let raw = try? await sync.fetchPerks(credentialIDHash: hash), !raw.isEmpty,
+                  // `?? nil` flattens the try?-of-optional double wrap
+                  let (root, endorsements) = (try? await sync.fetchIdentity(credentialIDHash: hash)) ?? nil
+            else { continue }
+            let verified = PerkAuthority.verifiedPerks(raw, root: root, endorsements: endorsements)
+            perksByMember[hash] = verified
+            friendStore?.setPerks(verified, for: hash)
         }
     }
 }

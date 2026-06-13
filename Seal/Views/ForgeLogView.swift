@@ -53,6 +53,12 @@ struct ForgeLogView: View {
                                     Text(FingerprintPhrase.phrase(for: friend.identity.publicKey))
                                         .font(.caption)
                                         .foregroundStyle(SealTheme.brass.opacity(0.8))
+                                    // Founder edition (verified before caching).
+                                    ForEach(friend.perks ?? [], id: \.grant.codeHashHex) { perk in
+                                        Text(perk.grant.kind.displayLabel(number: perk.grant.number))
+                                            .font(.caption2.weight(.semibold))
+                                            .foregroundStyle(SealTheme.brass.opacity(0.85))
+                                    }
                                 }
                                 Spacer()
                                 VStack(alignment: .trailing, spacing: 2) {

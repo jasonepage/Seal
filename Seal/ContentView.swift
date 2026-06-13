@@ -12,20 +12,32 @@ struct ContentView: View {
     @State private var friendStore: FriendStore?
     @State private var chatEngine: ChatEngine?
     @State private var appLock: AppLock?
+    @State private var perkRedeemer: PerkRedeemer?
+    @State private var showPostRegistrationRedeem = false
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         Group {
-            if let root = identity.rootIdentity, let ceremony, let chatEngine, let friendStore, let appLock {
+            if let root = identity.rootIdentity, let ceremony, let chatEngine, let friendStore, let appLock, let perkRedeemer {
                 HomeView(myRoot: root, identity: identity, ceremony: ceremony,
                          sync: sync, friendStore: friendStore, chatEngine: chatEngine,
-                         appLock: appLock, onReset: performReset)
+                         appLock: appLock, perkRedeemer: perkRedeemer, onReset: performReset)
+                    .sheet(isPresented: $showPostRegistrationRedeem) {
+                        RedeemPerkView(myRoot: root, redeemer: perkRedeemer)
+                    }
             } else if let ceremony {
                 RegistrationView(ceremony: ceremony, sync: sync)
             }
         }
         .onAppear { setupEngines() }
-        .onChange(of: identity.rootIdentity?.credentialIDHash) { setupEngines() }
+        .onChange(of: identity.rootIdentity?.credentialIDHash) { _, new in
+            setupEngines()
+            // Fresh ceremony THIS session (not an app relaunch) → offer the
+            // claim-code prompt once; forge-pack codes ship in the box.
+            if new != nil, ceremony?.phase == .sealed, !DemoFixtures.isActive {
+                showPostRegistrationRedeem = true
+            }
+        }
         .overlay {
             if let appLock, appLock.isLocked { AppLockScreen(lock: appLock) }
         }
@@ -51,6 +63,9 @@ struct ContentView: View {
         if appLock?.ownerHash != hash {
             appLock = AppLock(ownerHash: hash)
         }
+        if perkRedeemer?.ownerHash != hash {
+            perkRedeemer = PerkRedeemer(ownerHash: hash, identity: identity, sync: sync)
+        }
     }
 
     /// Reset destroys this identity's keys AND all its local data.
@@ -59,10 +74,12 @@ struct ContentView: View {
             FriendStore.wipe(ownerHash: hash)
             ChatEngine.wipe(ownerHash: hash)
             AppLock.wipe(ownerHash: hash)
+            PerkRedeemer.wipe(ownerHash: hash)
         }
         friendStore = nil
         chatEngine = nil
         appLock = nil
+        perkRedeemer = nil
         identity.reset()
         ceremony?.resetPhase()
         sync.resetStatus()

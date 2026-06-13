@@ -2,3 +2,7 @@ xcuserdata/
 *.xcuserstate
 .DS_Store
 DerivedData/
+
+# Founder perk minting — NEVER commit the key or unclaimed codes
+tools/founder_private.pem
+tools/mint_out*/

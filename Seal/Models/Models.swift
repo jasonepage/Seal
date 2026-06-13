@@ -72,6 +72,53 @@ struct SealGroup: Codable, Identifiable, Hashable {
     var ephemeralTTL: TimeInterval?     // nil = persistent (FR-12)
 }
 
+// MARK: - Founder perks (PerkGrant / PerkClaim, SDS §10)
+
+/// Perk editions. Founder is an EDITION of a tier, never a third tier —
+/// ring color stays tier-determined everywhere.
+enum PerkKind: String, Codable, Hashable {
+    case founder                            // numbered 1–100, hard-capped in PerkAuthority
+    case campusFounder = "campus-founder"   // unnumbered campus-ambassador edition
+
+    func displayLabel(number: Int?) -> String {
+        switch self {
+        case .founder: number.map { "Founder № \($0)" } ?? "Founder"
+        case .campusFounder: "Campus founder"
+        }
+    }
+}
+
+/// Founder-key-signed grant minted offline (tools/mint_perks.py) and placed
+/// in the public DB at record name `perk.<codeHashHex>`. The signature commits
+/// to the code hash, so a grant can't be replayed under a different code.
+/// Unix-second timestamps keep the signed message byte-identical between the
+/// Python minter and Swift verification.
+struct PerkGrant: Codable, Hashable {
+    let kind: PerkKind
+    let number: Int?                    // required 1–100 for .founder, nil otherwise
+    let codeHashHex: String             // SHA256(normalized claim code), lowercase hex
+    let issuedAtUnix: Int64
+    let signature: Data                 // founder P-256 ECDSA (DER) over PerkAuthority.grantMessage
+}
+
+/// Device-key-signed claim binding a verified grant to a root identity.
+/// Written once as record `pclaim.<codeHashHex>` (first creator wins) and
+/// appended to the claimant's Identity record so friends' clients can verify.
+struct PerkClaim: Codable, Hashable {
+    let codeHashHex: String
+    let rootID: String                  // claimant's credentialIDHash
+    let devicePublicKey: Data           // the endorsed device key that signed
+    let claimedAtUnix: Int64
+    let signature: Data                 // device-key ECDSA (DER) over PerkAuthority.claimMessage
+}
+
+/// What travels in Identity.perks: the grant + the claim, verified together
+/// (founder signature, code-hash match, claim chains to an endorsed device).
+struct PerkAttestation: Codable, Hashable {
+    let grant: PerkGrant
+    let claim: PerkClaim
+}
+
 struct Message: Codable, Identifiable, Hashable {
     let id: UUID
     let groupID: UUID

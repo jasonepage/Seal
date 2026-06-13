@@ -9,6 +9,9 @@ final class FriendStore {
         var id: String { identity.credentialIDHash }
         let identity: RootIdentity
         let friendship: Friendship
+        /// VERIFIED perk attestations (PerkAuthority checked before caching).
+        /// Optional so pre-perk keychain data still decodes.
+        var perks: [PerkAttestation]?
     }
 
     private(set) var friends: [StoredFriend] = []
@@ -32,6 +35,14 @@ final class FriendStore {
 
     func remove(_ credentialIDHash: String) {
         friends.removeAll { $0.identity.credentialIDHash == credentialIDHash }
+        save()
+    }
+
+    /// Cache a friend's verified perks (caller verifies via PerkAuthority first).
+    func setPerks(_ perks: [PerkAttestation], for credentialIDHash: String) {
+        guard let index = friends.firstIndex(where: { $0.identity.credentialIDHash == credentialIDHash }),
+              friends[index].perks != perks else { return }
+        friends[index].perks = perks
         save()
     }
 

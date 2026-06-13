@@ -120,3 +120,17 @@ Add a thin Vapor/Cloudflare-Workers backend for: standard WebAuthn ceremonies, a
 
 ## 9. Tech Stack Summary
 SwiftUI + iOS 17, AuthenticationServices (FIDO2), CryptoKit + Secure Enclave, CKSyncEngine (CloudKit), SwiftData (encrypted local store), static AASA hosting. Zero recurring server cost.
+
+## 10. Founder Perks (PerkGrant / PerkClaim)
+
+Growth seeding: blank NFC keys ("forge packs") gifted to campus ambassadors and meetup hosts, with perks attached via **claim codes printed in the box** — never pre-registered keys, because custody of a key that minted an identity breaks the trust model (§7). The code is a bearer secret; the key in the box is factory-blank.
+
+**Records (public DB, deterministic names, no queries):**
+- `PerkGrant` at `perk.<SHA256(code)>` — field `grant`: founder-key-signed JSON `{kind, number?, codeHashHex, issuedAtUnix, signature}`. Minted offline by `tools/mint_perks.py`; signed message is `seal.perk.grant.v1|<kind>|<number or '-'>|<codeHashHex>|<issuedAtUnix>` (byte-identical in Python minter and Swift verifier). The signature commits to the code hash, so a grant can't be served under a different code's record name.
+- `PerkClaim` at `pclaim.<SHA256(code)>` — field `claim`: device-key-signed JSON binding the perk to a root identity (`seal.perk.claim.v1|<codeHashHex>|<rootID>|<devicePubHex>|<claimedAtUnix>`). Created by the claimant.
+
+**Verification (client-side, always):** the founder public key is compiled into the app (`PerkAuthority.founderPublicKeyHex`; empty = fail closed). Before any perk renders: founder signature on the grant → edition rules (founder number hard-capped to 1–100 in the client, making "100 founders" a cryptographic promise; campus-founder is unnumbered) → claim/grant code-hash match → claim signature chains to an endorsed, unrevoked device of the claimed root. Friends' clients verify the attestation published in the claimant's `Identity.perks` field; verified results are cached with the friend (FriendStore).
+
+**One-time use, honestly:** there is no server to enforce uniqueness. We use CloudKit record **creation** atomicity: the first client to create `pclaim.<hash>` wins; the second gets `serverRecordChanged` and a clean "already claimed" error (re-redeeming your own code is idempotent). Creator-only write means nobody can stomp an existing claim even after the code hash becomes public via the claimant's Identity record. Residual risks, accepted and documented: (a) two simultaneous redeemers of the same code race — the loser finds out at redemption time, never silently; (b) Apple could *hide* a claim record (denial of badge display), but cannot *forge* one — forging requires the founder key plus an endorsed device key of the claimed identity; (c) a code is a bearer secret — whoever reads the box insert first wins, same as any gift card.
+
+**Founder is an edition, not a tier:** ring color stays tier-determined (brass = Verified, silver = passkey) everywhere; the perk renders as a brass text line ("Founder № 7", "Campus founder") in the verification drawer, profile, and forge log — brass because a verified founder signature is a trust artifact.

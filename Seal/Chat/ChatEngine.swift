@@ -65,7 +65,7 @@ final class ChatEngine {
     /// Deterministic record names make retries idempotent (an "already
     /// exists" error counts as delivered).
     private struct PendingRecord: Codable {
-        enum Kind: String, Codable { case message, envelope }
+        enum Kind: String, Codable { case message, envelope, media }
         let kind: Kind
         let groupID: String
         let epoch: UInt64
@@ -79,6 +79,8 @@ final class ChatEngine {
         var sentAt: Date?
         var recipients: [String]?
         var localMessageID: UUID?
+        var mediaName: String?          // media: reserved record name
+        var mediaBlob: Data?            // media: encrypted bytes
     }
 
     private var outbox: [PendingRecord] = []
@@ -88,7 +90,7 @@ final class ChatEngine {
     private(set) var lastError: String?
 
     private let identity: IdentityManager
-    private let sync: SyncEngine
+    let sync: SyncEngine
     // chains["send.<chatID>"] = my sending chain
     // chains["recv.<chatID>.<senderHash>"] = a member's receiving chain
     private var chains: [String: ChainState] = [:]
@@ -313,7 +315,18 @@ final class ChatEngine {
         do {
             let contentKey = SymmetricKey(size: .bits256)
             let sealed = try AES.GCM.seal(jpeg, using: contentKey).combined!
-            let mediaRef = try await sync.saveMediaAsset(sealed)
+            // Reserve the record name up front so an offline upload can be
+            // queued and retried under the same name the message references.
+            let mediaRef = "media.\(UUID().uuidString)"
+            imageCache[mediaRef] = jpeg     // sender sees their photo instantly
+            do {
+                try await sync.saveMediaAsset(sealed, name: mediaRef)
+            } catch {
+                outbox.append(PendingRecord(
+                    kind: .media, groupID: chat.id.uuidString, epoch: 0,
+                    senderHash: myRoot.credentialIDHash,
+                    mediaName: mediaRef, mediaBlob: sealed))
+            }
             let ttl = chats.first(where: { $0.id == chat.id })?.ttl
             await sendPayload(MessagePayload(
                 text: "", ttl: ttl, mediaRef: mediaRef,
@@ -464,6 +477,9 @@ final class ChatEngine {
                                        sentAt: record.sentAt ?? .now),
                         recipients: record.recipients ?? [])
                     if let id = record.localMessageID { deliveredIDs.insert(id) }
+                case .media:
+                    try await sync.saveMediaAsset(record.mediaBlob ?? Data(),
+                                                  name: record.mediaName ?? "")
                 }
             } catch let error as CKError where error.code == .serverRecordChanged {
                 if let id = record.localMessageID { deliveredIDs.insert(id) }
@@ -490,6 +506,7 @@ final class ChatEngine {
     /// Pull new messages from every other member, in chain order.
     func refresh(_ chat: Chat, myRoot: RootIdentity) async {
         if DemoFixtures.isActive { purgeExpired(); return }   // fully local (FR-22)
+        var failed = false
         let myHash = myRoot.credentialIDHash
         let groupID = chat.id.uuidString
         let liveChat = chats.first(where: { $0.id == chat.id }) ?? chat
@@ -551,10 +568,18 @@ final class ChatEngine {
                 }
                 chains["recv.\(chat.id).\(sender).e\(epoch)"] = chain
                 persist()
+            } catch let error as CKError
+                where error.code == .networkUnavailable || error.code == .networkFailure {
+                // Polling while offline isn't an error worth shouting about.
+                lastError = "Offline — will sync when connected."
+                failed = true
             } catch {
                 lastError = "Sync failed: \(error.localizedDescription)"
+                failed = true
             }
         }
+        // Back online and the pass fully succeeded: clear the stale offline notice.
+        if !failed, lastError == "Offline — will sync when connected." { lastError = nil }
         purgeExpired()
     }
 

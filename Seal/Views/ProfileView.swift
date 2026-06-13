@@ -7,9 +7,11 @@ struct ProfileView: View {
     let sync: SyncEngine
     @Bindable var ceremony: CeremonyManager
     @Bindable var appLock: AppLock
+    @Bindable var perkRedeemer: PerkRedeemer
     let onReset: () -> Void
 
     @State private var confirmReset = false
+    @State private var showRedeem = false
     @State private var devices: [DeviceEndorsement] = []
     @State private var revokedKeys: Set<Data> = []
     @State private var revoking: DeviceEndorsement?
@@ -33,6 +35,15 @@ struct ProfileView: View {
                     Text(FingerprintPhrase.phrase(for: myRoot.publicKey))
                         .font(.title3)
                         .foregroundStyle(SealTheme.brass)
+
+                    // Founder edition line — an edition of the tier, not a
+                    // third tier. Brass because it's a verified trust artifact.
+                    ForEach(verifiedPerks, id: \.grant.codeHashHex) { perk in
+                        Label(perk.grant.kind.displayLabel(number: perk.grant.number),
+                              systemImage: "seal.fill")
+                            .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                            .foregroundStyle(SealTheme.brass)
+                    }
 
                     VStack(alignment: .leading, spacing: 10) {
                         infoRow("Seal", String(myRoot.credentialIDHash.prefix(24)) + "…")
@@ -82,6 +93,25 @@ struct ProfileView: View {
                         .padding(.horizontal, 24)
                     }
 
+                    if verifiedPerks.isEmpty {
+                        Button { showRedeem = true } label: {
+                            HStack {
+                                Image(systemName: "ticket")
+                                    .foregroundStyle(SealTheme.silver)
+                                Text("Redeem a claim code")
+                                    .foregroundStyle(.white.opacity(0.9))
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.white.opacity(0.3))
+                            }
+                            .font(.callout)
+                            .padding(16)
+                            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
+                        }
+                        .padding(.horizontal, 24)
+                    }
+
                     Button(role: .destructive) { confirmReset = true } label: {
                         Text("Sign out")
                             .frame(maxWidth: .infinity)
@@ -128,8 +158,24 @@ struct ProfileView: View {
                 }
             }
             .task { await loadDevices() }
+            .sheet(isPresented: $showRedeem) {
+                RedeemPerkView(myRoot: myRoot, redeemer: perkRedeemer)
+            }
         }
         .preferredColorScheme(.dark)
+    }
+
+    /// Locally stored perks, re-verified before display — same discipline as
+    /// every other signature in the app. Uses the directory device list when
+    /// loaded (a claim signed on another of our devices still verifies),
+    /// falling back to this device's endorsement.
+    private var verifiedPerks: [PerkAttestation] {
+        var endorsements = devices
+        if endorsements.isEmpty, let own = identity.deviceEndorsement {
+            endorsements = [own]
+        }
+        return PerkAuthority.verifiedPerks(perkRedeemer.perks, root: myRoot,
+                                           endorsements: endorsements)
     }
 
     private func deviceRow(_ device: DeviceEndorsement) -> some View {
