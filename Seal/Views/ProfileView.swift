@@ -8,7 +8,8 @@ struct ProfileView: View {
     @Bindable var ceremony: CeremonyManager
     @Bindable var appLock: AppLock
     @Bindable var perkRedeemer: PerkRedeemer
-    let onReset: () -> Void
+    let onSignOut: () -> Void
+    let onDelete: () -> Void
 
     @State private var confirmReset = false
     @State private var confirmDelete = false
@@ -167,7 +168,7 @@ struct ProfileView: View {
                 isPresented: $confirmReset, titleVisibility: .visible
             ) {
                 Button("Sign out and delete local data", role: .destructive) {
-                    onReset()
+                    onSignOut()
                 }
             }
             .confirmationDialog(
@@ -260,7 +261,7 @@ struct ProfileView: View {
                 return
             }
         }
-        onReset()
+        onDelete()
     }
 
     private func loadDevices() async {

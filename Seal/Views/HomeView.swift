@@ -11,7 +11,8 @@ struct HomeView: View {
     @Bindable var chatEngine: ChatEngine
     @Bindable var appLock: AppLock
     @Bindable var perkRedeemer: PerkRedeemer
-    let onReset: () -> Void
+    let onSignOut: () -> Void
+    let onDelete: () -> Void
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -29,7 +30,8 @@ struct HomeView: View {
             Tab("You", systemImage: "checkmark.seal.fill") {
                 ProfileView(myRoot: myRoot, identity: identity, sync: sync,
                             ceremony: ceremony, appLock: appLock,
-                            perkRedeemer: perkRedeemer, onReset: onReset)
+                            perkRedeemer: perkRedeemer,
+                            onSignOut: onSignOut, onDelete: onDelete)
             }
         }
         .tint(SealTheme.brass)

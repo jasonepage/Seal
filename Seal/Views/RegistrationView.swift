@@ -7,6 +7,7 @@ struct RegistrationView: View {
     let sync: SyncEngine
     @State private var displayName = ""
     @State private var busy = false
+    @State private var showSignInOptions = false
 
     var body: some View {
         ZStack {
@@ -68,7 +69,7 @@ struct RegistrationView: View {
                 .disabled(busy || displayName.trimmingCharacters(in: .whitespaces).isEmpty)
 
                 Button {
-                    Task { await signIn() }
+                    showSignInOptions = true
                 } label: {
                     Text("Already have a seal? Sign in")
                         .font(.footnote)
@@ -76,6 +77,11 @@ struct RegistrationView: View {
                 }
                 .disabled(busy)
                 .padding(.top, 4)
+                .confirmationDialog("Sign in with", isPresented: $showSignInOptions, titleVisibility: .visible) {
+                    Button("Face ID (passkey)") { Task { await signIn(.passkey) } }
+                    Button("Security key") { Task { await signIn(.verified) } }
+                    Button("Cancel", role: .cancel) {}
+                }
 
                 Text("Your key is your identity. Friends are made in person.\nNothing is recoverable — by design.")
                     .font(.caption2)
@@ -115,11 +121,11 @@ struct RegistrationView: View {
         )
     }
 
-    private func signIn() async {
+    private func signIn(_ tier: IdentityTier) async {
         busy = true
         defer { busy = false }
         ceremony.resetPhase()
-        _ = try? await ceremony.signIn(directory: sync)
+        _ = try? await ceremony.signIn(directory: sync, tier: tier)
         // Honest note: identity returns; chats/friends are device-local and
         // may not (they survive reinstalls via keychain, not resets).
     }

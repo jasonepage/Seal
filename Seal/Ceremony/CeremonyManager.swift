@@ -2,6 +2,7 @@ import Foundation
 import AuthenticationServices
 import CryptoKit
 import UIKit
+import os   // Logger interpolation (privacy:) resolves at the call site
 
 /// Drives the three tap ceremonies (SDS §5): registration, friend forge, device add.
 /// UI choreography spec: docs/UI.md §3.1–3.2.
@@ -37,6 +38,8 @@ final class CeremonyManager: NSObject {
         case missingCredentialID
         case identityNotFound
         case alreadyRegistered
+        case directoryUnavailable
+        case directoryEmpty
 
         var errorDescription: String? {
             switch self {
@@ -47,6 +50,8 @@ final class CeremonyManager: NSObject {
             case .missingCredentialID: "This person registered before credential publishing — they need to update their identity."
             case .identityNotFound: "No identity in the directory matches that key. Register instead?"
             case .alreadyRegistered: "This key already holds a Seal identity — one key, one identity. Use \"Sign in\" instead."
+            case .directoryUnavailable: "Couldn't reach the identity directory to look up your key. Check your connection and iCloud sign-in, then tap to try again."
+            case .directoryEmpty: "No identities are published in the directory yet, so there's nothing for your security key to match. (If you just registered, give iCloud a moment to sync — or the Identity record type may not be Queryable in this CloudKit environment.)"
             }
         }
     }
@@ -65,7 +70,18 @@ final class CeremonyManager: NSObject {
             //    recognizes its own credential IDs, even non-discoverable
             //    ones). Best-effort by design: directory unreachable →
             //    proceed; deterrence, not an invariant (SDS §7).
-            let excluded = (try? await directory?.fetchAllCredentialIDs()) ?? []
+            // Best-effort by design (deterrence, not an invariant), but log
+            // the outcome: if this query fails or returns 0 here, security-key
+            // SIGN-IN will also come up empty (same query), which is the usual
+            // root cause of a "No Credentials" sign-in — Identity not Queryable
+            // in this CloudKit environment, or iCloud unreachable.
+            var excluded: [Data] = []
+            do {
+                excluded = try await directory?.fetchAllCredentialIDs() ?? []
+                WebAuthnDiag.log.info("register: directory exclusion query returned \(excluded.count, privacy: .public) credential ID(s)")
+            } catch {
+                WebAuthnDiag.log.error("register: directory exclusion query FAILED (sign-in by key will also fail): \(error.localizedDescription, privacy: .public)")
+            }
 
             // 1. Create the root WebAuthn credential.
             let challenge = Self.randomChallenge()
@@ -89,8 +105,9 @@ final class CeremonyManager: NSObject {
                 rawCredentialID: registration.credentialID
             )
 
-            // 3. Create this device's Secure Enclave signing key.
-            let deviceKey = try identity.createDeviceKey()
+            // 3. Create this device's Secure Enclave signing key (scoped to
+            //    the new identity).
+            let deviceKey = try identity.createDeviceKey(for: root.credentialIDHash)
             let devicePub = deviceKey.publicKey.x963Representation
 
             // 4. Endorsement: root credential signs a challenge committing to
@@ -120,8 +137,24 @@ final class CeremonyManager: NSObject {
                 revokedAt: nil
             )
 
-            // 5. Persist. (CloudKit publish is SyncEngine's job — next milestone.)
+            // 5. Persist locally.
             identity.completeRegistration(identity: root, endorsement: endorsement)
+
+            // 6. Publish to the directory NOW, as part of registration — not
+            //    deferred to HomeView's .task. A security-key account that
+            //    isn't in the directory cannot be signed back into (sign-in
+            //    builds its allow-list from the directory), so a lazy publish
+            //    that was skipped (status-gated) or cancelled (user navigated
+            //    away / signed out before the CloudKit save finished) looked
+            //    like "sign-out deleted my account." Publishing here guarantees
+            //    the record exists before the user can leave this screen.
+            //    Best-effort: if offline, HomeView's .task republishes later.
+            if let directory {
+                await directory.publishIdentity(root, endorsement: endorsement)
+                WebAuthnDiag.log.info("register: published identity to directory (hash=\(root.credentialIDHash, privacy: .public))")
+            } else {
+                WebAuthnDiag.log.error("register: no directory handle — identity NOT published (key sign-in will fail until it syncs)")
+            }
             phase = .sealed
             SealTheme.sealHaptic()
             return root
@@ -141,24 +174,69 @@ final class CeremonyManager: NSObject {
 
     // MARK: - Sign in (existing identity, this or a new device)
 
-    /// Assert with any credential for our RP (passkey via Face ID, or a
-    /// discoverable security-key credential), look the identity up in the
-    /// directory, verify the assertion against its public key, then endorse
+    /// Assert with an existing credential for our RP, look the identity up in
+    /// the directory, verify the assertion against its public key, then endorse
     /// THIS device with a second tap. Chats/friends are device-local and do
     /// not follow the identity — the UI says so.
-    func signIn(directory: SyncEngine) async throws -> RootIdentity {
+    ///
+    /// `tier` selects the method explicitly. We do NOT bundle the passkey and
+    /// security-key providers into one request: with both present iOS jumps
+    /// straight to the security-key (NFC/USB) modal instead of offering Face
+    /// ID, which broke passkey sign-in. The caller asks the user which they
+    /// have and we fire exactly one provider.
+    func signIn(directory: SyncEngine, tier: IdentityTier) async throws -> RootIdentity {
         phase = .searching
         do {
-            // 1. Who are you? Empty allow-lists: any credential for this RP.
+            // 1. Who are you? One provider only, chosen by `tier`.
             let challenge = Self.randomChallenge()
-            let platform = ASAuthorizationPlatformPublicKeyCredentialProvider(
-                relyingPartyIdentifier: Self.relyingPartyID)
-            let security = ASAuthorizationSecurityKeyPublicKeyCredentialProvider(
-                relyingPartyIdentifier: Self.relyingPartyID)
-            let credential = try await performRequests([
-                platform.createCredentialAssertionRequest(challenge: challenge),
-                security.createCredentialAssertionRequest(challenge: challenge),
-            ])
+            let request: ASAuthorizationRequest
+            switch tier {
+            case .passkey:
+                // Passkeys are discoverable: empty allow-list → the system
+                // shows every passkey for this RP and authenticates via Face ID.
+                let platform = ASAuthorizationPlatformPublicKeyCredentialProvider(
+                    relyingPartyIdentifier: Self.relyingPartyID)
+                request = platform.createCredentialAssertionRequest(challenge: challenge)
+            case .verified:
+                // Security-key credentials are NON-discoverable (registration
+                // mints them with residentKey .discouraged to dodge the CTAP2
+                // PIN ceremony), so an empty allow-list finds nothing. Instead
+                // we hand the request EVERY credentialID published in the
+                // directory: a non-resident authenticator recognizes its own
+                // credential when its ID is in the allow-list (the credential
+                // is key-wrapped into the ID), so it asserts without being
+                // discoverable and without the PIN ceremony. Directory
+                // unreachable → empty list → the key has nothing to match,
+                // surfaced as identityNotFound below (SDS §7).
+                let security = ASAuthorizationSecurityKeyPublicKeyCredentialProvider(
+                    relyingPartyIdentifier: Self.relyingPartyID)
+                let securityRequest = security.createCredentialAssertionRequest(challenge: challenge)
+                securityRequest.userVerificationPreference = .discouraged
+                // Build the allow-list from the directory. Do NOT swallow a
+                // fetch failure into an empty list: an empty allow-list makes
+                // iOS report the key's generic "No Credentials" error, which
+                // masks the real cause (directory unreachable, or the Identity
+                // record type isn't Queryable in this CloudKit environment).
+                // Distinguish the two and fail with an honest message.
+                let directoryCredentialIDs: [Data]
+                do {
+                    directoryCredentialIDs = try await directory.fetchAllCredentialIDs()
+                } catch {
+                    WebAuthnDiag.log.error("signIn(.verified): directory fetch FAILED: \(error.localizedDescription, privacy: .public)")
+                    throw CeremonyError.directoryUnavailable
+                }
+                WebAuthnDiag.log.info("signIn(.verified): directory returned \(directoryCredentialIDs.count, privacy: .public) credential ID(s)")
+                guard !directoryCredentialIDs.isEmpty else {
+                    throw CeremonyError.directoryEmpty
+                }
+                securityRequest.allowedCredentials = directoryCredentialIDs.map {
+                    ASAuthorizationSecurityKeyPublicKeyCredentialDescriptor(
+                        credentialID: $0,
+                        transports: ASAuthorizationSecurityKeyPublicKeyCredentialDescriptor.Transport.allSupported)
+                }
+                request = securityRequest
+            }
+            let credential = try await performRequest(request)
             guard let assertion = credential as? ASAuthorizationPublicKeyCredentialAssertion else {
                 throw CeremonyError.unexpectedCredential
             }
@@ -183,14 +261,20 @@ final class CeremonyManager: NSObject {
                 throw CeremonyError.verificationFailed
             }
 
-            // 4. Endorse this device (same as registration steps 3–4).
-            let deviceKey = try identity.createDeviceKey()
+            // 4. Endorse this device. REUSE this phone's existing key for this
+            //    identity if it survived a prior sign-out — that keeps the
+            //    device public key stable so the directory recognizes the same
+            //    device instead of logging a duplicate. Only a genuinely new
+            //    phone mints a fresh key here.
+            let deviceKey = try identity.loadOrCreateDeviceKey(for: root.credentialIDHash)
             let devicePub = deviceKey.publicKey.x963Representation
             phase = .endorsing
             let kemPub = identity.kemPublicKeyData ?? Data()
             let commitment = Data(SHA256.hash(data: Data("seal.endorse.v2".utf8) + devicePub + kemPub))
-            let endorseCredential = try await performRequests(
-                makeFriendAssertionRequests(friendCredentialID: assertion.credentialID, challenge: commitment))
+            // Endorse with the SAME provider used to identify — passing both
+            // would re-trigger the NFC modal for passkey users.
+            let endorseCredential = try await performRequest(
+                makeAssertionRequest(tier: tier, challenge: commitment, allowedCredentialID: assertion.credentialID))
             guard let endorseAssertion = endorseCredential as? ASAuthorizationPublicKeyCredentialAssertion else {
                 throw CeremonyError.unexpectedCredential
             }
@@ -206,6 +290,11 @@ final class CeremonyManager: NSObject {
                 revokedAt: nil)
 
             identity.completeRegistration(identity: root, endorsement: endorsement)
+            // Publish the appended endorsement immediately (same reasoning as
+            // registration step 6): don't rely on a deferred view task that can
+            // be skipped or cancelled before the CloudKit save lands.
+            await directory.publishIdentity(root, endorsement: endorsement)
+            WebAuthnDiag.log.info("signIn: published appended endorsement (hash=\(root.credentialIDHash, privacy: .public))")
             phase = .sealed
             SealTheme.sealHaptic()
             return root
@@ -299,6 +388,14 @@ final class CeremonyManager: NSObject {
                 credentialID: friendCredentialID,
                 transports: ASAuthorizationSecurityKeyPublicKeyCredentialDescriptor.Transport.allSupported)
         ]
+        // Match registration's UV policy. Registration mints the credential
+        // with userVerification .discouraged; leaving assertions at the default
+        // (.preferred) makes a PIN-protected key launch the CTAP2 clientPIN
+        // ceremony over NFC mid-tap — the "wrong PIN despite correct PIN"
+        // failure. Keeping it .discouraged here is what actually fixes
+        // security-key friending. (Platform/passkey UV is unaffected: the
+        // passkey side still verifies via Face ID on the friend's device.)
+        skRequest.userVerificationPreference = .discouraged
         let platform = ASAuthorizationPlatformPublicKeyCredentialProvider(
             relyingPartyIdentifier: Self.relyingPartyID)
         let pkRequest = platform.createCredentialAssertionRequest(challenge: challenge)
@@ -369,9 +466,12 @@ final class CeremonyManager: NSObject {
             // Non-discoverable: discoverable credentials force the CTAP2
             // clientPIN ceremony on PIN-protected keys, which fails on some
             // firmware/NFC combinations ("wrong PIN" despite correct PIN).
-            // Trade-off: key-only sign-in needs discoverable credentials, so
-            // security-key sign-in is parked until this is resolved upstream;
-            // passkey sign-in is unaffected.
+            // We keep credentials non-discoverable AND still support key
+            // sign-in: signIn() hands the security-key request every
+            // credentialID from the directory as its allow-list, so a
+            // non-resident key recognizes its own credential without needing
+            // to be discoverable (no PIN ceremony). Scale ceiling = directory
+            // size in the allow-list; fine at current scale (SDS §7).
             request.residentKeyPreference = .discouraged
             // .discouraged avoids iOS forcing PIN setup on PIN-less keys mid-ceremony.
             // Revisit for Verified tier policy (key presence is still required).
@@ -400,6 +500,8 @@ final class CeremonyManager: NSObject {
                     credentialID: allowedCredentialID,
                     transports: ASAuthorizationSecurityKeyPublicKeyCredentialDescriptor.Transport.allSupported)
             ]
+            // Same UV policy as registration — see makeFriendAssertionRequests.
+            request.userVerificationPreference = .discouraged
             return request
         }
     }

@@ -8,8 +8,15 @@ final class IdentityManager {
     private(set) var rootIdentity: RootIdentity?
     private(set) var deviceEndorsement: DeviceEndorsement?
 
-    private static let deviceKeyTag = "seal.deviceKey"
-    private static let kemKeyTag = "seal.kemKey"
+    // Device + KEM keys are scoped to the identity hash so the SAME phone
+    // keeps the SAME device key across sign-out (re-login reclaims its slot
+    // instead of minting a duplicate), while a DIFFERENT identity on this
+    // phone gets its own key (no cross-identity device-key linkage).
+    private static func deviceKeyTag(_ hash: String) -> String { "seal.deviceKey.\(hash)" }
+    private static func kemKeyTag(_ hash: String) -> String { "seal.kemKey.\(hash)" }
+    // Legacy un-scoped tags (pre-scoping builds) — migrated once on load.
+    private static let legacyDeviceKeyTag = "seal.deviceKey"
+    private static let legacyKemKeyTag = "seal.kemKey"
     static let identityKey = "seal.rootIdentity"        // internal: DemoFixtures swaps/restores it
     static let endorsementKey = "seal.deviceEndorsement"
 
@@ -24,8 +31,11 @@ final class IdentityManager {
     /// message, so gating is done at app level (Face ID app lock), not per-sign.
     private(set) var deviceKey: SecureEnclave.P256.Signing.PrivateKey?
 
+    /// Mint a fresh device key + KEM key for `identityHash`. Use during
+    /// registration (genuinely new device). For sign-in prefer
+    /// `loadOrCreateDeviceKey(for:)`, which reuses an existing key.
     @discardableResult
-    func createDeviceKey() throws -> SecureEnclave.P256.Signing.PrivateKey {
+    func createDeviceKey(for identityHash: String) throws -> SecureEnclave.P256.Signing.PrivateKey {
         var error: Unmanaged<CFError>?
         guard let access = SecAccessControlCreateWithFlags(
             nil,
@@ -35,14 +45,39 @@ final class IdentityManager {
         ) else { throw error!.takeRetainedValue() as Error }
 
         let key = try SecureEnclave.P256.Signing.PrivateKey(accessControl: access)
-        KeychainStore.save(key.dataRepresentation, for: Self.deviceKeyTag)
+        KeychainStore.save(key.dataRepresentation, for: Self.deviceKeyTag(identityHash))
         deviceKey = key
 
         // X25519 KEM key for sender-chain wrapping (SDS §2). Software key,
         // this-device-only; its public half is published in the endorsement.
         let kem = Curve25519.KeyAgreement.PrivateKey()
-        KeychainStore.save(kem.rawRepresentation, for: Self.kemKeyTag)
+        KeychainStore.save(kem.rawRepresentation, for: Self.kemKeyTag(identityHash))
         kemPrivateKey = kem
+        return key
+    }
+
+    /// Reuse this phone's existing device key for `identityHash` if the
+    /// keychain still holds it (survives sign-out), otherwise mint one. This
+    /// is what keeps a returning phone from being counted as a NEW device:
+    /// the device public key stays stable, so `publishIdentity` dedupes the
+    /// endorsement by it instead of appending a ghost.
+    @discardableResult
+    func loadOrCreateDeviceKey(for identityHash: String) throws -> SecureEnclave.P256.Signing.PrivateKey {
+        guard let data = KeychainStore.load(Self.deviceKeyTag(identityHash)),
+              let key = try? SecureEnclave.P256.Signing.PrivateKey(dataRepresentation: data) else {
+            return try createDeviceKey(for: identityHash)
+        }
+        deviceKey = key
+        if let kemData = KeychainStore.load(Self.kemKeyTag(identityHash)) {
+            kemPrivateKey = try? Curve25519.KeyAgreement.PrivateKey(rawRepresentation: kemData)
+        }
+        // Device key present but KEM somehow missing → mint a KEM so the
+        // endorsement can still commit to a valid encryption key.
+        if kemPrivateKey == nil {
+            let kem = Curve25519.KeyAgreement.PrivateKey()
+            KeychainStore.save(kem.rawRepresentation, for: Self.kemKeyTag(identityHash))
+            kemPrivateKey = kem
+        }
         return key
     }
 
@@ -65,16 +100,37 @@ final class IdentityManager {
         // TODO(SyncEngine): publish Identity record to CloudKit public DB (FR-4)
     }
 
-    /// Wipe local identity (dev/testing; revocation flow is FR-19).
+    /// Sign out: forget the identity on this device but KEEP this device's
+    /// Secure Enclave + KEM keys in the keychain, so signing back into the
+    /// SAME identity is recognized as the SAME device (no ghost). Local
+    /// chats/friends are wiped by the caller. Use `reset()` for full deletion.
+    func signOut() {
+        rootIdentity = nil
+        deviceEndorsement = nil
+        deviceKey = nil          // in-memory only — keychain copy survives
+        kemPrivateKey = nil
+        KeychainStore.delete(Self.identityKey)
+        KeychainStore.delete(Self.endorsementKey)
+    }
+
+    /// Full wipe (account deletion / hard reset): everything signOut clears
+    /// PLUS this identity's device + KEM keys, so nothing of this identity
+    /// remains on the device. (Revocation flow is FR-19.)
     func reset() {
+        let hash = rootIdentity?.credentialIDHash
         rootIdentity = nil
         deviceEndorsement = nil
         deviceKey = nil
         kemPrivateKey = nil
         KeychainStore.delete(Self.identityKey)
         KeychainStore.delete(Self.endorsementKey)
-        KeychainStore.delete(Self.deviceKeyTag)
-        KeychainStore.delete(Self.kemKeyTag)
+        if let hash {
+            KeychainStore.delete(Self.deviceKeyTag(hash))
+            KeychainStore.delete(Self.kemKeyTag(hash))
+        }
+        // Legacy un-scoped keys, if any, go too.
+        KeychainStore.delete(Self.legacyDeviceKeyTag)
+        KeychainStore.delete(Self.legacyKemKeyTag)
     }
 
     private func load() {
@@ -84,10 +140,23 @@ final class IdentityManager {
         if let data = KeychainStore.load(Self.endorsementKey) {
             deviceEndorsement = try? JSONDecoder().decode(DeviceEndorsement.self, from: data)
         }
-        if let data = KeychainStore.load(Self.deviceKeyTag) {
+        guard let hash = rootIdentity?.credentialIDHash else { return }
+        // One-time migration: a pre-scoping build stored this device's key
+        // under the legacy un-scoped tag. Move it under the current identity
+        // so the existing install keeps its device slot instead of orphaning.
+        if KeychainStore.load(Self.deviceKeyTag(hash)) == nil,
+           let legacy = KeychainStore.load(Self.legacyDeviceKeyTag) {
+            KeychainStore.save(legacy, for: Self.deviceKeyTag(hash))
+            if let legacyKem = KeychainStore.load(Self.legacyKemKeyTag) {
+                KeychainStore.save(legacyKem, for: Self.kemKeyTag(hash))
+            }
+            KeychainStore.delete(Self.legacyDeviceKeyTag)
+            KeychainStore.delete(Self.legacyKemKeyTag)
+        }
+        if let data = KeychainStore.load(Self.deviceKeyTag(hash)) {
             deviceKey = try? SecureEnclave.P256.Signing.PrivateKey(dataRepresentation: data)
         }
-        if let data = KeychainStore.load(Self.kemKeyTag) {
+        if let data = KeychainStore.load(Self.kemKeyTag(hash)) {
             kemPrivateKey = try? Curve25519.KeyAgreement.PrivateKey(rawRepresentation: data)
         }
     }

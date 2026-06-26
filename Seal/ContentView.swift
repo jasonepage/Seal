@@ -21,7 +21,8 @@ struct ContentView: View {
             if let root = identity.rootIdentity, let ceremony, let chatEngine, let friendStore, let appLock, let perkRedeemer {
                 HomeView(myRoot: root, identity: identity, ceremony: ceremony,
                          sync: sync, friendStore: friendStore, chatEngine: chatEngine,
-                         appLock: appLock, perkRedeemer: perkRedeemer, onReset: performReset)
+                         appLock: appLock, perkRedeemer: perkRedeemer,
+                         onSignOut: performSignOut, onDelete: performDelete)
                     .sheet(isPresented: $showPostRegistrationRedeem) {
                         RedeemPerkView(myRoot: root, redeemer: perkRedeemer)
                     }
@@ -69,8 +70,9 @@ struct ContentView: View {
         }
     }
 
-    /// Reset destroys this identity's keys AND all its local data.
-    private func performReset() {
+    /// Clear all of this identity's local data + engines (shared by sign-out
+    /// and delete). Reads the identity hash BEFORE the identity is cleared.
+    private func wipeLocalAndEngines() {
         if let hash = identity.rootIdentity?.credentialIDHash {
             FriendStore.wipe(ownerHash: hash)
             ChatEngine.wipe(ownerHash: hash)
@@ -81,10 +83,24 @@ struct ContentView: View {
         chatEngine = nil
         appLock = nil
         perkRedeemer = nil
-        identity.reset()
         ceremony?.resetPhase()
         sync.resetStatus()
+    }
+
+    /// Sign out: wipe local data but KEEP this device's key, so re-login on
+    /// this phone is recognized as the same device.
+    private func performSignOut() {
+        wipeLocalAndEngines()
+        identity.signOut()
+    }
+
+    /// Delete identity: wipe local data AND this device's keys — nothing of
+    /// this identity remains on the phone.
+    private func performDelete() {
+        wipeLocalAndEngines()
+        identity.reset()
         // TODO(FR-19): tombstone the directory record so friends see revocation
+        //              and other signed-in devices stop republishing it.
     }
 }
 
