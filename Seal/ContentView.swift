@@ -95,12 +95,12 @@ struct ContentView: View {
     }
 
     /// Delete identity: wipe local data AND this device's keys — nothing of
-    /// this identity remains on the phone.
+    /// this identity remains on the phone. The directory tombstone (write-once
+    /// marker + tier flip) is written by ProfileView.deleteIdentity BEFORE this
+    /// local wipe runs, so sign-in is refused and no device can republish it.
     private func performDelete() {
         wipeLocalAndEngines()
         identity.reset()
-        // TODO(FR-19): tombstone the directory record so friends see revocation
-        //              and other signed-in devices stop republishing it.
     }
 }
 

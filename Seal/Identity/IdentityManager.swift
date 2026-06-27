@@ -100,6 +100,20 @@ final class IdentityManager {
         // TODO(SyncEngine): publish Identity record to CloudKit public DB (FR-4)
     }
 
+    /// Change the display name after registration and persist it. The name is
+    /// metadata only — it's NOT part of any signature, the endorsement
+    /// commitment, or the credential hash — so renaming never affects
+    /// verification or identity. The caller republishes the Identity record so
+    /// friends pick up the new name on their next directory fetch.
+    func updateDisplayName(_ newName: String) {
+        guard var root = rootIdentity else { return }
+        root.displayName = newName
+        rootIdentity = root
+        if let data = try? JSONEncoder().encode(root) {
+            KeychainStore.save(data, for: Self.identityKey)
+        }
+    }
+
     /// Sign out: forget the identity on this device but KEEP this device's
     /// Secure Enclave + KEM keys in the keychain, so signing back into the
     /// SAME identity is recognized as the SAME device (no ghost). Local

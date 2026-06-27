@@ -30,6 +30,27 @@ final class SyncEngine {
         CKContainer(identifier: Self.containerID).publicCloudDatabase
     }
 
+    // MARK: - Tombstones (permanent deletion)
+
+    /// Deletion marker lives in its OWN record, separate from the (revivable)
+    /// Identity record. The `tier="deleted"` flag on the Identity record alone
+    /// is not enough: the app republishes that record on sign-in, on every
+    /// device refresh, and via ChatEngine.ensureSelfPublished — and if the
+    /// record was removed outright (e.g. deleted in the CloudKit console),
+    /// publishIdentity just re-creates a fresh LIVE one. A write-once tombstone
+    /// record can't be revived by republishing the identity, because the
+    /// publish path never touches this record name.
+    private static func tombstoneName(_ hash: String) -> String { "tomb.\(hash)" }
+
+    /// True if this identity has been permanently deleted. Checked at sign-in
+    /// AND before any publish, so a deleted identity can't be brought back.
+    func isTombstoned(credentialIDHash hash: String) async -> Bool {
+        let id = CKRecord.ID(recordName: Self.tombstoneName(hash))
+        do { _ = try await publicDB.record(for: id); return true }
+        catch let error as CKError where error.code == .unknownItem { return false }
+        catch { return false }   // network/unknown: fail open (don't block normal use)
+    }
+
     // MARK: - Identity directory (FR-4)
 
     /// Publish (or refresh) our Identity record in the public database so
@@ -38,17 +59,24 @@ final class SyncEngine {
     func publishIdentity(_ root: RootIdentity, endorsement: DeviceEndorsement) async {
         status = .publishing
         do {
+            // Never resurrect a permanently-deleted identity. The write-once
+            // tombstone record is authoritative and survives the Identity
+            // record being overwritten OR removed outright, so this closes the
+            // revival paths the `tier` flag alone missed (sign-in republish,
+            // other-device refresh, ensureSelfPublished, console deletion).
+            if await isTombstoned(credentialIDHash: root.credentialIDHash) {
+                status = .error("This identity was deleted and can't be republished.")
+                WebAuthnDiag.log.info("publishIdentity: refused to revive tombstoned identity")
+                return
+            }
             let recordID = CKRecord.ID(recordName: root.credentialIDHash)
             let record: CKRecord
             if let existing = try? await publicDB.record(for: recordID) {
-                // Never resurrect a tombstoned identity. Account deletion is
-                // permanent (FR-19); without this guard, a sign-in's republish
-                // would re-create a just-deleted record — especially during the
-                // CloudKit propagation window when the deleted record is still
-                // readable.
+                // Belt-and-suspenders: also honor the legacy tier flag (covers
+                // identities deleted before the tombstone record existed).
                 if existing["tier"] as? String == Self.deletedTier {
                     status = .error("This identity was deleted and can't be republished.")
-                    WebAuthnDiag.log.info("publishIdentity: refused to revive tombstoned identity")
+                    WebAuthnDiag.log.info("publishIdentity: refused to revive tombstoned identity (tier flag)")
                     return
                 }
                 record = existing
@@ -178,23 +206,31 @@ final class SyncEngine {
     /// fetchIdentity, the sign-in allow-list, and publishIdentity all refuse to
     /// revive (FR-19). Uses only existing fields, so no schema change.
     func deleteIdentity(credentialIDHash: String) async throws {
+        // 1. Write-once permanence marker FIRST, in its OWN record. Once this
+        //    exists, isTombstoned() is true forever, so sign-in and every
+        //    publish refuse the identity — a racing republish (or a wiped
+        //    Identity record) can't bring it back. Reuses the existing
+        //    "Identity" record type, so no schema change. Idempotent.
+        let tombID = CKRecord.ID(recordName: Self.tombstoneName(credentialIDHash))
+        let tomb = CKRecord(recordType: "Identity", recordID: tombID)
+        tomb["tier"] = Self.deletedTier
+        try await publicDB.save(tomb)
+
+        // 2. Also flip the live Identity record to the deleted sentinel + scrub
+        //    endorsements, so the fast path (fetchIdentity's tier check) sees it
+        //    gone immediately without the extra tombstone fetch. EXISTING fields
+        //    only — no schema change, works in Production.
         let recordID = CKRecord.ID(recordName: credentialIDHash)
         let record: CKRecord
         do {
             record = try await publicDB.record(for: recordID)
         } catch let error as CKError where error.code == .unknownItem {
-            // Never published (or already removed): still write a tombstone so
-            // the identity can't be (re)created later either.
             record = CKRecord(recordType: "Identity", recordID: recordID)
         }
-        // Tombstone using EXISTING fields only — no schema change, works in
-        // Production. The sentinel tier makes every reader fail to decode the
-        // identity, and publishIdentity refuses to revive it. Empty the
-        // endorsements too so even a reader that ignores tier loads nothing.
         record["tier"] = Self.deletedTier
         record["deviceEndorsements"] = Data()
         try await publicDB.save(record)
-        WebAuthnDiag.log.info("deleteIdentity: tombstoned \(credentialIDHash, privacy: .public) (tier=deleted)")
+        WebAuthnDiag.log.info("deleteIdentity: tombstoned \(credentialIDHash, privacy: .public) (record + write-once marker)")
     }
 
     /// Raw device list (including revoked) for the profile UI.

@@ -19,6 +19,12 @@ struct ProfileView: View {
     @State private var devices: [DeviceEndorsement] = []
     @State private var revokedKeys: Set<Data> = []
     @State private var revoking: DeviceEndorsement?
+    @State private var renaming = false
+    @State private var draftName = ""
+
+    /// Live name — reflects an in-session rename immediately (myRoot is a
+    /// passed-in copy that only refreshes when the parent re-renders).
+    private var currentName: String { identity.rootIdentity?.displayName ?? myRoot.displayName }
 
     var body: some View {
         NavigationStack {
@@ -26,11 +32,29 @@ struct ProfileView: View {
                 SealTheme.ink.ignoresSafeArea()
                 ScrollView {
                 VStack(spacing: 20) {
-                    IdentityRing(displayName: myRoot.displayName, tier: myRoot.tier, size: 96)
+                    IdentityRing(displayName: currentName, tier: myRoot.tier, size: 96)
                         .padding(.top, 32)
-                    Text(myRoot.displayName)
-                        .font(.system(.title, design: .rounded, weight: .semibold))
-                        .foregroundStyle(.white)
+                    Button {
+                        draftName = currentName
+                        renaming = true
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(currentName)
+                                .font(.system(.title, design: .rounded, weight: .semibold))
+                                .foregroundStyle(.white)
+                            Image(systemName: "pencil")
+                                .font(.footnote)
+                                .foregroundStyle(.white.opacity(0.4))
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .alert("Change your name", isPresented: $renaming) {
+                        TextField("Your name", text: $draftName)
+                        Button("Save") { Task { await saveName() } }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("This is only a label — your key stays your identity. Friends see the new name next time they sync.")
+                    }
                     Label(myRoot.tier == .verified ? "Verified — hardware key" : "Passkey",
                           systemImage: myRoot.tier == .verified ? "key.radiowaves.forward.fill" : "faceid")
                         .font(.subheadline)
@@ -243,6 +267,18 @@ struct ProfileView: View {
                         .foregroundStyle(.orange.opacity(0.8))
                 }
             }
+        }
+    }
+
+    /// Rename: update locally, then republish so friends see the new name.
+    private func saveName() async {
+        let trimmed = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != currentName else { return }
+        identity.updateDisplayName(trimmed)
+        // Best-effort republish; the local change persists regardless, and
+        // publishIdentity reports any directory error in the status row.
+        if let root = identity.rootIdentity, let endorsement = identity.deviceEndorsement {
+            await sync.publishIdentity(root, endorsement: endorsement)
         }
     }
 

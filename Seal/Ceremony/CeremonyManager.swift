@@ -37,6 +37,7 @@ final class CeremonyManager: NSObject {
         case verificationFailed
         case missingCredentialID
         case identityNotFound
+        case identityDeleted
         case alreadyRegistered
         case directoryUnavailable
         case directoryEmpty
@@ -49,6 +50,7 @@ final class CeremonyManager: NSObject {
             case .verificationFailed: "That key doesn't match this person's identity. The forge was NOT completed."
             case .missingCredentialID: "This person registered before credential publishing — they need to update their identity."
             case .identityNotFound: "No identity in the directory matches that key. Register instead?"
+            case .identityDeleted: "This identity was permanently deleted and can't be restored. Register a new one instead."
             case .alreadyRegistered: "This key already holds a Seal identity — one key, one identity. Use \"Sign in\" instead."
             case .directoryUnavailable: "Couldn't reach the identity directory to look up your key. Check your connection and iCloud sign-in, then tap to try again."
             case .directoryEmpty: "No identities are published in the directory yet, so there's nothing for your security key to match. (If you just registered, give iCloud a moment to sync — or the Identity record type may not be Queryable in this CloudKit environment.)"
@@ -211,7 +213,11 @@ final class CeremonyManager: NSObject {
                 let security = ASAuthorizationSecurityKeyPublicKeyCredentialProvider(
                     relyingPartyIdentifier: Self.relyingPartyID)
                 let securityRequest = security.createCredentialAssertionRequest(challenge: challenge)
-                securityRequest.userVerificationPreference = .discouraged
+                // .preferred, not .discouraged — see makeRegistrationRequest.
+                // A PIN'd key forces UV via always_uv; .discouraged would put
+                // iOS and the key in the "wrong PIN" conflict. Pinless keys are
+                // unaffected (.preferred prompts only when a PIN is set).
+                securityRequest.userVerificationPreference = .preferred
                 // Build the allow-list from the directory. Do NOT swallow a
                 // fetch failure into an empty list: an empty allow-list makes
                 // iOS report the key's generic "No Credentials" error, which
@@ -244,6 +250,12 @@ final class CeremonyManager: NSObject {
 
             // 2. Directory lookup by credential hash.
             let hash = Data(SHA256.hash(data: assertion.credentialID)).hexString
+            // Permanently-deleted identities refuse sign-in even if their
+            // Identity record was revived during a CloudKit propagation window —
+            // the write-once tombstone is authoritative.
+            if await directory.isTombstoned(credentialIDHash: hash) {
+                throw CeremonyError.identityDeleted
+            }
             guard let (root, _) = try await directory.fetchIdentity(credentialIDHash: hash) else {
                 throw CeremonyError.identityNotFound
             }
@@ -388,14 +400,14 @@ final class CeremonyManager: NSObject {
                 credentialID: friendCredentialID,
                 transports: ASAuthorizationSecurityKeyPublicKeyCredentialDescriptor.Transport.allSupported)
         ]
-        // Match registration's UV policy. Registration mints the credential
-        // with userVerification .discouraged; leaving assertions at the default
-        // (.preferred) makes a PIN-protected key launch the CTAP2 clientPIN
-        // ceremony over NFC mid-tap — the "wrong PIN despite correct PIN"
-        // failure. Keeping it .discouraged here is what actually fixes
-        // security-key friending. (Platform/passkey UV is unaffected: the
-        // passkey side still verifies via Face ID on the friend's device.)
-        skRequest.userVerificationPreference = .discouraged
+        // Match registration's UV policy: .preferred — see
+        // makeRegistrationRequest for the full rationale. A PIN-protected key
+        // forces the clientPIN ceremony regardless (always_uv); .preferred
+        // makes iOS and the key agree so it completes, instead of the
+        // .discouraged conflict that surfaced as "wrong PIN despite correct
+        // PIN". Pinless keys still tap through with no prompt. (Platform/passkey
+        // UV is unaffected: the passkey side verifies via Face ID.)
+        skRequest.userVerificationPreference = .preferred
         let platform = ASAuthorizationPlatformPublicKeyCredentialProvider(
             relyingPartyIdentifier: Self.relyingPartyID)
         let pkRequest = platform.createCredentialAssertionRequest(challenge: challenge)
@@ -463,19 +475,29 @@ final class CeremonyManager: NSObject {
                     credentialID: $0,
                     transports: ASAuthorizationSecurityKeyPublicKeyCredentialDescriptor.Transport.allSupported)
             }
-            // Non-discoverable: discoverable credentials force the CTAP2
-            // clientPIN ceremony on PIN-protected keys, which fails on some
-            // firmware/NFC combinations ("wrong PIN" despite correct PIN).
-            // We keep credentials non-discoverable AND still support key
-            // sign-in: signIn() hands the security-key request every
-            // credentialID from the directory as its allow-list, so a
-            // non-resident key recognizes its own credential without needing
-            // to be discoverable (no PIN ceremony). Scale ceiling = directory
-            // size in the allow-list; fine at current scale (SDS §7).
+            // Non-discoverable credentials: keeps sign-in working off an
+            // allow-list — signIn() hands the request every directory
+            // credentialID, so a non-resident key still recognizes its own
+            // credential. Scale ceiling = directory size in the allow-list;
+            // fine at current scale (SDS §7). NOTE: residentKey is orthogonal
+            // to the PIN — making creds non-discoverable does NOT avoid the
+            // clientPIN ceremony (that's the userVerification axis, below).
             request.residentKeyPreference = .discouraged
-            // .discouraged avoids iOS forcing PIN setup on PIN-less keys mid-ceremony.
-            // Revisit for Verified tier policy (key presence is still required).
-            request.userVerificationPreference = .discouraged
+            // UV policy — CANONICAL comment, referenced by the other three
+            // security-key requests. Use .preferred, NOT .discouraged.
+            //
+            // Modern FIDO2.1 keys ship with `always_uv` enabled once a PIN is
+            // set, so they FORCE the CTAP2 clientPIN ceremony regardless of what
+            // the RP requests. Asking for .discouraged against such a key makes
+            // iOS and the key disagree (RP says "no UV"; key insists on UV).
+            // iOS then drives the PIN path in that contradictory state, which is
+            // the "wrong PIN despite correct PIN" failure we kept hitting.
+            // .preferred aligns iOS with the key so the ceremony completes.
+            // Pinless keys are unaffected: .preferred prompts only "if a PIN is
+            // set" (FIDO spec), so they stay tap-only with no prompt. (.required
+            // would also fix PIN'd keys but forces PIN SETUP on pinless keys —
+            // rejected to preserve the tap-only flow.)
+            request.userVerificationPreference = .preferred
             request.attestationPreference = .direct   // SDS §6: request, don't enforce
             return request
         }
@@ -500,8 +522,8 @@ final class CeremonyManager: NSObject {
                     credentialID: allowedCredentialID,
                     transports: ASAuthorizationSecurityKeyPublicKeyCredentialDescriptor.Transport.allSupported)
             ]
-            // Same UV policy as registration — see makeFriendAssertionRequests.
-            request.userVerificationPreference = .discouraged
+            // Same UV policy as registration (.preferred) — see makeRegistrationRequest.
+            request.userVerificationPreference = .preferred
             return request
         }
     }

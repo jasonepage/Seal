@@ -62,9 +62,14 @@ Result = ✅ works / ⚠️ works sometimes / ❌ fails. For ❌ and ⚠️, cop
 - **`verify: ... did NOT match`** → not a crypto-format bug: wrong credential
   answered, or directory public key mismatch. Check the one-key-one-identity
   exclusion and the directory record.
-- **Register/sign needs a PIN and fails over NFC** → the CTAP clientPIN / UV
-  policy path (`userVerificationPreference = .discouraged`), not the parser.
-  Note whether the key has a PIN; this is a policy decision, not a code bug.
+- **Register/sign needs a PIN and fails over NFC** ("wrong PIN" though the PIN
+  is right) → the CTAP clientPIN / UV path, not the parser. ROOT CAUSE (6/26):
+  modern FIDO2.1 keys enable `always_uv` once a PIN is set and force UV no matter
+  what the RP asks; requesting `.discouraged` conflicts with that and iOS drives
+  the PIN path in a broken state. FIXED by `userVerificationPreference =
+  .preferred` (CeremonyManager, all 4 security-key requests) so iOS and the key
+  agree. If a PIN'd key STILL fails over NFC after this, suspect transport
+  flakiness (multi-round-trip clientPIN over NFC) — retest over USB-C to isolate.
 
 ## After the pass
 

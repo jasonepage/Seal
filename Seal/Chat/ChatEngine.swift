@@ -1,6 +1,7 @@
 import Foundation
 import CloudKit
 import CryptoKit
+import os
 
 /// E2EE chat over CloudKit (SDS §2, §5). Each member has a per-chat sender
 /// chain; per-message keys ratchet forward and are never reused. Inbound
@@ -8,6 +9,16 @@ import CryptoKit
 /// before display — unverifiable messages are dropped, never shown.
 @Observable
 final class ChatEngine {
+    /// Messaging-layer diagnostics — same subsystem as WebAuthnDiag, separate
+    /// `messaging` category. Logs key FINGERPRINTS (8 hex of SHA256) and counts
+    /// only; never key material or plaintext. Read in Console.app filtered on
+    /// subsystem `io.github.jasonepage.Seal` category `messaging`.
+    static let msgLog = Logger(subsystem: "io.github.jasonepage.Seal", category: "messaging")
+
+    /// 8-hex fingerprint of a PUBLIC key, for correlating desyncs in logs.
+    static func fp(_ data: Data) -> String {
+        Data(SHA256.hash(data: data)).prefix(4).map { String(format: "%02x", $0) }.joined()
+    }
     struct Chat: Codable, Identifiable, Hashable {
         let id: UUID
         var name: String
@@ -117,6 +128,8 @@ final class ChatEngine {
     private var chains: [String: ChainState] = [:]
     // directory cache: rootHash → (identity, verified endorsements)
     private var directoryCache: [String: (RootIdentity, [DeviceEndorsement])] = [:]
+    // One self-heal republish per launch (see ensureSelfPublished).
+    private var didEnsureSelfPublished = false
 
     let ownerHash: String
 
@@ -281,9 +294,33 @@ final class ChatEngine {
         if changed { persist() }
     }
 
+    /// Self-heal the SENDER side of a key desync: make sure THIS device's
+    /// current endorsement (signing + KEM key) is actually present in the
+    /// directory. A rebuild/reset (e.g. the PIN-fix build) can leave our
+    /// published record pointing at old keys — then friends wrap to a KEM key
+    /// we no longer hold AND we sign with a device key they can't verify, which
+    /// is exactly the bidirectional failure we chased. One idempotent republish
+    /// per launch closes that gap; publishIdentity merges by device key, so it's
+    /// a no-op once we're current. Best-effort and silent if offline.
+    private func ensureSelfPublished(myRoot: RootIdentity) async {
+        guard !didEnsureSelfPublished, let endorsement = identity.deviceEndorsement else { return }
+        didEnsureSelfPublished = true
+        // Skip the CloudKit write only if our current device key is already in
+        // the directory's VERIFIED set; republish when it's missing OR present
+        // but stale/unverifiable.
+        if let (root, endorsements) = try? await sync.fetchIdentity(credentialIDHash: myRoot.credentialIDHash),
+           IdentityManager.verifiedDevices(root: root, endorsements: endorsements)
+               .contains(where: { $0.devicePublicKey == endorsement.devicePublicKey }) {
+            return
+        }
+        ChatEngine.msgLog.info("ensureSelfPublished: republishing this device's endorsement (device=\(ChatEngine.fp(endorsement.devicePublicKey), privacy: .public) kem=\(ChatEngine.fp(endorsement.kemBundlePublicKeys), privacy: .public)) — was missing/stale in directory")
+        await sync.publishIdentity(myRoot, endorsement: endorsement)
+    }
+
     /// Full sync pass: surface 1:1 chats for every friend, accept invites,
     /// pull new messages everywhere. Called on launch, foreground, and push.
     func refreshAll(myRoot: RootIdentity, friendStore: FriendStore) async {
+        await ensureSelfPublished(myRoot: myRoot)
         await flushOutbox()
         for friend in friendStore.friends {
             _ = ensureChat(with: friend.identity, myHash: myRoot.credentialIDHash)
@@ -507,18 +544,25 @@ final class ChatEngine {
             if chain == nil {
                 let fresh = ChainState(chainKey: Self.randomBytes(32), index: 0)
                 for member in liveChat.memberHashes where member != myHash {
-                    // .last = most recently endorsed device (after a sign-in
-                    // on a new phone, that's the active one).
-                    // NOTE: first message of an epoch needs the directory
-                    // (recipient KEM keys) — fully-offline sends only work
-                    // once a chain exists or the directory entry is cached.
-                    guard let (_, endorsements) = try await directoryEntry(for: member),
-                          let recipientKEM = endorsements.last?.kemBundlePublicKeys,
-                          !recipientKEM.isEmpty else {
+                    // Wrap to EVERY one of the member's endorsed device KEM
+                    // keys, not just `.last`. If our directory view of "their
+                    // latest device" is stale, the recipient can still open the
+                    // copy wrapped to the key it actually holds — self-healing
+                    // against the cross-device "Sync failed / CryptoKit error 3"
+                    // desync. NOTE: first message of an epoch needs the
+                    // directory (recipient KEM keys) — fully-offline sends only
+                    // work once a chain exists or the directory entry is cached.
+                    guard let (_, endorsements) = try await directoryEntry(for: member) else {
                         lastError = "A member's identity has no message keys — they need to re-register."
                         return
                     }
-                    let envelope = try HybridKEM.wrap(fresh.chainKey, to: recipientKEM)
+                    let recipientKEMs = endorsements.map(\.kemBundlePublicKeys).filter { !$0.isEmpty }
+                    guard !recipientKEMs.isEmpty else {
+                        lastError = "A member's identity has no message keys — they need to re-register."
+                        return
+                    }
+                    let envelope = try HybridKEM.wrapToAll(fresh.chainKey, to: recipientKEMs)
+                    ChatEngine.msgLog.info("send: wrapped epoch \(epoch, privacy: .public) key to \(recipientKEMs.count, privacy: .public) device key(s) [\(recipientKEMs.map { ChatEngine.fp($0) }.joined(separator: ","), privacy: .public)]")
                     do {
                         try await sync.saveKeyEnvelope(
                             groupID: groupID, epoch: epoch, senderHash: myHash,
@@ -665,7 +709,22 @@ final class ChatEngine {
                           let envelope = try await sync.fetchKeyEnvelope(
                             groupID: groupID, epoch: epoch, senderHash: sender, recipientHash: myHash)
                     else { continue }   // they haven't sent in this epoch yet
-                    let chainKey = try HybridKEM.unwrap(envelope, with: kemKey)
+                    let chainKey: Data
+                    do {
+                        chainKey = try HybridKEM.unwrap(envelope, with: kemKey)
+                    } catch {
+                        // None of the wrapped copies opened with our key: the
+                        // sender wrapped to a KEM key this device no longer
+                        // holds (stale view of our endorsements, or our keys
+                        // were re-minted). Skip this sender with a clear notice
+                        // instead of a raw CryptoKit error — refreshAll's
+                        // self-republish pushes our current key so their next
+                        // send wraps to it.
+                        let myKEMfp = ChatEngine.fp(identity.kemPublicKeyData ?? Data())
+                        ChatEngine.msgLog.error("recv: KEM unwrap failed (sender=\(sender, privacy: .public)) — no copy matched myKEM=\(myKEMfp, privacy: .public)")
+                        lastError = "Couldn't unlock messages from a member yet — their app has older keys for you. It clears once you're both updated; re-friending fixes it for sure."
+                        continue
+                    }
                     state = ChainState(chainKey: chainKey, index: 0)
                 }
                 var chain = state!
@@ -680,14 +739,17 @@ final class ChatEngine {
                     let aad = Self.messageAAD(groupID: groupID, epoch: epoch, sender: sender,
                                               index: chain.index, prevHash: chain.lastMessageHash)
 
-                    // Full verification chain before decryption is even attempted.
-                    guard let (root, endorsements) = try await directoryEntry(for: sender),
-                          identity.verify(signature: wire.signature,
-                                          over: wire.ciphertext + aad,
-                                          deviceKey: wire.senderDevicePublicKey,
-                                          claimedRoot: root,
-                                          endorsements: endorsements) else {
-                        lastError = "Dropped a message that failed verification."
+                    // Full verification chain before decryption is even
+                    // attempted. If it misses, our CACHED directory view of the
+                    // sender may be stale (they re-endorsed a new device since
+                    // we cached) — refetch once and retry before dropping.
+                    var entry = try await directoryEntry(for: sender)
+                    if !verifyInbound(wire, aad: aad, entry: entry) {
+                        entry = try await directoryEntry(for: sender, forceRefresh: true)
+                    }
+                    guard verifyInbound(wire, aad: aad, entry: entry) else {
+                        ChatEngine.msgLog.error("recv: drop — signed by device \(ChatEngine.fp(wire.senderDevicePublicKey), privacy: .public) not among sender's endorsed devices [\((entry?.1 ?? []).map { ChatEngine.fp($0.devicePublicKey) }.joined(separator: ","), privacy: .public)]")
+                        lastError = "Couldn't verify a message from a member — their signing key isn't in the directory yet. Ask them to reopen the app (to republish) or re-friend."
                         Self.advance(&chain)    // skip the bad slot, don't stall the chain
                         continue
                     }
@@ -776,12 +838,23 @@ final class ChatEngine {
 
     // MARK: - Helpers
 
-    private func directoryEntry(for hash: String) async throws -> (RootIdentity, [DeviceEndorsement])? {
-        if let cached = directoryCache[hash] { return cached }
+    private func directoryEntry(for hash: String, forceRefresh: Bool = false) async throws -> (RootIdentity, [DeviceEndorsement])? {
+        if !forceRefresh, let cached = directoryCache[hash] { return cached }
         guard let (root, endorsements) = try await sync.fetchIdentity(credentialIDHash: hash) else { return nil }
         let verified = IdentityManager.verifiedDevices(root: root, endorsements: endorsements)
         directoryCache[hash] = (root, verified)
         return (root, verified)
+    }
+
+    /// Verify one inbound wire message against a (root, verified-endorsements)
+    /// directory entry. Pulled out so the receive loop can retry it after a
+    /// forced directory refetch without duplicating the call.
+    private func verifyInbound(_ wire: SyncEngine.WireMessage, aad: Data,
+                               entry: (RootIdentity, [DeviceEndorsement])?) -> Bool {
+        guard let (root, endorsements) = entry else { return false }
+        return identity.verify(signature: wire.signature, over: wire.ciphertext + aad,
+                               deviceKey: wire.senderDevicePublicKey,
+                               claimedRoot: root, endorsements: endorsements)
     }
 
     /// chainKey → (messageKey, index); chain advances, old key destroyed.
