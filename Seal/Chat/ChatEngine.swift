@@ -113,6 +113,9 @@ final class ChatEngine {
     private(set) var chats: [Chat] = []
     private(set) var messagesByChat: [UUID: [ChatMessage]] = [:]
     private(set) var lastError: String?
+    /// Root hashes this user has blocked (App Store Guideline 1.2). Their
+    /// messages are hidden and skipped on receive; fully reversible. Local only.
+    private(set) var blockedHashes: Set<String> = []
 
     // Presence. readMarks persists ("Read" survives relaunch); the rest is
     // transient throttling/expiry state rebuilt each session.
@@ -130,6 +133,9 @@ final class ChatEngine {
     private var directoryCache: [String: (RootIdentity, [DeviceEndorsement])] = [:]
     // One self-heal republish per launch (see ensureSelfPublished).
     private var didEnsureSelfPublished = false
+    // Chats with a refresh in flight — coalesces overlapping refreshes (poll
+    // loop + push + foreground) so the same messages aren't double-processed.
+    private var refreshingChats: Set<UUID> = []
 
     let ownerHash: String
 
@@ -147,6 +153,7 @@ final class ChatEngine {
         KeychainStore.delete("seal.chains.\(ownerHash)")
         KeychainStore.delete("seal.outbox.\(ownerHash)")
         KeychainStore.delete("seal.readmarks.\(ownerHash)")
+        KeychainStore.delete("seal.blocks.\(ownerHash)")
     }
 
     func setTTL(_ ttl: TimeInterval?, for chat: Chat) {
@@ -340,8 +347,29 @@ final class ChatEngine {
     }
 
     func messages(for chat: Chat) -> [ChatMessage] {
-        (messagesByChat[chat.id] ?? []).sorted { $0.sentAt < $1.sentAt }
+        (messagesByChat[chat.id] ?? [])
+            .filter { !blockedHashes.contains($0.senderHash) }   // hide blocked users (1.2)
+            .sorted { $0.sentAt < $1.sentAt }
     }
+
+    // MARK: - Block & report (App Store Guideline 1.2)
+
+    func isBlocked(_ hash: String) -> Bool { blockedHashes.contains(hash) }
+
+    /// Hide a user's content and stop processing their messages. Reversible.
+    func block(_ hash: String) {
+        guard hash != ownerHash else { return }
+        blockedHashes.insert(hash)
+        persist()
+    }
+
+    func unblock(_ hash: String) {
+        blockedHashes.remove(hash)
+        persist()
+    }
+
+    // Report itself is a UI action (it composes an email to the developer in
+    // ChatView) — the engine only owns the block side of report-and-block.
 
     // MARK: - Send
 
@@ -603,6 +631,12 @@ final class ChatEngine {
                                    signature: signature.derRepresentation,
                                    sentAt: .now),
                     recipients: recipients)
+            } catch let ckError as CKError where ckError.code == .serverRecordChanged {
+                // Deterministic record name already on the server = this exact
+                // slot already landed (an earlier half-completed send, or a
+                // stale record from a prior test on the same identity). It IS
+                // delivered — don't requeue or it loops.
+                ChatEngine.msgLog.error("send: slot \(index, privacy: .public) already exists — treating as delivered")
             } catch {
                 deliveredNow = false
                 outbox.append(PendingRecord(
@@ -610,7 +644,15 @@ final class ChatEngine {
                     chainIndex: index, ciphertext: ciphertext, devicePub: devicePub,
                     signature: signature.derRepresentation, sentAt: .now,
                     recipients: recipients, localMessageID: localID))
-                lastError = "Offline — message queued, sends when you're connected."
+                // Only call it "Offline" when it actually is — otherwise surface
+                // the real CloudKit reason instead of hiding it behind a queue.
+                let isNetwork = (error as? CKError).map {
+                    $0.code == .networkUnavailable || $0.code == .networkFailure
+                } ?? false
+                lastError = isNetwork
+                    ? "Offline — message queued, sends when you're connected."
+                    : "Couldn't send (\(error.localizedDescription)) — queued, will retry when possible."
+                ChatEngine.msgLog.error("send: saveMessage failed, queued (sender=\(myHash, privacy: .public) idx=\(index, privacy: .public)): \(error.localizedDescription, privacy: .public)")
             }
 
             // Advance the transcript chain.
@@ -695,12 +737,19 @@ final class ChatEngine {
     /// Pull new messages from every other member, in chain order.
     func refresh(_ chat: Chat, myRoot: RootIdentity) async {
         if DemoFixtures.isActive { purgeExpired(); return }   // fully local (FR-22)
+        // Coalesce overlapping refreshes of the SAME chat. The poll loop, push,
+        // and foreground all call refresh; without this, concurrent runs read
+        // the same chain index, fetch the same message, and each append it —
+        // the "one message shows up five times" bug. defer guarantees release.
+        guard !refreshingChats.contains(chat.id) else { return }
+        refreshingChats.insert(chat.id)
+        defer { refreshingChats.remove(chat.id) }
         var failed = false
         let myHash = myRoot.credentialIDHash
         let groupID = chat.id.uuidString
         let liveChat = chats.first(where: { $0.id == chat.id }) ?? chat
         let epoch = liveChat.currentEpoch
-        for sender in liveChat.memberHashes where sender != myHash {
+        for sender in liveChat.memberHashes where sender != myHash && !blockedHashes.contains(sender) {
             do {
                 // Receiving chain for this epoch: unwrap their envelope once.
                 var state = chains["recv.\(chat.id).\(sender).e\(epoch)"]
@@ -770,6 +819,14 @@ final class ChatEngine {
                     case "typing":
                         markTyping(chatID: chat.id, memberHash: sender)
                     default:
+                        // Idempotent display: a message can be processed more
+                        // than once (overlapping refreshes, a re-fetch after a
+                        // racy chain save). wireID is stable per message, so if
+                        // it's already on screen, don't append a duplicate.
+                        let wireID = "\(sender).e\(epoch).\(idx)"
+                        if messagesByChat[chat.id]?.contains(where: { $0.wireID == wireID }) == true {
+                            break
+                        }
                         // A real message from them ends any "typing" state.
                         typingBy[chat.id]?[sender] = nil
                         var local = messagesByChat[chat.id] ?? []
@@ -781,7 +838,7 @@ final class ChatEngine {
                             mediaRef: payload.mediaRef,
                             mediaKey: payload.mediaKey,
                             kind: payload.kind,
-                            wireID: "\(sender).e\(epoch).\(idx)",
+                            wireID: wireID,
                             replyTo: payload.replyTo,
                             replyPreview: payload.replyPreview,
                             replySenderHash: payload.replySenderHash))
@@ -890,6 +947,7 @@ final class ChatEngine {
         if let data = try? JSONEncoder().encode(chains) { KeychainStore.save(data, for: "seal.chains.\(ownerHash)") }
         if let data = try? JSONEncoder().encode(outbox) { KeychainStore.save(data, for: "seal.outbox.\(ownerHash)") }
         if let data = try? JSONEncoder().encode(readMarks) { KeychainStore.save(data, for: "seal.readmarks.\(ownerHash)") }
+        if let data = try? JSONEncoder().encode(blockedHashes) { KeychainStore.save(data, for: "seal.blocks.\(ownerHash)") }
     }
 
     private func load() {
@@ -903,5 +961,7 @@ final class ChatEngine {
            let decoded = try? JSONDecoder().decode([PendingRecord].self, from: data) { outbox = decoded }
         if let data = KeychainStore.load("seal.readmarks.\(ownerHash)"),
            let decoded = try? JSONDecoder().decode([UUID: [String: Date]].self, from: data) { readMarks = decoded }
+        if let data = KeychainStore.load("seal.blocks.\(ownerHash)"),
+           let decoded = try? JSONDecoder().decode(Set<String>.self, from: data) { blockedHashes = decoded }
     }
 }

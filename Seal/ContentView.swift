@@ -91,6 +91,7 @@ struct ContentView: View {
     /// this phone is recognized as the same device.
     private func performSignOut() {
         wipeLocalAndEngines()
+        DemoFixtures.deactivate()   // exit demo if a reviewer was in it
         identity.signOut()
     }
 
@@ -100,6 +101,7 @@ struct ContentView: View {
     /// local wipe runs, so sign-in is refused and no device can republish it.
     private func performDelete() {
         wipeLocalAndEngines()
+        DemoFixtures.deactivate()   // exit demo if a reviewer was in it
         identity.reset()
     }
 }

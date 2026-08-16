@@ -206,31 +206,38 @@ final class SyncEngine {
     /// fetchIdentity, the sign-in allow-list, and publishIdentity all refuse to
     /// revive (FR-19). Uses only existing fields, so no schema change.
     func deleteIdentity(credentialIDHash: String) async throws {
-        // 1. Write-once permanence marker FIRST, in its OWN record. Once this
-        //    exists, isTombstoned() is true forever, so sign-in and every
-        //    publish refuse the identity — a racing republish (or a wiped
-        //    Identity record) can't bring it back. Reuses the existing
-        //    "Identity" record type, so no schema change. Idempotent.
+        // 1. Authoritative deletion = a write-once marker record that THIS
+        //    account creates and therefore OWNS. Creating a brand-new record
+        //    always succeeds (you're the creator of what you create), so delete
+        //    works from ANY iCloud account — even when the Identity record was
+        //    first published by a DIFFERENT account and the public-DB
+        //    creator-only-write rule ("WRITE operation not permitted") won't let
+        //    us touch it. If the marker already exists, the identity is already
+        //    dead — that's success too. Once present, isTombstoned() is true
+        //    forever, so sign-in and every publish refuse to revive it.
         let tombID = CKRecord.ID(recordName: Self.tombstoneName(credentialIDHash))
-        let tomb = CKRecord(recordType: "Identity", recordID: tombID)
-        tomb["tier"] = Self.deletedTier
-        try await publicDB.save(tomb)
-
-        // 2. Also flip the live Identity record to the deleted sentinel + scrub
-        //    endorsements, so the fast path (fetchIdentity's tier check) sees it
-        //    gone immediately without the extra tombstone fetch. EXISTING fields
-        //    only — no schema change, works in Production.
-        let recordID = CKRecord.ID(recordName: credentialIDHash)
-        let record: CKRecord
         do {
-            record = try await publicDB.record(for: recordID)
-        } catch let error as CKError where error.code == .unknownItem {
-            record = CKRecord(recordType: "Identity", recordID: recordID)
+            let tomb = CKRecord(recordType: "Identity", recordID: tombID)
+            tomb["tier"] = Self.deletedTier
+            try await publicDB.save(tomb)
+        } catch let error as CKError where error.code == .serverRecordChanged {
+            // Marker already present (this or another account deleted before).
         }
+
+        // 2. BEST-EFFORT: also flip the live Identity record to the deleted
+        //    sentinel + scrub endorsements, so the fast path (fetchIdentity's
+        //    tier check) sees it gone without the extra tombstone fetch. Only
+        //    the record's creator may modify it, so this is skipped silently
+        //    when another account owns it — the marker in step 1 is what
+        //    actually enforces deletion, so we must NOT fail the whole delete
+        //    over a write we may not be permitted to make.
+        let recordID = CKRecord.ID(recordName: credentialIDHash)
+        let record = (try? await publicDB.record(for: recordID))
+            ?? CKRecord(recordType: "Identity", recordID: recordID)
         record["tier"] = Self.deletedTier
         record["deviceEndorsements"] = Data()
-        try await publicDB.save(record)
-        WebAuthnDiag.log.info("deleteIdentity: tombstoned \(credentialIDHash, privacy: .public) (record + write-once marker)")
+        try? await publicDB.save(record)
+        WebAuthnDiag.log.info("deleteIdentity: tombstoned \(credentialIDHash, privacy: .public) (marker authoritative; main-record flip best-effort)")
     }
 
     /// Raw device list (including revoked) for the profile UI.
@@ -248,6 +255,10 @@ final class SyncEngine {
         }
         return (endorsements, revocations)
     }
+
+    // Moderation (App Store 1.2): reports are emailed to the developer from
+    // ChatView (mailto) — no CloudKit record / backend needed. Block is local
+    // (ChatEngine). Action on a valid report = tombstone the identity (deleteIdentity).
 
     // MARK: - Founder perks (SDS §10 — deterministic names, no queries)
     //
@@ -346,9 +357,16 @@ final class SyncEngine {
     }
 
     func saveKeyEnvelope(groupID: String, epoch: UInt64, senderHash: String, recipientHash: String, envelope: Data) async throws {
-        let record = CKRecord(
-            recordType: "KeyEnvelope",
-            recordID: CKRecord.ID(recordName: Self.envelopeName(groupID, epoch, senderHash, recipientHash)))
+        let id = CKRecord.ID(recordName: Self.envelopeName(groupID, epoch, senderHash, recipientHash))
+        // Fetch-then-update so we OVERWRITE an existing envelope instead of
+        // failing on its change tag. The envelope for (group, epoch, sender,
+        // recipient) must carry the sender's CURRENT chain key. If the sender
+        // re-keyed — a new session after a sign-out/reinstall wiped the local
+        // send chain — a plain create would collide with the old record and
+        // leave the recipient holding an envelope wrapped to stale keys
+        // ("Couldn't unlock messages"). Replacing it is the fix.
+        let record = (try? await publicDB.record(for: id))
+            ?? CKRecord(recordType: "KeyEnvelope", recordID: id)
         record["envelope"] = envelope
         try await publicDB.save(record)
     }

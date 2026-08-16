@@ -10,6 +10,10 @@ struct ChatView: View {
     @State private var draft = ""
     @State private var showVerification = false
     @State private var replyingTo: ChatEngine.ChatMessage?
+    /// Drives the post-report confirmation alert. Set to the reported sender's
+    /// display name so feedback is visible even if no mail client opens.
+    @State private var reportedSenderName: String?
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         ZStack {
@@ -158,6 +162,16 @@ struct ChatView: View {
             guard !newValue.isEmpty else { return }
             Task { await engine.sendTyping(in: chat, from: myRoot) }
         }
+        // App Store 1.2: report must give clear, immediate feedback even when
+        // no mail client is configured to receive the routed report.
+        .alert("Reported", isPresented: Binding(
+            get: { reportedSenderName != nil },
+            set: { if !$0 { reportedSenderName = nil } }
+        )) {
+            Button("OK", role: .cancel) { reportedSenderName = nil }
+        } message: {
+            Text("Thanks — \(reportedSenderName ?? "this person") is now blocked and won't appear in your chats. We review reports and remove violators within 24 hours.")
+        }
     }
 
     private var currentTTL: TimeInterval? {
@@ -212,6 +226,27 @@ struct ChatView: View {
             .identity.displayName ?? "Someone"
     }
 
+    /// Pre-filled report email to the developer (App Store 1.2 moderation).
+    /// Reporting also blocks; this just routes the flag to a human inbox.
+    private func reportMailURL(for m: ChatEngine.ChatMessage) -> URL? {
+        var allowed = CharacterSet.urlQueryAllowed
+        allowed.remove(charactersIn: "&=?+")   // so message text can't break the URL
+        let subject = "Seal report"
+        let body = """
+        A user reported a message in Seal.
+
+        Reported message: "\(m.mediaRef != nil ? "[photo]" : m.text)"
+        Reported user (root hash): \(m.senderHash)
+        Message id: \(m.wireID ?? "—")
+        Reporter (root hash): \(myRoot.credentialIDHash)
+
+        Action if upheld: tombstone the reported identity in the directory.
+        """
+        let s = subject.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
+        let b = body.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
+        return URL(string: "mailto:jaysubplays@gmail.com?subject=\(s)&body=\(b)")
+    }
+
     /// Quick-pick reactions surfaced on long-press (FR-11).
     private static let reactionEmojis = ["❤️", "😂", "👍", "🔥", "😮", "😢"]
 
@@ -249,6 +284,25 @@ struct ChatView: View {
                         replyingTo = message
                     } label: {
                         Label("Reply", systemImage: "arrowshape.turn.up.left")
+                    }
+                    if !mine {
+                        Divider()
+                        Button(role: .destructive) {
+                            engine.block(message.senderHash)              // protect immediately
+                            if let url = reportMailURL(for: message) {     // email the report to the dev
+                                openURL(url)
+                            }
+                            // Visible confirmation regardless of whether a mail
+                            // client opened (App Store 1.2: report must clearly work).
+                            reportedSenderName = senderName(message)
+                        } label: {
+                            Label("Report", systemImage: "exclamationmark.bubble")
+                        }
+                        Button(role: .destructive) {
+                            engine.block(message.senderHash)
+                        } label: {
+                            Label("Block \(senderName(message))", systemImage: "hand.raised")
+                        }
                     }
                 }
                 reactionChips(message)
@@ -426,6 +480,18 @@ struct VerificationSheet: View {
                                 Button { removing = member } label: {
                                     Image(systemName: "minus.circle")
                                         .foregroundStyle(.orange.opacity(0.8))
+                                }
+                            }
+                            // Block / unblock this member (reversible; App Store 1.2).
+                            if let engine {
+                                Button {
+                                    let h = member.credentialIDHash
+                                    if engine.isBlocked(h) { engine.unblock(h) } else { engine.block(h) }
+                                } label: {
+                                    Image(systemName: engine.isBlocked(member.credentialIDHash)
+                                          ? "hand.raised.slash.fill" : "hand.raised")
+                                        .foregroundStyle(engine.isBlocked(member.credentialIDHash)
+                                                         ? SealTheme.brass : .white.opacity(0.5))
                                 }
                             }
                         }

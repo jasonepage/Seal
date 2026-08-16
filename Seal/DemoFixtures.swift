@@ -16,12 +16,37 @@ enum DemoFixtures {
     static let demoArgument = "-SealDemoMode"
     static let hideWatermarkArgument = "-SealDemoHideWatermark"
 
+    /// Reviewer access code. Typed as the name on the registration screen, it
+    /// drops into the fully-local demo account — no key, no Face ID, no
+    /// network. NEVER the default: only this exact code activates it, so App
+    /// Review can explore every feature without a hardware key while real users
+    /// see the normal registration flow.
+    static let accessCode = "SEALDEMO"
+
+    /// Runtime activation (the access code). Session-scoped on purpose: a
+    /// force-quit + relaunch without the code leaves demo via `prepare()` →
+    /// `uninstallIfPresent()`, so a reviewer is never silently stuck in demo.
+    private static var runtimeActive = false
+
     static var isActive: Bool {
-        ProcessInfo.processInfo.arguments.contains(demoArgument)
+        ProcessInfo.processInfo.arguments.contains(demoArgument) || runtimeActive
     }
 
     static var showWatermark: Bool {
         isActive && !ProcessInfo.processInfo.arguments.contains(hideWatermarkArgument)
+    }
+
+    /// Enter demo at runtime (from the access code). Seeds the local fixtures;
+    /// the caller reloads the identity so the app drops into the demo account.
+    static func activate() {
+        runtimeActive = true
+        install()
+    }
+
+    /// Leave demo (sign out / delete). Clears the runtime flag; the identity
+    /// itself is removed by the caller's sign-out/reset.
+    static func deactivate() {
+        runtimeActive = false
     }
 
     // MARK: - Synthetic identities (deterministic, NOT real keys)

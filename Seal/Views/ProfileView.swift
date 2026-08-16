@@ -1,4 +1,5 @@
 import SwiftUI
+import CloudKit
 
 /// Profile + key management surface (UI.md §3.5, trimmed to what exists).
 struct ProfileView: View {
@@ -183,6 +184,10 @@ struct ProfileView: View {
                         .padding(.horizontal, 40)
                         .padding(.bottom, 24)
                 }
+                // iPad/large widths: keep profile content a centered, readable
+                // column instead of full-bleed rows. No-op on iPhone.
+                .frame(maxWidth: 460)
+                .frame(maxWidth: .infinity)
                 }
             }
             .navigationTitle("You")
@@ -293,7 +298,14 @@ struct ProfileView: View {
             do {
                 try await sync.deleteIdentity(credentialIDHash: myRoot.credentialIDHash)
             } catch {
-                deleteError = "Couldn't reach iCloud to remove your directory entry — check your connection and try again."
+                // Only blame the connection when it actually is one — otherwise
+                // show the real CloudKit reason instead of hiding it.
+                let isNetwork = (error as? CKError).map {
+                    $0.code == .networkUnavailable || $0.code == .networkFailure || $0.code == .notAuthenticated
+                } ?? false
+                deleteError = isNetwork
+                    ? "Couldn't reach iCloud to remove your directory entry — check your connection and try again."
+                    : "Delete failed: \(error.localizedDescription)"
                 return
             }
         }

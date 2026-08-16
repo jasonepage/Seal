@@ -8,6 +8,7 @@ struct RegistrationView: View {
     @State private var displayName = ""
     @State private var busy = false
     @State private var showSignInOptions = false
+    @AppStorage("seal.welcomeSeen") private var welcomeSeen = false
 
     var body: some View {
         ZStack {
@@ -89,6 +90,19 @@ struct RegistrationView: View {
                     .multilineTextAlignment(.center)
                     .padding(.bottom, 16)
             }
+            // iPad/large widths: keep the form a centered, readable column
+            // instead of stretching fields and buttons edge to edge. No-op on
+            // iPhone, where the screen is already narrower than this cap.
+            .frame(maxWidth: 460)
+            .frame(maxWidth: .infinity)
+        }
+        // First launch only: set the mental model before the ceremony (UI.md
+        // §3.1). Dismisses by flipping the stored flag, so it never shows again.
+        .fullScreenCover(isPresented: Binding(
+            get: { !welcomeSeen },
+            set: { presented in if !presented { welcomeSeen = true } }
+        )) {
+            WelcomeCarousel { welcomeSeen = true }
         }
     }
 
@@ -111,17 +125,32 @@ struct RegistrationView: View {
     }
 
     private func start(_ tier: IdentityTier) async {
+        let name = displayName.trimmingCharacters(in: .whitespaces)
+        // Reviewer/demo access (FR-22): the access code as the name drops into a
+        // fully-local demo account — no key or Face ID. Only this exact code
+        // triggers it; everyone else registers normally.
+        if name.caseInsensitiveCompare(DemoFixtures.accessCode) == .orderedSame {
+            ceremony.activateDemo()
+            return
+        }
         busy = true
         defer { busy = false }
         ceremony.resetPhase()
         _ = try? await ceremony.register(
             tier: tier,
-            displayName: displayName.trimmingCharacters(in: .whitespaces),
+            displayName: name,
             directory: sync   // enables 1-key-1-identity excludedCredentials
         )
     }
 
     private func signIn(_ tier: IdentityTier) async {
+        // Accept the demo access code here too, so a reviewer reaches demo
+        // whether they tap a register button or "Sign in".
+        if displayName.trimmingCharacters(in: .whitespaces)
+            .caseInsensitiveCompare(DemoFixtures.accessCode) == .orderedSame {
+            ceremony.activateDemo()
+            return
+        }
         busy = true
         defer { busy = false }
         ceremony.resetPhase()

@@ -6,9 +6,13 @@ struct ChatsView: View {
     @Bindable var chatEngine: ChatEngine
     @Bindable var friendStore: FriendStore
     @State private var showNewGroup = false
+    @State private var selectedChatID: UUID?
 
     var body: some View {
-        NavigationStack {
+        // NavigationSplitView gives iPad a sidebar (list) + detail (open chat)
+        // and AUTOMATICALLY collapses to the normal push/pop stack on iPhone,
+        // so one structure serves both. Selection drives the detail pane.
+        NavigationSplitView {
             ZStack {
                 SealTheme.ink.ignoresSafeArea()
                 if chatEngine.chats.isEmpty {
@@ -16,14 +20,11 @@ struct ChatsView: View {
                                line: "No colonies yet.",
                                sub: "Forge a friend in Circle,\nthen haul out here together.")
                 } else {
-                    List {
+                    List(selection: $selectedChatID) {
                         ForEach(chatEngine.chats) { chat in
-                            NavigationLink {
-                                ChatView(chat: chat, myRoot: myRoot, engine: chatEngine, friendStore: friendStore)
-                            } label: {
-                                row(chat)
-                            }
-                            .listRowBackground(Color.white.opacity(0.05))
+                            row(chat)
+                                .tag(chat.id)
+                                .listRowBackground(Color.white.opacity(0.05))
                         }
                     }
                     .scrollContentBackground(.hidden)
@@ -40,7 +41,8 @@ struct ChatsView: View {
                             Label("New group", systemImage: "person.3.fill")
                         }
                         Button {
-                            _ = chatEngine.ensureNoteToSelf(myHash: myRoot.credentialIDHash)
+                            // Create + open the note-to-self chat in the detail.
+                            selectedChatID = chatEngine.ensureNoteToSelf(myHash: myRoot.credentialIDHash).id
                         } label: {
                             Label("Note to self", systemImage: "lock.square")
                         }
@@ -52,6 +54,18 @@ struct ChatsView: View {
             }
             .sheet(isPresented: $showNewGroup) {
                 NewGroupView(myRoot: myRoot, chatEngine: chatEngine, friendStore: friendStore)
+            }
+        } detail: {
+            if let id = selectedChatID,
+               let chat = chatEngine.chats.first(where: { $0.id == id }) {
+                ChatView(chat: chat, myRoot: myRoot, engine: chatEngine, friendStore: friendStore)
+            } else {
+                ZStack {
+                    SealTheme.ink.ignoresSafeArea()
+                    SealMascot(size: 56,
+                               line: "Pick a chat",
+                               sub: "Your sealed conversations\nopen on this side.")
+                }
             }
         }
         .preferredColorScheme(.dark)

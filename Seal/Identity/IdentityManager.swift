@@ -114,6 +114,14 @@ final class IdentityManager {
         }
     }
 
+    /// Reviewer/demo access (FR-22): install the fully-local demo account and
+    /// load it, so the app drops straight into demo without a key or Face ID.
+    /// Gated behind the access code in RegistrationView — never the default.
+    func activateDemo() {
+        DemoFixtures.activate()   // seeds the demo identity + friends + chats
+        load()                    // pull the just-installed demo identity into rootIdentity
+    }
+
     /// Sign out: forget the identity on this device but KEEP this device's
     /// Secure Enclave + KEM keys in the keychain, so signing back into the
     /// SAME identity is recognized as the SAME device (no ghost). Local

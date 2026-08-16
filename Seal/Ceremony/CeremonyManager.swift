@@ -174,6 +174,10 @@ final class CeremonyManager: NSObject {
 
     func resetPhase() { phase = .idle }
 
+    /// Reviewer/demo access: enter the fully-local demo account (no ceremony,
+    /// no key). Triggered only by the access code in RegistrationView.
+    func activateDemo() { identity.activateDemo() }
+
     // MARK: - Sign in (existing identity, this or a new device)
 
     /// Assert with an existing credential for our RP, look the identity up in
