@@ -500,6 +500,29 @@ final class SyncEngine {
         try await publicDB.save(record)
     }
 
+    /// Deterministic name so re-forging the same pair REPLACES the handshake
+    /// rather than littering the directory with duplicates.
+    private static func handshakeName(sender: String, recipient: String) -> String {
+        "forge.\(recipient).\(sender)"
+    }
+
+    /// Publish the reciprocal half of a forge ceremony (ForgeHandshake.swift).
+    /// Reuses the GroupInvite record type deliberately — **no schema change**,
+    /// and its `recipient` field is already queryable, which is what lets the
+    /// other person find this without knowing our hash in advance. They
+    /// genuinely don't know it: their phone took no part in the ceremony.
+    func publishForgeHandshake(_ handshake: ForgeHandshake) async throws {
+        let id = CKRecord.ID(recordName: Self.handshakeName(sender: handshake.senderHash,
+                                                            recipient: handshake.recipientHash))
+        // Fetch-then-update: a plain create would fail on the change tag if
+        // this pair ever forged before (same bug class as the KeyEnvelope fix).
+        let record = (try? await publicDB.record(for: id))
+            ?? CKRecord(recordType: "GroupInvite", recordID: id)
+        record["recipient"] = handshake.recipientHash
+        record["payload"] = try JSONEncoder().encode(handshake)
+        try await publicDB.save(record)
+    }
+
     func fetchGroupInvites(recipientHash: String) async throws -> [Data] {
         let query = CKQuery(recordType: "GroupInvite",
                             predicate: NSPredicate(format: "recipient == %@", recipientHash))

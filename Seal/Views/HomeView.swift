@@ -53,17 +53,31 @@ struct HomeView: View {
             await MainActor.run { UIApplication.shared.registerForRemoteNotifications() }
             await sync.ensureMessageSubscription(for: myRoot.credentialIDHash)
             await sync.ensureInviteSubscription(for: myRoot.credentialIDHash)
+            // Complete any friendship where the other person ran the ceremony
+            // on THEIR phone (ForgeHandshake.swift). Must run before refreshAll
+            // so a brand-new friend's chat is available on this very pass.
+            await ForgeHandshakeService.check(myRoot: myRoot, identity: identity,
+                                              friendStore: friendStore, sync: sync)
             await chatEngine.refreshAll(myRoot: myRoot, friendStore: friendStore)
         }
         .onReceive(NotificationCenter.default.publisher(for: AppDelegate.messageArrived)) { _ in
             guard !DemoFixtures.isActive else { return }
-            Task { await chatEngine.refreshAll(myRoot: myRoot, friendStore: friendStore) }
+            Task {
+                // A handshake arrives as a GroupInvite record, so the invite
+                // subscription already pushed us awake — check here too and the
+                // friendship lands within seconds of the ceremony ending.
+                await ForgeHandshakeService.check(myRoot: myRoot, identity: identity,
+                                                  friendStore: friendStore, sync: sync)
+                await chatEngine.refreshAll(myRoot: myRoot, friendStore: friendStore)
+            }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active, !DemoFixtures.isActive {
                 Task {
                     // Coming back to the app clears the unread badge.
                     try? await UNUserNotificationCenter.current().setBadgeCount(0)
+                    await ForgeHandshakeService.check(myRoot: myRoot, identity: identity,
+                                                      friendStore: friendStore, sync: sync)
                     await chatEngine.refreshAll(myRoot: myRoot, friendStore: friendStore)
                 }
             }

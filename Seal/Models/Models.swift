@@ -50,6 +50,14 @@ struct Friendship: Codable, Identifiable, Hashable {
     let attestation: Data               // friend's assertion over our challenge
     let reverseAttestation: Data?       // our assertion held by them; both required for invites
     let forgedAt: Date
+    /// True when THIS side of the edge was completed automatically from the
+    /// other party's ForgeHandshake instead of by a ceremony on this phone.
+    /// Such an edge proves the peer's intent, not their physical presence, so
+    /// ForgeRank must weight it below a real forge (docs/TRUST.md §5.1) and the
+    /// UI should not present it as a full brass ceremony. Optional with a
+    /// default so friendships already in the keychain still decode, and so the
+    /// memberwise initialiser stays source-compatible with existing callers.
+    var autoReciprocated: Bool? = nil
 }
 
 /// Signed, append-only membership log entry (SDS §4).

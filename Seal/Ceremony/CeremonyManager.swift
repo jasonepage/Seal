@@ -382,6 +382,18 @@ final class CeremonyManager: NSObject {
         }
     }
 
+    /// Commitment for the RECIPROCAL half of a forge (see ForgeHandshake.swift).
+    /// Deliberately a different domain string from `friendChallenge` so a
+    /// device-key reciprocal signature can never be replayed as, or mistaken
+    /// for, a root-key ceremony assertion — the two prove different things and
+    /// must stay cryptographically distinguishable. Argument order is
+    /// (whoever ran the ceremony, whoever tapped), and both sides recompute it
+    /// the same way, so the commitment is unambiguous about direction.
+    static func reciprocalChallenge(senderHash: String, recipientHash: String, nonce: Data) -> Data {
+        Data(SHA256.hash(data: Data("seal.forge.reverse.v1".utf8)
+                         + Data(senderHash.utf8) + Data(recipientHash.utf8) + nonce))
+    }
+
     /// Domain-separated commitment binding both identities + a fresh nonce.
     static func friendChallenge(myHash: String, theirHash: String, nonce: Data) -> Data {
         Data(SHA256.hash(data: Data("seal.friend.v1".utf8) + Data(myHash.utf8) + Data(theirHash.utf8) + nonce))

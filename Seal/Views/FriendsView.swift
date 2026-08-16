@@ -327,6 +327,15 @@ struct FriendsView: View {
             let friendship = try await ceremony.forgeFriendship(myRoot: myRoot, friend: friend)
             friendStore.add(identity: friend, friendship: friendship)
             stage = .sealed(friend)
+            // Hand them their half of the edge so their phone completes the
+            // friendship on its own (ForgeHandshake.swift). Without this the
+            // ceremony has to be run a SECOND time on their device — the step
+            // everybody forgets. Deliberately after `stage = .sealed`, and
+            // deliberately non-throwing: the forge already succeeded here, and
+            // a directory hiccup must not turn a good ceremony into an error.
+            await ForgeHandshakeService.publish(myRoot: myRoot, friend: friend,
+                                                friendship: friendship,
+                                                identity: ceremony.identity, sync: sync)
         } catch {
             stage = .failed((error as? LocalizedError)?.errorDescription ?? "The forge failed. Try again.")
         }
