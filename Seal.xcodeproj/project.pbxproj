@@ -10,9 +10,22 @@
 		BC6EF6CF2FDB8FDE00DE39B2 /* Seal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Seal.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		BC2DD7A8303249E70056D69C /* Exceptions for "Seal" folder in "Seal" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = BC6EF6CE2FDB8FDE00DE39B2 /* Seal */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		BC6EF6D12FDB8FDE00DE39B2 /* Seal */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				BC2DD7A8303249E70056D69C /* Exceptions for "Seal" folder in "Seal" target */,
+			);
 			path = Seal;
 			sourceTree = "<group>";
 		};
@@ -257,6 +270,7 @@
 				DEVELOPMENT_TEAM = 8C4BM6A82T;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Seal/Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Seal uses the camera to scan a friend's seal.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Seal uses Face ID to unlock the app.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -292,6 +306,7 @@
 				DEVELOPMENT_TEAM = 8C4BM6A82T;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Seal/Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Seal uses the camera to scan a friend's seal.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Seal uses Face ID to unlock the app.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
