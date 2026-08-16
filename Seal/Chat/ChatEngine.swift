@@ -621,7 +621,16 @@ final class ChatEngine {
             // 5. Ship it — or queue it. Chain state commits either way (the
             //    ciphertext exists; a retry must never reuse key or index).
             let localID = UUID()
-            let recipients = liveChat.memberHashes.filter { $0 != myHash }
+            // `recipients` exists ONLY to drive the CKQuerySubscription that
+            // fires a push. Inbound messages are fetched by deterministic
+            // record name, never by query, so leaving it empty costs delivery
+            // nothing. Presence and reactions therefore ship with NO recipients:
+            // otherwise every typing ping (1 per 4s) and every read receipt
+            // pushes a "New sealed message" banner at the other person, which
+            // buries the real messages and trains people to mute the app.
+            let recipients = Self.isNonBubble(payloadValue.kind)
+                ? []
+                : liveChat.memberHashes.filter { $0 != myHash }
             var deliveredNow = true
             do {
                 try await sync.saveMessage(
@@ -632,11 +641,24 @@ final class ChatEngine {
                                    sentAt: .now),
                     recipients: recipients)
             } catch let ckError as CKError where ckError.code == .serverRecordChanged {
-                // Deterministic record name already on the server = this exact
-                // slot already landed (an earlier half-completed send, or a
-                // stale record from a prior test on the same identity). It IS
-                // delivered — don't requeue or it loops.
-                ChatEngine.msgLog.error("send: slot \(index, privacy: .public) already exists — treating as delivered")
+                // A FIRST attempt at this slot collided. That is NOT a delivery:
+                // this device has never written here, so the occupant is a stale
+                // record from a previous local state (sign-out wipes
+                // seal.chains.<hash>, resetting the index to 0, while the server
+                // keeps the old records). CloudKit created nothing, so the
+                // creation-triggered push never fires and the recipient — who is
+                // walking the same deterministic names — is stuck on ciphertext
+                // our current chain key can no longer open.
+                //
+                // Silently calling this "delivered" is what made the failure
+                // invisible: the sender sees a sent bubble and the recipient
+                // gets nothing at all. Surface it instead. (flushOutbox still
+                // treats a collision as delivered — there the record genuinely
+                // was written by an earlier attempt of OURS.)
+                deliveredNow = false
+                lastError = "This chat is out of sync with the server — messages aren't reaching anyone. "
+                          + "Old messages from a previous sign-in are occupying this chat's slots."
+                ChatEngine.msgLog.error("send: slot \(index, privacy: .public) occupied on FIRST attempt — stale server chain, message NOT delivered and no push fired (group=\(groupID, privacy: .public) epoch=\(epoch, privacy: .public))")
             } catch {
                 deliveredNow = false
                 outbox.append(PendingRecord(
@@ -804,8 +826,22 @@ final class ChatEngine {
                     }
 
                     let (messageKey, idx) = Self.ratchet(&chain)
-                    let sealedBox = try AES.GCM.SealedBox(combined: wire.ciphertext)
-                    let plaintext = try AES.GCM.open(sealedBox, using: messageKey, authenticating: aad)
+                    // Decrypt failures must NOT escape this loop. They used to
+                    // throw to the per-sender catch below, which abandoned the
+                    // sender for this refresh — and since the chain index never
+                    // advanced past the offending slot, every later refresh hit
+                    // the same slot and failed again. One stale record silently
+                    // froze that person's whole conversation, permanently.
+                    // Skip the slot instead (same policy the verify-miss path
+                    // above already uses) so a later, good message still lands.
+                    guard let sealedBox = try? AES.GCM.SealedBox(combined: wire.ciphertext),
+                          let plaintext = try? AES.GCM.open(sealedBox, using: messageKey,
+                                                            authenticating: aad)
+                    else {
+                        ChatEngine.msgLog.error("recv: slot \(idx, privacy: .public) from \(sender, privacy: .public) failed to decrypt — skipping it rather than stalling the chain")
+                        lastError = "Skipped an unreadable message from a member — it was sent with keys that no longer match. Newer messages still arrive."
+                        continue
+                    }
 
                     let payload = (try? JSONDecoder().decode(MessagePayload.self, from: plaintext))
                         ?? MessagePayload(text: String(decoding: plaintext, as: UTF8.self), ttl: nil)
