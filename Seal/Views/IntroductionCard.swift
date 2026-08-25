@@ -240,8 +240,13 @@ struct IntroductionBubble: View {
             }
 
         case .accepted:
-            title("You accepted. Waiting for \(counterpartName).")
-            Text("You'll be linked as soon as they accept too. \(introducerName) only ever sees whether it's been accepted — never who has answered.")
+            // NOT "waiting for <them>". Verified on device 8/25: both parties
+            // had already accepted and both cards still said they were waiting
+            // for the other, because a party only learns of the other's
+            // acceptance when the INTRODUCER relays it. The card was blaming
+            // the wrong person for a delay that belonged to a third phone.
+            title("You accepted.")
+            Text("You'll be linked once \(counterpartName) accepts too and \(introducerName)'s phone is next online — it's the only one that can pass their answer along. \(introducerName) only ever sees whether it's been accepted, never who has answered.")
                 .font(.caption)
                 .foregroundStyle(.white.opacity(0.55))
                 .fixedSize(horizontal: false, vertical: true)
