@@ -229,10 +229,16 @@ identity, and a non-discoverable backup key is tappable at sign-in. The scan
 carries each record's backup blob and lands on the same ~1k-identity ceiling
 §7 already documents — revisit both together.
 
-**What a backup key cannot do:** recover message history. Per-message keys are
-ratcheted forward and destroyed after use (§2), and the sender chains that
-would re-derive them were wrapped to KEM keys that died with the lost phone. It
-recovers the identity and the friendships. The UI says exactly that.
+**What a backup key cannot do:** recover message history, or move the friend
+list. Per-message keys are ratcheted forward and destroyed after use (§2), and
+the sender chains that would re-derive them were wrapped to KEM keys that died
+with the lost phone. Friendships are the easily-missed half: `FriendStore` is
+keychain-local per identity and nothing republishes it, so a recovered phone
+starts with an empty friend list while peers still hold their side. What is
+restored is the IDENTITY — same root, same seal — so friends can verify it is
+really you when they add you again in person. The UI says exactly that. (If
+friendship mirroring to CloudKit ever lands, FR-5/6, this gets better on its
+own; until then, re-forging is the recovery path for the social graph.)
 
 **A recovered phone is frozen at one credential.** Both backup ceremonies need
 a ROOT tap, so a phone recovered *with* a backup key can neither add another

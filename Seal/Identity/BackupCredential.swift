@@ -55,11 +55,18 @@ import CryptoKit
 ///   was STOLEN rather than lost cannot be evicted: delete the identity and
 ///   start fresh. Symmetric co-root revocation needs a quorum design and is
 ///   explicitly a v2 problem, not something to improvise here.
-/// - **It cannot recover message history.** Per-message keys are ratcheted
-///   forward and destroyed after use (SDS §2), and the sender chains that
-///   would re-derive them were wrapped to device KEM keys that died with the
-///   lost phone. No key held anywhere can bring those bytes back. The UI says
-///   so plainly rather than letting "backup" imply a backup of messages.
+/// - **It cannot recover message history, and it does not move friendships.**
+///   Per-message keys are ratcheted forward and destroyed after use (SDS §2),
+///   and the sender chains that would re-derive them were wrapped to device
+///   KEM keys that died with the lost phone — no key held anywhere brings
+///   those bytes back. Friendships are a separate and easily-missed point:
+///   `FriendStore` is keychain-local per identity (`seal.friends.<hash>`) and
+///   nothing republishes it, so a recovered phone starts with an EMPTY friend
+///   list even though the peers still hold their side of the attestation.
+///   What a backup key restores is the IDENTITY — the same root, the same
+///   seal, so friends can verify it really is you when they add you again.
+///   The UI says exactly that rather than letting "backup" imply a backup of
+///   messages or of the social graph.
 struct BackupCredential: Codable, Hashable, Identifiable {
     /// Raw WebAuthn credential ID of the backup authenticator. Public, not
     /// secret — it is what goes in an assertion's allow-list and in
