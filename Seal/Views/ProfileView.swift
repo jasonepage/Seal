@@ -135,6 +135,16 @@ struct ProfileView: View {
                         .padding(.horizontal, 24)
                     }
 
+                    // Backup keys (FR-3). Unlike the Devices card above this
+                    // one is ALWAYS shown, including when the list is empty:
+                    // having no backup key is the state that costs you the
+                    // identity, so it is precisely the state that must not be
+                    // invisible. It loads its own list rather than sharing
+                    // loadDevices() — a directory read the profile already
+                    // does once more is cheaper than two features sharing
+                    // mutable state across a merge.
+                    BackupKeysSection(myRoot: myRoot, ceremony: ceremony, sync: sync)
+
                     if PerkAuthority.isConfigured, verifiedPerks.isEmpty {
                         Button { showRedeem = true } label: {
                             HStack {

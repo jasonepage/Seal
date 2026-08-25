@@ -68,7 +68,7 @@ Root identity (FR-21 tiers)
 ## 4. CloudKit Data Model
 
 **Public DB** (discoverability, all records signed):
-- `Identity` — rootPublicKey (record name = key hash), displayName, avatar, deviceEndorsements[], backupKeyEndorsements[], revocations[]
+- `Identity` — rootPublicKey (record name = key hash), displayName, avatar, deviceEndorsements[], backupEndorsements[] (§11), revocations[]
 
 **Private DB, custom zone per group, shared via `CKShare`:**
 - `Group` — groupID, name, signed `MembershipLog` (append-only: add/remove/role records, each signed by actor)
@@ -109,7 +109,7 @@ Group transport = CloudKit **shared zones**: creator owns the zone, members acce
 | Server (Apple) reads messages | E2EE; CloudKit holds ciphertext only |
 | Server forges membership/identity | All records signed; clients verify chains; server is untrusted for integrity |
 | Stolen phone (unlocked) | SE keys gated by `biometryCurrentSet` access control; hardware key absent → no new endorsements |
-| Stolen hardware key | Key alone can't read messages (no SE device key); victim revokes via backup key |
+| Stolen hardware key | Key alone can't read messages (no SE device key). **A backup key does NOT evict a thief** — revocation authority stays with the root credential (§11), so a stolen *root* means: delete the identity and start fresh. A stolen *backup* is revoked by the root. |
 | Replay of ceremony assertions | Fresh challenges bound to identities + timestamps |
 | Removed member reads on | Epoch rotation on removal |
 | Metadata exposure | Accepted residual risk: Apple sees who talks to whom and when. Document honestly (NFR-3). |
@@ -134,3 +134,76 @@ Growth seeding: blank NFC keys ("forge packs") gifted to campus ambassadors and 
 **One-time use, honestly:** there is no server to enforce uniqueness. We use CloudKit record **creation** atomicity: the first client to create `pclaim.<hash>` wins; the second gets `serverRecordChanged` and a clean "already claimed" error (re-redeeming your own code is idempotent). Creator-only write means nobody can stomp an existing claim even after the code hash becomes public via the claimant's Identity record. Residual risks, accepted and documented: (a) two simultaneous redeemers of the same code race — the loser finds out at redemption time, never silently; (b) Apple could *hide* a claim record (denial of badge display), but cannot *forge* one — forging requires the founder key plus an endorsed device key of the claimed identity; (c) a code is a bearer secret — whoever reads the box insert first wins, same as any gift card.
 
 **Founder is an edition, not a tier:** ring color stays tier-determined (brass = Verified, silver = passkey) everywhere; the perk renders as a brass text line ("Founder № 7", "Campus founder") in the verification drawer, profile, and forge log — brass because a verified founder signature is a trust artifact.
+
+## 11. Backup Credentials (FR-3) — `seal.backup.v1`
+
+Losing the only registered credential loses the identity forever. A **backup
+credential** is a second WebAuthn credential (hardware key, or a passkey on a
+helper's phone) that the root identity has endorsed, so a family survives a
+lost key.
+
+**The statement.** A root-key assertion whose challenge is
+
+```
+SHA256("seal.backup.v1" ‖ credentialID ‖ publicKey)
+```
+
+Both halves are committed. Committing to the ID alone would let a tampered
+directory keep the ID and swap the key — total takeover; committing to the key
+alone would let it re-point the ID. Same reasoning that made `seal.endorse.v2`
+bind the signing and KEM keys together.
+
+**Storage.** A new `backupEndorsements` field (Bytes, JSON `[BackupCredential]`)
+on the existing `Identity` record. **No new record type.** Not folded into
+`deviceEndorsements`: that array is iterated by `HybridKEM.wrapToAll` and by the
+verified-endorsement set, and a credential is not a device with a KEM key —
+every consumer would need a filter, and one missed filter is a send failure or
+a verification hole.
+
+**Authority set.** `IdentityManager.verifiedDevices` verifies a device
+endorsement against the root credential **or any non-revoked backup**, not the
+root alone. This is required, not cosmetic: sign-in endorses the phone it runs
+on, so recovery on a new phone produces a *backup-signed* device endorsement.
+The set travels on `RootIdentity.backupCredentials`, populated (verified and
+revocation-filtered) by `SyncEngine.fetchIdentity`, so every existing consumer
+inherits it without a call-site change.
+
+**Wire compatibility.** A build older than FR-3 verifies against the root only,
+so it will not accept a backup-signed device endorsement — a recovered phone
+can talk to this build and newer, not older. Same class of break as the
+`wrapToAll` envelope change, same answer: the family updates together.
+
+**Revocation is asymmetric, deliberately.** The root revokes a backup with
+`SHA256("seal.backup.revoke.v1" ‖ publicKey)`, appended to the *existing*
+`revocations` list (no new field; the domain string is what distinguishes it
+from a device's `seal.revoke.v1`). **A backup credential revokes nothing.** If a
+backup could revoke the root, a stolen backup would be a full takeover *with
+eviction of the real owner* — strictly worse than the loss FR-3 exists to
+survive. The honest consequence, stated in-app: a main key that was stolen
+rather than lost cannot be evicted; delete the identity and start fresh.
+Symmetric co-root revocation is a v2 problem needing a quorum design.
+
+**Sign-in** accepts any non-revoked credential on the identity. A root
+credential's hash is its record name (direct fetch). A backup's is not — it
+lives inside its owner's record — so `resolveSignInCredential` falls back to the
+directory scan to find the owner, then verifies the tap against the *backup's*
+public key and the backup's endorsement against the root's. Tombstones are
+checked on the identity that would be recovered, so deletion can't be undone
+through a backup key.
+
+**`excludedCredentials` / allow-list.** `fetchAllCredentialIDs` is now a
+projection of `fetchDirectoryCredentials()`, which returns root *and* backup
+credentials, so a key already serving as somebody's backup can't mint a second
+identity, and a non-discoverable backup key is tappable at sign-in. The scan
+carries each record's backup blob and lands on the same ~1k-identity ceiling
+§7 already documents — revisit both together.
+
+**What a backup key cannot do:** recover message history. Per-message keys are
+ratcheted forward and destroyed after use (§2), and the sender chains that
+would re-derive them were wrapped to KEM keys that died with the lost phone. It
+recovers the identity and the friendships. The UI says exactly that.
+
+**Residual, accepted:** a backup revoked seconds ago stays trusted in an
+in-memory directory cache until the next fetch — the same window a revoked
+device has today, self-healing through the same `forceRefresh` path.
+

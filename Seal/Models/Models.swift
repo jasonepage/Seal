@@ -16,6 +16,25 @@ struct RootIdentity: Codable, Identifiable, Hashable {
     /// Raw WebAuthn credential ID — needed to request assertions from this
     /// identity's authenticator (friend ceremony). Public, not secret.
     var rawCredentialID: Data?
+    /// Backup credentials this root has endorsed (FR-3, `seal.backup.v1` —
+    /// see BackupCredential.swift), as published in the directory and already
+    /// signature-checked and revocation-filtered by `SyncEngine.fetchIdentity`.
+    ///
+    /// It lives ON the identity rather than beside it so that the AUTHORITY
+    /// SET travels wherever the identity does. Every existing consumer of
+    /// `IdentityManager.verifiedDevices` — ChatEngine's receive path, the perk
+    /// verifier, the receipts view — then accepts a device endorsement signed
+    /// by a backup key without a single call site changing, and ChatEngine's
+    /// directory cache carries the backups along with the root it caches.
+    /// Passing them as a separate argument would have meant five call sites
+    /// each remembering to thread them through, and one forgotten thread is a
+    /// recovered phone whose messages silently fail to verify.
+    ///
+    /// Optional with a `nil` default so identities already sitting in the
+    /// keychain still decode, and so the memberwise initialiser stays
+    /// source-compatible with every existing caller (same reasoning as
+    /// `Friendship.autoReciprocated`).
+    var backupCredentials: [BackupCredential]? = nil
 }
 
 /// The verifiable payload inside Friendship.attestation: enough to recompute

@@ -174,6 +174,13 @@ final class CeremonyManager: NSObject {
 
     func resetPhase() { phase = .idle }
 
+    /// Drive the ceremony state machine from a ceremony defined in an
+    /// extension in another file (FR-3 backup keys — BackupKeyCeremony.swift).
+    /// `phase` stays `private(set)` so the only way to move it from outside
+    /// this file is this deliberate, greppable call rather than an assignment
+    /// anywhere in the module.
+    func setPhase(_ phase: Phase) { self.phase = phase }
+
     /// Reviewer/demo access: enter the fully-local demo account (no ceremony,
     /// no key). Triggered only by the access code in RegistrationView.
     func activateDemo() { identity.activateDemo() }
@@ -252,29 +259,37 @@ final class CeremonyManager: NSObject {
             }
             phase = .reading
 
-            // 2. Directory lookup by credential hash.
+            // 2. Directory lookup by credential hash. The tapped credential
+            //    may be the identity's ROOT credential or one of its BACKUP
+            //    credentials (FR-3) — `resolveSignInCredential` handles both,
+            //    checks the tombstone on whichever identity would be
+            //    recovered, and hands back the public key this particular tap
+            //    must verify against. Permanently-deleted identities refuse
+            //    sign-in even if their Identity record was revived during a
+            //    CloudKit propagation window: the write-once tombstone is
+            //    authoritative.
             let hash = Data(SHA256.hash(data: assertion.credentialID)).hexString
-            // Permanently-deleted identities refuse sign-in even if their
-            // Identity record was revived during a CloudKit propagation window —
-            // the write-once tombstone is authoritative.
-            if await directory.isTombstoned(credentialIDHash: hash) {
-                throw CeremonyError.identityDeleted
-            }
-            guard let (root, _) = try await directory.fetchIdentity(credentialIDHash: hash) else {
-                throw CeremonyError.identityNotFound
-            }
+            let resolved = try await directory.resolveSignInCredential(credentialIDHash: hash)
+            let root = resolved.root
 
-            // 3. Verify the assertion against the directory's public key —
-            //    proves the tapper controls the identity they're claiming.
+            // 3. Verify the assertion against the directory's published key
+            //    for THAT credential — proves the tapper controls the
+            //    credential they're claiming. For a backup key this is the
+            //    backup's own public key; checking it against the root's would
+            //    fail every time, since a backup credential signs with its own
+            //    key and is authorised by the root's separate `seal.backup.v1`
+            //    endorsement (already verified inside resolve).
             let stored = WebAuthnAssertion(
                 credentialID: assertion.credentialID,
                 clientDataJSON: assertion.rawClientDataJSON,
                 authenticatorData: assertion.rawAuthenticatorData,
                 signature: assertion.signature)
-            let rootPub = try P256.Signing.PublicKey(rawRepresentation: root.publicKey)
-            guard stored.verify(with: rootPub),
+            guard stored.verify(with: resolved.publicKey),
                   Self.clientDataChallengeMatches(stored.clientDataJSON, expected: challenge) else {
                 throw CeremonyError.verificationFailed
+            }
+            if resolved.backup != nil {
+                WebAuthnDiag.log.info("signIn: recovering identity via a backup credential")
             }
 
             // 4. Endorse this device. REUSE this phone's existing key for this
@@ -288,7 +303,12 @@ final class CeremonyManager: NSObject {
             let kemPub = identity.kemPublicKeyData ?? Data()
             let commitment = Data(SHA256.hash(data: Data("seal.endorse.v2".utf8) + devicePub + kemPub))
             // Endorse with the SAME provider used to identify — passing both
-            // would re-trigger the NFC modal for passkey users.
+            // would re-trigger the NFC modal for passkey users — and with the
+            // SAME credential that just asserted. That second part is what
+            // makes FR-3 recovery actually work: sign in on a new phone with a
+            // BACKUP key and the endorsement this device gets is signed by the
+            // backup, which peers accept because `verifiedDevices` verifies
+            // against the whole authority set rather than the root alone.
             let endorseCredential = try await performRequest(
                 makeAssertionRequest(tier: tier, challenge: commitment, allowedCredentialID: assertion.credentialID))
             guard let endorseAssertion = endorseCredential as? ASAuthorizationPublicKeyCredentialAssertion else {
@@ -407,7 +427,7 @@ final class CeremonyManager: NSObject {
 
     /// Both providers with the same challenge: a hardware key answers via
     /// NFC/USB-C; a passkey friend answers via the nearby-device (hybrid) flow.
-    private func makeFriendAssertionRequests(friendCredentialID: Data, challenge: Data) -> [ASAuthorizationRequest] {
+    func makeFriendAssertionRequests(friendCredentialID: Data, challenge: Data) -> [ASAuthorizationRequest] {
         let securityKey = ASAuthorizationSecurityKeyPublicKeyCredentialProvider(
             relyingPartyIdentifier: Self.relyingPartyID)
         let skRequest = securityKey.createCredentialAssertionRequest(challenge: challenge)
@@ -467,8 +487,14 @@ final class CeremonyManager: NSObject {
     }
 
     // MARK: - Request building
+    //
+    // Internal rather than private: the backup-key ceremonies (FR-3) live in
+    // Seal/Ceremony/BackupKeyCeremony.swift as an extension on this type and
+    // build their requests through exactly these functions. Re-deriving them
+    // there would mean two places holding the UV / residentKey policy that
+    // the 6/26 "wrong PIN" fix depends on, and one of them drifting.
 
-    private func makeRegistrationRequest(tier: IdentityTier, name: String, challenge: Data,
+    func makeRegistrationRequest(tier: IdentityTier, name: String, challenge: Data,
                                          userID: Data, excluding: [Data] = []) -> ASAuthorizationRequest {
         switch tier {
         case .passkey:
@@ -519,7 +545,7 @@ final class CeremonyManager: NSObject {
         }
     }
 
-    private func makeAssertionRequest(tier: IdentityTier, challenge: Data, allowedCredentialID: Data) -> ASAuthorizationRequest {
+    func makeAssertionRequest(tier: IdentityTier, challenge: Data, allowedCredentialID: Data) -> ASAuthorizationRequest {
         switch tier {
         case .passkey:
             let provider = ASAuthorizationPlatformPublicKeyCredentialProvider(
@@ -544,11 +570,11 @@ final class CeremonyManager: NSObject {
         }
     }
 
-    private func performRequest(_ request: ASAuthorizationRequest) async throws -> ASAuthorizationCredential {
+    func performRequest(_ request: ASAuthorizationRequest) async throws -> ASAuthorizationCredential {
         try await performRequests([request])
     }
 
-    private func performRequests(_ requests: [ASAuthorizationRequest]) async throws -> ASAuthorizationCredential {
+    func performRequests(_ requests: [ASAuthorizationRequest]) async throws -> ASAuthorizationCredential {
         try await withCheckedThrowingContinuation { continuation in
             self.continuation = continuation
             let controller = ASAuthorizationController(authorizationRequests: requests)
@@ -558,7 +584,7 @@ final class CeremonyManager: NSObject {
         }
     }
 
-    private static func randomChallenge(_ count: Int = 32) -> Data {
+    static func randomChallenge(_ count: Int = 32) -> Data {
         var bytes = [UInt8](repeating: 0, count: count)
         _ = SecRandomCopyBytes(kSecRandomDefault, count, &bytes)
         return Data(bytes)

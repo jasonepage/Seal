@@ -14,6 +14,7 @@ struct ContentView: View {
     @State private var appLock: AppLock?
     @State private var perkRedeemer: PerkRedeemer?
     @State private var showPostRegistrationRedeem = false
+    @State private var showBackupPrompt = false
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -26,6 +27,17 @@ struct ContentView: View {
                     .sheet(isPresented: $showPostRegistrationRedeem) {
                         RedeemPerkView(myRoot: root, redeemer: perkRedeemer)
                     }
+                    // Blocking, by design (FR-3, UI.md §3.1): this is the one
+                    // moment the person is holding their key and thinking
+                    // about it, and skipping it is the one choice here that
+                    // can't be undone later. A full-screen cover can't be
+                    // swiped away, so the only ways out are adding a key or
+                    // accepting the risk explicitly.
+                    .fullScreenCover(isPresented: $showBackupPrompt) {
+                        BackupKeyPrompt(myRoot: root, ceremony: ceremony, sync: sync) {
+                            showBackupPrompt = false
+                        }
+                    }
             } else if let ceremony {
                 RegistrationView(ceremony: ceremony, sync: sync)
             }
@@ -33,10 +45,28 @@ struct ContentView: View {
         .onAppear { setupEngines() }
         .onChange(of: identity.rootIdentity?.credentialIDHash) { _, new in
             setupEngines()
+            // Fresh ceremony THIS session (not an app relaunch), and this
+            // identity has no backup key yet → the FR-3 prompt.
+            //
+            // "No backup key yet" is read off the identity we just stored,
+            // which is what makes this fire in the right places without a
+            // second flag: a fresh registration has none, a sign-in carries
+            // whatever the directory published. So registering prompts,
+            // signing in on a phone whose identity still has no backup key
+            // prompts (it should — nothing has changed about the risk), and
+            // signing in on an identity that already has one stays quiet.
+            let hasBackup = !(identity.rootIdentity?.backupCredentials ?? []).isEmpty
+            if new != nil, ceremony?.phase == .sealed, !DemoFixtures.isActive, !hasBackup {
+                showBackupPrompt = true
+            }
             // Fresh ceremony THIS session (not an app relaunch) → offer the
             // claim-code prompt once; forge-pack codes ship in the box.
+            // `!showBackupPrompt`: a sheet and a full-screen cover presented
+            // from the same view in the same tick fight, and the backup-key
+            // prompt is the one that must win — a claim code can be redeemed
+            // any time, an unbacked identity can't be un-lost.
             if new != nil, ceremony?.phase == .sealed, !DemoFixtures.isActive,
-               PerkAuthority.isConfigured {
+               PerkAuthority.isConfigured, !showBackupPrompt {
                 showPostRegistrationRedeem = true
             }
         }

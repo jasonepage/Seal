@@ -26,7 +26,11 @@ final class SyncEngine {
     /// Back to idle so a newly registered identity publishes itself.
     func resetStatus() { status = .idle }
 
-    private var publicDB: CKDatabase {
+    // Internal, not private: the FR-3 backup-key directory calls live in
+    // Seal/Sync/BackupDirectory.swift as an extension on this type, and a
+    // second CKContainer handle there would be a silent way for the two to
+    // disagree about which database they are talking to.
+    var publicDB: CKDatabase {
         CKContainer(identifier: Self.containerID).publicCloudDatabase
     }
 
@@ -134,7 +138,7 @@ final class SyncEngine {
             let endorsements = try? JSONDecoder().decode([DeviceEndorsement].self, from: endorsementData)
         else { return nil }
 
-        let root = RootIdentity(
+        var root = RootIdentity(
             credentialIDHash: credentialIDHash,
             publicKey: publicKey,
             tier: tier,
@@ -142,13 +146,34 @@ final class SyncEngine {
             rawCredentialID: record["credentialID"] as? Data
         )
 
+        // One revocation list, two kinds of subject: device keys (FR-19,
+        // `seal.revoke.v1`) and backup credentials (FR-3,
+        // `seal.backup.revoke.v1`). They are told apart by the domain string
+        // inside the root-signed commitment, never by position or by shape.
+        var revocations: [DeviceRevocation] = []
+        if let data = record["revocations"] as? Data,
+           let decoded = try? JSONDecoder().decode([DeviceRevocation].self, from: data) {
+            revocations = decoded
+        }
+
+        // Backup credentials (FR-3). THIS is the single point where a backup
+        // is checked against the root signature and the revocation list, so
+        // every consumer downstream — the authority set in verifiedDevices,
+        // sign-in resolution, the profile list — inherits one filtered answer
+        // instead of each re-deriving it. An absent field means "no backups"
+        // (an identity that has none, or a directory where the field is not
+        // deployed yet) and is never an error.
+        if let data = record["backupEndorsements"] as? Data,
+           let decoded = try? JSONDecoder().decode([BackupCredential].self, from: data) {
+            let revokedBackups = IdentityManager.revokedBackupPublicKeys(root: root, revocations: revocations)
+            let live = BackupCredential.verified(decoded, root: root, revokedPublicKeys: revokedBackups)
+            root.backupCredentials = live.isEmpty ? nil : live
+        }
+
         // Filter out revoked devices before anyone trusts them (FR-19).
         var live = endorsements
-        if let revocationData = record["revocations"] as? Data,
-           let revocations = try? JSONDecoder().decode([DeviceRevocation].self, from: revocationData) {
-            let revoked = IdentityManager.revokedDevicePublicKeys(root: root, revocations: revocations)
-            live.removeAll { revoked.contains($0.devicePublicKey) }
-        }
+        let revokedDevices = IdentityManager.revokedDevicePublicKeys(root: root, revocations: revocations)
+        live.removeAll { revokedDevices.contains($0.devicePublicKey) }
         return (root, live)
     }
 
@@ -159,24 +184,17 @@ final class SyncEngine {
     /// NOTE: requires the `recordName QUERYABLE` index on Identity in the
     /// CloudKit schema (console → Indexes → Identity), dev + Production.
     /// Scale ceiling is documented in SDS §7 — revisit past ~1k identities.
+    /// Now a thin projection of `fetchDirectoryCredentials()` (FR-3, see
+    /// Seal/Sync/BackupDirectory.swift), so BACKUP credential IDs land in this
+    /// list too. Both callers need that:
+    ///   - registration's `excludedCredentials` — otherwise a key already
+    ///     serving as somebody's backup could mint a second identity, which is
+    ///     exactly the hole 1-key-1-identity exists to deter (SDS §7);
+    ///   - security-key sign-in's allow-list — a non-discoverable backup key
+    ///     recognises its own credential only when its ID is on the list, so
+    ///     leaving it off would make the recovery key silently un-tappable.
     func fetchAllCredentialIDs() async throws -> [Data] {
-        let query = CKQuery(recordType: "Identity", predicate: NSPredicate(value: true))
-        var ids: [Data] = []
-        var (results, cursor) = try await publicDB.records(
-            matching: query, desiredKeys: ["credentialID", "tier"], resultsLimit: 200)
-        while true {
-            for (_, result) in results {
-                if let record = try? result.get(),
-                   (record["tier"] as? String) != Self.deletedTier,   // skip tombstones
-                   let id = record["credentialID"] as? Data {
-                    ids.append(id)
-                }
-            }
-            guard let next = cursor else { break }
-            (results, cursor) = try await publicDB.records(
-                continuingMatchFrom: next, desiredKeys: ["credentialID", "tier"], resultsLimit: 200)
-        }
-        return ids
+        try await fetchDirectoryCredentials().map(\.credentialID)
     }
 
     /// Append a (root-key-signed) device revocation to our directory record.
@@ -236,6 +254,16 @@ final class SyncEngine {
             ?? CKRecord(recordType: "Identity", recordID: recordID)
         record["tier"] = Self.deletedTier
         record["deviceEndorsements"] = Data()
+        // Scrub backup credentials as well, so a deleted identity can't be
+        // reached through one (FR-3). Guarded on the field already being
+        // present: writing a field the Production schema doesn't have yet
+        // would make the whole save fail, and account deletion is an App
+        // Review 5.1.1(v) requirement that must not depend on a schema deploy.
+        // The write-once tombstone marker above is authoritative regardless —
+        // sign-in through a backup resolves to this root and checks it.
+        if record["backupEndorsements"] != nil {
+            record["backupEndorsements"] = Data()
+        }
         try? await publicDB.save(record)
         WebAuthnDiag.log.info("deleteIdentity: tombstoned \(credentialIDHash, privacy: .public) (marker authoritative; main-record flip best-effort)")
     }

@@ -185,20 +185,93 @@ final class IdentityManager {
 
     // MARK: - Verification
 
+    /// Every credential allowed to endorse a device for this identity: the
+    /// root credential, plus each backup credential the root has endorsed and
+    /// not revoked (FR-3, `seal.backup.v1`).
+    ///
+    /// Returned as (credential ID, public key) pairs because an endorsement's
+    /// assertion names the credential that produced it, which lets
+    /// `verifiedDevices` check exactly one signature instead of trying each
+    /// authority in turn. Credential ID is nil only for the root of an
+    /// identity registered before credential publishing (the same population
+    /// `CeremonyError.missingCredentialID` already speaks about).
+    static func authorityKeys(for root: RootIdentity) -> [(credentialID: Data?, publicKey: P256.Signing.PublicKey)] {
+        // Element type spelled with its labels: an array of unlabelled tuples
+        // is a DIFFERENT type here, not an implicit conversion.
+        var keys: [(credentialID: Data?, publicKey: P256.Signing.PublicKey)] = []
+        if let rootPub = try? P256.Signing.PublicKey(rawRepresentation: root.publicKey) {
+            keys.append((credentialID: root.rawCredentialID, publicKey: rootPub))
+        }
+        // Re-verify the root signature on every backup rather than trusting
+        // whoever assembled this RootIdentity: a hand-constructed or
+        // tampered-with entry must not be able to widen the set of keys that
+        // may speak for an identity. What this canNOT re-check is REVOCATION,
+        // which lives in the record's revocation list, not on the identity —
+        // so a backup revoked a moment ago stays trusted until the next
+        // directory fetch. That is the same staleness window a revoked DEVICE
+        // has today, and it self-heals through the same path: ChatEngine
+        // refetches with `forceRefresh` on a verify miss, and every fresh
+        // `fetchIdentity` strips revoked backups before they get here.
+        for backup in verifiedBackups(for: root) {
+            if let pub = try? P256.Signing.PublicKey(rawRepresentation: backup.publicKey) {
+                keys.append((credentialID: backup.credentialID, publicKey: pub))
+            }
+        }
+        return keys
+    }
+
+    /// The backup credentials on `root` whose root signature actually checks
+    /// out. Revocation filtering happens upstream in `fetchIdentity`, which is
+    /// where the revocation list lives.
+    static func verifiedBackups(for root: RootIdentity) -> [BackupCredential] {
+        guard let backups = root.backupCredentials, !backups.isEmpty else { return [] }
+        return BackupCredential.verified(backups, root: root, revokedPublicKeys: [])
+    }
+
     /// Returns the device public keys + KEM keys from `endorsements` whose
     /// signature chain back to `root` actually verifies. Everything else is
     /// dropped — the server is untrusted for integrity (SDS §7).
+    ///
+    /// **The endorsing credential may be the root OR a backup credential**
+    /// (FR-3). That is the entire point of a backup key: sign-in endorses the
+    /// phone it runs on, so a person recovering onto a new phone with their
+    /// backup key produces a device endorsement signed by the BACKUP. If this
+    /// function still demanded the root's signature, that endorsement would be
+    /// dropped by every peer and the recovered phone would be able to send
+    /// nothing anyone could verify — recovery that silently does not work.
+    ///
+    /// **Compatibility, stated plainly:** a build older than backup keys
+    /// verifies against the root credential only, so it will NOT accept a
+    /// backup-signed device endorsement. A recovered phone can talk to peers
+    /// on this build or newer; older peers drop its messages the same way they
+    /// dropped an unknown device key before. This is the same class of break
+    /// as the `wrapToAll` envelope change (HANDOFF, 6/26) and has the same
+    /// answer: the family updates together.
     static func verifiedDevices(root: RootIdentity, endorsements: [DeviceEndorsement]) -> [DeviceEndorsement] {
-        guard let rootPub = try? P256.Signing.PublicKey(rawRepresentation: root.publicKey) else { return [] }
+        let authorities = authorityKeys(for: root)
+        guard !authorities.isEmpty else { return [] }
         return endorsements.filter { e in
             guard e.revokedAt == nil,
-                  let assertion = try? JSONDecoder().decode(WebAuthnAssertion.self, from: e.assertion),
-                  assertion.verify(with: rootPub) else { return false }
+                  let assertion = try? JSONDecoder().decode(WebAuthnAssertion.self, from: e.assertion)
+            else { return false }
             // v2 commitment binds signing AND KEM keys — a directory that
             // swaps either one fails verification.
             let commitment = Data(SHA256.hash(data:
                 Data("seal.endorse.v2".utf8) + e.devicePublicKey + e.kemBundlePublicKeys))
-            return CeremonyManager.clientDataChallengeMatches(assertion.clientDataJSON, expected: commitment)
+            guard CeremonyManager.clientDataChallengeMatches(assertion.clientDataJSON, expected: commitment)
+            else { return false }
+            // Prefer the authority the assertion actually names. Trying every
+            // authority in turn would also work, but each failed attempt logs
+            // a "did NOT match the directory public key" error, and a healthy
+            // backup-signed endorsement would print one of those on the root
+            // attempt every time — exactly the misleading noise the messaging
+            // os-log category exists to avoid. Fall back to trying them all
+            // only when the ID matches nothing (pre-credential-publishing
+            // identities, where rawCredentialID is nil).
+            if let named = authorities.first(where: { $0.credentialID == assertion.credentialID }) {
+                return assertion.verify(with: named.publicKey)
+            }
+            return authorities.contains { assertion.verify(with: $0.publicKey) }
         }
     }
 
@@ -212,6 +285,30 @@ final class IdentityManager {
             guard let assertion = try? JSONDecoder().decode(WebAuthnAssertion.self, from: revocation.assertion),
                   assertion.verify(with: rootPub) else { continue }
             let commitment = Data(SHA256.hash(data: Data("seal.revoke.v1".utf8) + revocation.devicePublicKey))
+            if CeremonyManager.clientDataChallengeMatches(assertion.clientDataJSON, expected: commitment) {
+                revoked.insert(revocation.devicePublicKey)
+            }
+        }
+        return revoked
+    }
+
+    /// Backup credential public keys with a VALID revocation — a root-signed
+    /// assertion committing to that credential under `seal.backup.revoke.v1`.
+    /// Same shape and same discipline as `revokedDevicePublicKeys`, in the
+    /// same `revocations` list on the record, with its own domain string so
+    /// the two statements can never stand in for one another.
+    ///
+    /// Only the ROOT can sign these: a backup credential revokes nothing in
+    /// v1, because a stolen backup that could evict the real owner would be
+    /// worse than the key loss this feature exists to survive. See
+    /// BackupCredential.swift for the full argument.
+    static func revokedBackupPublicKeys(root: RootIdentity, revocations: [DeviceRevocation]) -> Set<Data> {
+        guard let rootPub = try? P256.Signing.PublicKey(rawRepresentation: root.publicKey) else { return [] }
+        var revoked: Set<Data> = []
+        for revocation in revocations {
+            guard let assertion = try? JSONDecoder().decode(WebAuthnAssertion.self, from: revocation.assertion),
+                  assertion.verify(with: rootPub) else { continue }
+            let commitment = BackupCredential.revocationCommitment(publicKey: revocation.devicePublicKey)
             if CeremonyManager.clientDataChallengeMatches(assertion.clientDataJSON, expected: commitment) {
                 revoked.insert(revocation.devicePublicKey)
             }
