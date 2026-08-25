@@ -6,16 +6,33 @@ struct ForgeLogView: View {
     let myRoot: RootIdentity
     @Bindable var friendStore: FriendStore
 
+    /// IN-PERSON friendships only. This screen is "signed proof that you
+    /// met", and the share card literally says "Every friendship forged in
+    /// person" — a LINKED friendship (docs/INTRODUCTIONS.md) was never forged,
+    /// has no ceremony date worth printing, and must never be counted here.
+    /// Listing them with a forge date would make the one screen whose whole
+    /// claim is physical presence quietly untrue.
+    private var forged: [FriendStore.StoredFriend] {
+        friendStore.friends.filter { $0.friendship.isInPerson }
+    }
+
     private var sorted: [FriendStore.StoredFriend] {
-        friendStore.friends.sorted { $0.friendship.forgedAt > $1.friendship.forgedAt }
+        forged.sorted { $0.friendship.forgedAt > $1.friendship.forgedAt }
+    }
+
+    /// Introduced friends, which the log deliberately does not list. Counted
+    /// so the omission is stated rather than silently swallowing people the
+    /// user can see everywhere else in the app.
+    private var linkedCount: Int {
+        friendStore.friends.count - forged.count
     }
 
     private var verifiedCount: Int {
-        friendStore.friends.filter { $0.identity.tier == .verified }.count
+        forged.filter { $0.identity.tier == .verified }.count
     }
 
     private var monthsActive: Int {
-        let months = Set(friendStore.friends.map {
+        let months = Set(forged.map {
             Calendar.current.dateComponents([.year, .month], from: $0.friendship.forgedAt)
         })
         return months.count
@@ -27,7 +44,7 @@ struct ForgeLogView: View {
             VStack(spacing: 16) {
                 // Stats header
                 HStack(spacing: 12) {
-                    stat("\(friendStore.friends.count)", "forged")
+                    stat("\(forged.count)", "forged")
                     stat("\(verifiedCount)", "verified")
                     stat("\(monthsActive)", monthsActive == 1 ? "month" : "months")
                 }
@@ -75,6 +92,17 @@ struct ForgeLogView: View {
                     }
                     .scrollContentBackground(.hidden)
                 }
+                if linkedCount > 0 {
+                    Text(linkedCount == 1
+                         ? "1 linked friend isn't shown here — the forge log is only what you forged in person."
+                         : "\(linkedCount) linked friends aren't shown here — the forge log is only what you forged in person.")
+                        .font(.caption2)
+                        .foregroundStyle(SealTheme.silver.opacity(0.8))
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 32)
+                        .padding(.bottom, 8)
+                }
             }
         }
         .navigationTitle("Forge log")
@@ -95,7 +123,11 @@ struct ForgeLogView: View {
             }
         }
         .onAppear { renderShareCard() }
-        .onChange(of: friendStore.friends.count) { renderShareCard() }
+        // `forged.count`, not `friends.count`: FriendStore.add is
+        // remove-then-append, so a LINKED friend who later forges in person
+        // leaves the total unchanged while the forged count rises — and the
+        // share card would keep printing the old, too-low number.
+        .onChange(of: forged.count) { renderShareCard() }
     }
 
     // MARK: - Share card (growth surface: the forge log as a postable object)
@@ -104,10 +136,10 @@ struct ForgeLogView: View {
 
     @MainActor
     private func renderShareCard() {
-        guard !friendStore.friends.isEmpty else { shareCard = nil; return }
+        guard !forged.isEmpty else { shareCard = nil; return }
         let renderer = ImageRenderer(content: ForgeShareCard(
             name: myRoot.displayName,
-            forged: friendStore.friends.count,
+            forged: forged.count,
             verified: verifiedCount,
             months: monthsActive))
         renderer.scale = 3

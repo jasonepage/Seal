@@ -140,6 +140,9 @@ struct ColonyBar: View {
         let id: String
         let name: String
         let tier: IdentityTier
+        /// Introduced rather than forged (docs/INTRODUCTIONS.md) — silver
+        /// link ring, never brass, in the chat header as everywhere else.
+        var linked: Bool = false
     }
 
     private var members: [Member] {
@@ -148,7 +151,9 @@ struct ColonyBar: View {
                 return Member(id: hash, name: myRoot.displayName, tier: myRoot.tier)
             }
             if let friend = friendStore?.friends.first(where: { $0.id == hash }) {
-                return Member(id: hash, name: friend.identity.displayName, tier: friend.identity.tier)
+                return Member(id: hash, name: friend.identity.displayName,
+                              tier: friend.identity.tier,
+                              linked: !friend.friendship.isInPerson)
             }
             return Member(id: hash, name: "?", tier: .passkey)
         }
@@ -157,9 +162,17 @@ struct ColonyBar: View {
     var body: some View {
         HStack(spacing: 6) {
             HStack(spacing: -10) {
-                ForEach(members.prefix(5)) { member in
-                    IdentityRing(displayName: member.name, tier: member.tier, size: 26)
+                // Descending zIndex so each ring is painted OVER the next one's
+                // left edge rather than under its own right edge. The overlap
+                // is 10 of 26 points and the rings carry an opaque ink
+                // backing, so the default order would bury every linked
+                // member's trailing `link` glyph — the one cue that survives
+                // greyscale at this size (docs/INTRODUCTIONS.md).
+                ForEach(Array(members.prefix(5).enumerated()), id: \.element.id) { index, member in
+                    IdentityRing(displayName: member.name, tier: member.tier, size: 26,
+                                 linked: member.linked)
                         .background(Circle().fill(SealTheme.ink).padding(-1.5))
+                        .zIndex(Double(5 - index))
                 }
             }
             HStack(spacing: 3) {

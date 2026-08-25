@@ -52,6 +52,10 @@ final class ChatEngine {
         /// verified on arrival and never looked at again, but a card can be
         /// acted on days later (SealedCard.swift, MessageProof).
         var proof: MessageProof?
+        /// kind == "introduce": the offer plus the verdict of the checks the
+        /// engine ran on arrival, so the card is a pure function of stored
+        /// state and `body` never does async work. Nil on every other message.
+        var introduction: IntroductionOffer?
     }
 
     /// What actually gets encrypted — TTL and the media content key travel
@@ -70,6 +74,13 @@ final class ChatEngine {
         var replySenderHash: String?    // reply: quoted author
         var readUpTo: Date?             // read receipt: sentAt of latest message seen
         var card: SealedCard?           // "card": high-stakes payload (SealedCard.swift)
+        // Introductions (Seal/Introductions/Introduction.swift). Three kinds,
+        // one flow: the introducer's signed vouch, each party's signed
+        // acceptance travelling back, and the confirmation carrying both
+        // acceptances out again. No new record type — same reasoning as cards.
+        var introduce: IntroductionStatement?
+        var introduceAccept: IntroductionAcceptance?
+        var introduceConfirm: IntroductionConfirmation?
     }
 
     private struct ChainState: Codable {
@@ -147,10 +158,33 @@ final class ChatEngine {
 
     let ownerHash: String
 
+    /// Introductions in flight, in any role (docs/INTRODUCTIONS.md). Owned
+    /// here rather than beside the FriendStore because the receive path is
+    /// where the three payload kinds land, and because messages are consumed
+    /// once — the ratchet destroys the key — so "what does this flow still
+    /// owe?" has to be answered from local state, not from the transcript.
+    let introductions: IntroductionStore
+
+    /// Acceptances re-sent this session (see `resendAcceptanceOnce`). In
+    /// memory on purpose: the point is one nudge per launch, not a permanent
+    /// retry queue.
+    private var resentAcceptances: Set<String> = []
+
+    /// Last time each introduction was pushed forward. `refreshAll` runs on
+    /// launch, foreground and push, and ChatView's poll calls the same thing
+    /// every FOUR SECONDS while a chat is open — so every retryable failure
+    /// below (directory unreachable, a recipient with no published keys) would
+    /// otherwise become two forced identity fetches, or an outbound message,
+    /// every four seconds for the life of the install. One attempt per minute
+    /// per introduction. In memory: a fresh launch is allowed to try again
+    /// immediately, which is what a user who just reopened the app expects.
+    private var introductionAttempts: [String: Date] = [:]
+
     init(identity: IdentityManager, sync: SyncEngine, ownerHash: String) {
         self.identity = identity
         self.sync = sync
         self.ownerHash = ownerHash
+        self.introductions = IntroductionStore(ownerHash: ownerHash)
         load()
         purgeExpired()
     }
@@ -162,6 +196,7 @@ final class ChatEngine {
         KeychainStore.delete("seal.outbox.\(ownerHash)")
         KeychainStore.delete("seal.readmarks.\(ownerHash)")
         KeychainStore.delete("seal.blocks.\(ownerHash)")
+        IntroductionStore.wipe(ownerHash: ownerHash)
     }
 
     func setTTL(_ ttl: TimeInterval?, for chat: Chat) {
@@ -373,6 +408,10 @@ final class ChatEngine {
         for chat in chats {
             await refresh(chat, myRoot: myRoot)
         }
+        // After the inbound pass, not before: acceptances and confirmations
+        // arrive as messages, so this is the step that turns what just landed
+        // into the next thing this device owes (docs/INTRODUCTIONS.md).
+        await ensureIntroductionsProgressed(myRoot: myRoot, friendStore: friendStore)
     }
 
     func ensureNoteToSelf(myHash: String) -> Chat {
@@ -428,6 +467,7 @@ final class ChatEngine {
     /// that can. The card's `value` is never summarised — a truncated address
     /// in a list row is an invitation to misread it.
     static func summary(_ m: ChatMessage) -> String {
+        if m.introduction != nil { return "🔗 Introduction" }
         if let card = m.card { return "🔏 \(card.title)" }
         if m.mediaRef != nil { return "📷 Photo" }
         return m.text
@@ -568,6 +608,22 @@ final class ChatEngine {
     /// "screenshot" is NOT here: it renders a visible notice.
     private static func isNonBubble(_ kind: String?) -> Bool {
         kind == "reaction" || kind == "read" || kind == "typing"
+            || kind == Introduction.acceptKind || kind == Introduction.confirmKind
+    }
+
+    /// Kinds that should carry `recipients`, which is the ONLY thing that
+    /// fires a push (the CKQuerySubscription watches that field).
+    ///
+    /// Normally that is exactly the bubble kinds — presence pings and
+    /// reactions deliberately ship with no recipients so a typing indicator
+    /// never buries a real message. An introduction CONFIRMATION is the one
+    /// exception: it renders no bubble, but it is not chatter — it is the
+    /// moment a friendship comes into existence on the other phone, and it
+    /// arrives at most twice per introduction. Leaving it silent would mean a
+    /// new family member appears only when the app is next opened for some
+    /// other reason.
+    private static func firesPush(_ kind: String?) -> Bool {
+        !isNonBubble(kind) || kind == Introduction.confirmKind
     }
 
     /// Encrypt a photo with a fresh content key, park the blob in CloudKit,
@@ -607,12 +663,22 @@ final class ChatEngine {
         }
     }
 
-    private func sendPayload(_ payloadValue: MessagePayload, in chat: Chat, from myRoot: RootIdentity) async {
+    /// Returns true when the wire record was written OR queued in the outbox
+    /// (i.e. it will land), false when the send failed outright with nothing
+    /// left to retry.
+    ///
+    /// The result exists for the introduction flow, which has to know whether
+    /// it still owes somebody a message: an introducer that marked its
+    /// confirmations "sent" after a send that never happened would leave two
+    /// people permanently waiting, each believing the other hadn't answered.
+    /// Every other caller ignores it, as they always have.
+    @discardableResult
+    private func sendPayload(_ payloadValue: MessagePayload, in chat: Chat, from myRoot: RootIdentity) async -> Bool {
         lastError = nil
         // FR-23: demo identities cannot message real users — demo sends are
         // appended locally and never leave the device.
         if DemoFixtures.isActive {
-            if Self.isNonBubble(payloadValue.kind) { return }   // presence/reactions: no local bubble
+            if Self.isNonBubble(payloadValue.kind) { return true }   // presence/reactions: no local bubble
             let localID = UUID()
             var local = messagesByChat[chat.id] ?? []
             local.append(ChatMessage(id: localID, senderHash: myRoot.credentialIDHash,
@@ -625,14 +691,17 @@ final class ChatEngine {
                                      replyTo: payloadValue.replyTo,
                                      replyPreview: payloadValue.replyPreview,
                                      replySenderHash: payloadValue.replySenderHash,
-                                     card: payloadValue.card))
+                                     card: payloadValue.card,
+                                     introduction: payloadValue.introduce.map {
+                                         IntroductionOffer.verified($0, counterpart: nil)
+                                     }))
             messagesByChat[chat.id] = local
             persist()
-            return
+            return true
         }
         guard let deviceKey = identity.deviceKey,
               let devicePub = identity.deviceKey?.publicKey.x963Representation else {
-            lastError = "No device key — re-register."; return
+            lastError = "No device key — re-register."; return false
         }
         let myHash = myRoot.credentialIDHash
         let groupID = chat.id.uuidString
@@ -659,12 +728,12 @@ final class ChatEngine {
                     // work once a chain exists or the directory entry is cached.
                     guard let (_, endorsements) = try await directoryEntry(for: member) else {
                         lastError = "A member's identity has no message keys — they need to re-register."
-                        return
+                        return false
                     }
                     let recipientKEMs = endorsements.map(\.kemBundlePublicKeys).filter { !$0.isEmpty }
                     guard !recipientKEMs.isEmpty else {
                         lastError = "A member's identity has no message keys — they need to re-register."
-                        return
+                        return false
                     }
                     let envelope = try HybridKEM.wrapToAll(fresh.chainKey, to: recipientKEMs)
                     ChatEngine.msgLog.info("send: wrapped epoch \(epoch, privacy: .public) key to \(recipientKEMs.count, privacy: .public) device key(s) [\(recipientKEMs.map { ChatEngine.fp($0) }.joined(separator: ","), privacy: .public)]")
@@ -721,10 +790,14 @@ final class ChatEngine {
             // otherwise every typing ping (1 per 4s) and every read receipt
             // pushes a "New sealed message" banner at the other person, which
             // buries the real messages and trains people to mute the app.
-            let recipients = Self.isNonBubble(payloadValue.kind)
-                ? []
-                : liveChat.memberHashes.filter { $0 != myHash }
+            let recipients = Self.firesPush(payloadValue.kind)
+                ? liveChat.memberHashes.filter { $0 != myHash }
+                : []
             var deliveredNow = true
+            // Distinct from `deliveredNow`: a queued message has NOT been
+            // delivered but WILL be, so the caller has nothing left to do.
+            // Only the stale-slot collision below is a dead end.
+            var shipped = true
             do {
                 try await sync.saveMessage(
                     groupID: groupID, epoch: epoch, senderHash: myHash, chainIndex: index,
@@ -749,6 +822,7 @@ final class ChatEngine {
                 // treats a collision as delivered — there the record genuinely
                 // was written by an earlier attempt of OURS.)
                 deliveredNow = false
+                shipped = false
                 lastError = "This chat is out of sync with the server — messages aren't reaching anyone. "
                           + "Old messages from a previous sign-in are occupying this chat's slots."
                 ChatEngine.msgLog.error("send: slot \(index, privacy: .public) occupied on FIRST attempt — stale server chain, message NOT delivered and no push fired (group=\(groupID, privacy: .public) epoch=\(epoch, privacy: .public))")
@@ -790,12 +864,21 @@ final class ChatEngine {
                                          replyPreview: payloadValue.replyPreview,
                                          replySenderHash: payloadValue.replySenderHash,
                                          card: payloadValue.card,
-                                         proof: proof))
+                                         proof: proof,
+                                         introduction: payloadValue.introduce.map {
+                                             // The introducer's own copy. No
+                                             // `counterpart`: they have two,
+                                             // and both names come out of
+                                             // their FriendStore.
+                                             IntroductionOffer.verified($0, counterpart: nil)
+                                         }))
                 messagesByChat[chat.id] = local
                 persist()
             }
+            return shipped
         } catch {
             lastError = "Send failed: \(error.localizedDescription)"
+            return false
         }
     }
 
@@ -847,6 +930,497 @@ final class ChatEngine {
             }
         }
         persist()
+    }
+
+    // MARK: - Introductions (docs/INTRODUCTIONS.md)
+
+    /// Vouch two people you have met IN PERSON into a friendship with each
+    /// other. Returns nil on success, or a plain-language reason it didn't
+    /// happen.
+    ///
+    /// Two messages go out, one to each party in the 1:1 chat that already
+    /// exists with them. Nothing is published, nothing is queried, and no
+    /// record type is involved: an introduction names two people and says a
+    /// third vouched for them, which is exactly the who-knows-whom data
+    /// docs/TRUST.md D3 keeps private, so it travels encrypted or not at all.
+    func sendIntroduction(_ first: FriendStore.StoredFriend,
+                          and second: FriendStore.StoredFriend,
+                          from myRoot: RootIdentity,
+                          friendStore: FriendStore) async -> String? {
+        let myHash = myRoot.credentialIDHash
+        guard first.id != second.id else { return "Pick two different people." }
+        guard first.id != myHash, second.id != myHash else {
+            return "An introduction connects two OTHER people."
+        }
+        // Read both friendships BACK from the store instead of trusting the
+        // copies the sheet has been holding: an edge can be un-forged (or
+        // upgraded) while a view is alive, and the tier is the whole rule.
+        guard let a = friendStore.friends.first(where: { $0.id == first.id }),
+              let b = friendStore.friends.first(where: { $0.id == second.id }) else {
+            return "One of them isn't in your Circle any more."
+        }
+        // Re-check what the picker already filtered. A rule enforced only by a
+        // view is a rule an attacker skips — and this one is the whole point:
+        // introduction does not chain.
+        guard a.friendship.isInPerson, b.friendship.isInPerson else {
+            return "You can only introduce people you've met in person through Seal."
+        }
+
+        let pair = Introduction.canonical((hash: a.id, publicKey: a.identity.publicKey),
+                                          (hash: b.id, publicKey: b.identity.publicKey))
+        let createdAtEpoch = Int64(Date.now.timeIntervalSince1970)
+        // Demo mode has no device key — nothing in it is ever registered — so
+        // it produces the same OFFER with an unsigned statement and skips the
+        // signing step, exactly as `demoAccept` skips the acceptance. Without
+        // this the demo walkthrough dies at "No device key — re-register." on
+        // the one screen it exists to show.
+        if DemoFixtures.isActive {
+            let statement = IntroductionStatement(
+                introducerHash: myHash,
+                introducerDevicePublicKey: Data(),
+                partyAHash: pair.a.hash, partyAPublicKey: pair.a.publicKey,
+                partyBHash: pair.b.hash, partyBPublicKey: pair.b.publicKey,
+                createdAtEpoch: createdAtEpoch,
+                signature: Data("seal.demo.introduction".utf8))
+            introductions.record(statement)
+            await deliverOffer(statement, to: a, other: b, from: myRoot)
+            await deliverOffer(statement, to: b, other: a, from: myRoot)
+            return nil
+        }
+        guard let deviceKey = identity.deviceKey else { return "No device key — re-register." }
+
+        let commitment = Introduction.commitment(
+            introducerHash: myHash,
+            partyAHash: pair.a.hash, partyAPublicKey: pair.a.publicKey,
+            partyBHash: pair.b.hash, partyBPublicKey: pair.b.publicKey,
+            createdAtEpoch: createdAtEpoch)
+        let statement: IntroductionStatement
+        do {
+            let signature = try deviceKey.signature(for: commitment)
+            statement = IntroductionStatement(
+                introducerHash: myHash,
+                introducerDevicePublicKey: deviceKey.publicKey.x963Representation,
+                partyAHash: pair.a.hash, partyAPublicKey: pair.a.publicKey,
+                partyBHash: pair.b.hash, partyBPublicKey: pair.b.publicKey,
+                createdAtEpoch: createdAtEpoch,
+                signature: signature.derRepresentation)
+        } catch {
+            return "Couldn't sign the introduction: \(error.localizedDescription)"
+        }
+        introductions.record(statement)
+        await deliverOffer(statement, to: a, other: b, from: myRoot)
+        await deliverOffer(statement, to: b, other: a, from: myRoot)
+        Introduction.log.info("sent introduction \(statement.shortID, privacy: .public) to \(a.id, privacy: .public) and \(b.id, privacy: .public)")
+        return nil
+    }
+
+    /// Re-ship an introduction this device already made and signed. The SAME
+    /// statement, byte for byte, so the recipient's store recognises it by
+    /// commitment and nobody ends up holding two offers for one introduction.
+    /// Returns nil when both copies went out, or a plain-language reason
+    /// otherwise — a "Send again" button that can silently do nothing is a
+    /// button that trains people to distrust the app.
+    @discardableResult
+    func resendIntroduction(_ statement: IntroductionStatement,
+                            from myRoot: RootIdentity,
+                            friendStore: FriendStore) async -> String? {
+        guard statement.introducerHash == myRoot.credentialIDHash else {
+            return "Only the person who made an introduction can send it again."
+        }
+        var sent = 0
+        for hash in [statement.partyAHash, statement.partyBHash] {
+            guard let party = friendStore.friends.first(where: { $0.id == hash }),
+                  let otherHash = statement.counterpartHash(for: hash),
+                  let other = friendStore.friends.first(where: { $0.id == otherHash })
+            else { continue }
+            await deliverOffer(statement, to: party, other: other, from: myRoot)
+            sent += 1
+        }
+        return sent == 2 ? nil : "One of the two isn't in your Circle any more, so Seal didn't send it again."
+    }
+
+    private func deliverOffer(_ statement: IntroductionStatement,
+                              to party: FriendStore.StoredFriend,
+                              other: FriendStore.StoredFriend,
+                              from myRoot: RootIdentity) async {
+        let chat = ensureChat(with: party.identity, myHash: myRoot.credentialIDHash)
+        // Introductions inherit the chat's TTL like every other message. They
+        // are NOT carved out: the verification drawer promises disappearing
+        // messages disappear, and a message class that quietly outlives that
+        // promise is how honest copy becomes dishonest (docs/CARDS.md made the
+        // same call). If an unanswered card burns, the introducer's own card
+        // still offers "Send again", which re-ships this identical statement.
+        let ttl = chats.first(where: { $0.id == chat.id })?.ttl
+        // `text` is the old-build fallback, exactly as a card's is: a build
+        // without introductions decodes this payload fine, falls through to
+        // `default:`, and renders `text` — the only field it reads.
+        await sendPayload(MessagePayload(
+            text: "\(myRoot.displayName) would like to introduce you to \(other.identity.displayName). Update Seal to accept.",
+            ttl: ttl, kind: Introduction.offerKind, introduce: statement),
+            in: chat, from: myRoot)
+    }
+
+    /// Accept an introduction: sign it and send the acceptance back to the
+    /// introducer. Nil on success, a plain-language reason otherwise.
+    ///
+    /// Accepting is NOT the moment the friendship appears. Both parties have
+    /// to accept, and the friend record is created when the introducer's
+    /// confirmation carrying both acceptances arrives (`materialize`).
+    func acceptIntroduction(_ offer: IntroductionOffer,
+                            in chat: Chat,
+                            from myRoot: RootIdentity,
+                            friendStore: FriendStore) async -> String? {
+        let statement = offer.statement
+        let myHash = myRoot.credentialIDHash
+        guard offer.isActionable else {
+            return offer.refusal ?? offer.unchecked ?? "This introduction can't be accepted."
+        }
+        guard statement.involves(myHash) else { return "This introduction is addressed to someone else." }
+        // Check (b), enforced HERE and not only in the card: the introducer
+        // must be someone THIS phone met in person. This is where "a linked
+        // friend cannot introduce" actually bites.
+        if let reason = Introduction.introducerEligibility(statement, friendStore: friendStore) {
+            return reason
+        }
+        if let existing = introductions.entry(for: statement) {
+            if existing.declinedAt != nil { return "You already dismissed this introduction." }
+            // Idempotent: accepting twice re-signs nothing and re-sends
+            // nothing. The card doesn't offer the button in this state, but
+            // the engine is what has to be true.
+            if existing.myAcceptance(myHash) != nil { return nil }
+        }
+        if DemoFixtures.isActive {
+            return demoAccept(statement, from: myRoot, friendStore: friendStore)
+        }
+        guard let deviceKey = identity.deviceKey else { return "No device key — re-register." }
+
+        let acceptedAtEpoch = Int64(Date.now.timeIntervalSince1970)
+        let commitment = Introduction.acceptanceCommitment(
+            introduction: statement.commitment, accepterHash: myHash, acceptedAtEpoch: acceptedAtEpoch)
+        let acceptance: IntroductionAcceptance
+        do {
+            let signature = try deviceKey.signature(for: commitment)
+            acceptance = IntroductionAcceptance(
+                introductionCommitment: statement.commitment,
+                accepterHash: myHash,
+                accepterDevicePublicKey: deviceKey.publicKey.x963Representation,
+                acceptedAtEpoch: acceptedAtEpoch,
+                signature: signature.derRepresentation)
+        } catch {
+            return "Couldn't sign your acceptance: \(error.localizedDescription)"
+        }
+        // Recorded BEFORE the send, so a send that fails leaves this phone
+        // knowing it said yes — `resendAcceptanceOnce` picks it up later.
+        introductions.recordAcceptance(acceptance, for: statement)
+        await sendPayload(MessagePayload(text: "", ttl: nil, kind: Introduction.acceptKind,
+                                         introduceAccept: acceptance),
+                          in: chat, from: myRoot)
+        Introduction.log.info("accepted introduction \(statement.shortID, privacy: .public)")
+        return nil
+    }
+
+    /// "Not now." Nothing is sent, ever — the introducer keeps seeing "not
+    /// accepted yet" and never learns which side stopped. That silence is a
+    /// protocol rule, not an omission: there is nothing useful the introducer
+    /// could do with the information and plenty of family they could do it to.
+    func declineIntroduction(_ offer: IntroductionOffer) {
+        introductions.markDeclined(offer.statement)
+        Introduction.log.info("dismissed introduction \(offer.statement.shortID, privacy: .public) — nothing sent, by design")
+    }
+
+    /// Push every introduction this device is part of as far as it can go.
+    /// Called from `refreshAll` and from the open-chat poll, so the flow
+    /// survives any phone being offline at any step. Every transition is
+    /// idempotent and keyed by the commitment hash.
+    func ensureIntroductionsProgressed(myRoot: RootIdentity, friendStore: FriendStore) async {
+        guard !DemoFixtures.isActive else { return }
+        let myHash = myRoot.credentialIDHash
+        await retryUncheckedOffers(myRoot: myRoot)
+        for entry in introductions.entries {
+            guard entry.abandonedAt == nil else { continue }
+            // Rate floor — see `introductionAttempts`. Recorded before the
+            // work, so a failure costs the same as a success.
+            if let last = introductionAttempts[entry.commitmentHex],
+               Date.now.timeIntervalSince(last) < 60 { continue }
+            introductionAttempts[entry.commitmentHex] = .now
+            if entry.isIntroducer(myHash) {
+                guard entry.bothAccepted, entry.confirmationsSentAt == nil else { continue }
+                await sendConfirmations(entry, from: myRoot, friendStore: friendStore)
+            } else {
+                guard entry.declinedAt == nil, entry.completedAt == nil else { continue }
+                if entry.bothAccepted {
+                    await materialize(entry, myRoot: myRoot, friendStore: friendStore)
+                } else if entry.myAcceptance(myHash) != nil {
+                    await resendAcceptanceOnce(entry, myRoot: myRoot, friendStore: friendStore)
+                }
+            }
+        }
+    }
+
+    /// Both parties said yes: hand each of them the other's acceptance.
+    private func sendConfirmations(_ entry: IntroductionStore.Entry,
+                                   from myRoot: RootIdentity,
+                                   friendStore: FriendStore) async {
+        let statement = entry.statement
+        guard let a = entry.acceptances[statement.partyAHash],
+              let b = entry.acceptances[statement.partyBHash] else { return }
+        // Both of them must STILL be friends of ours. Un-forging one is a
+        // deliberate act and it stops the introduction we were carrying — the
+        // same call `materialize` makes about an un-forged introducer. Latched
+        // as abandoned so a dead flow doesn't re-push whoever is left on every
+        // single launch.
+        guard friendStore.isFriend(statement.partyAHash),
+              friendStore.isFriend(statement.partyBHash) else {
+            Introduction.log.error("confirm: abandoned \(entry.shortID, privacy: .public) — one of the two is no longer a friend of this phone")
+            introductions.markAbandoned(entry.commitmentHex)
+            return
+        }
+        let confirmation = IntroductionConfirmation(statement: statement, acceptances: [a, b])
+        var shipped = 0
+        for hash in [statement.partyAHash, statement.partyBHash] {
+            guard let party = friendStore.friends.first(where: { $0.id == hash }) else { continue }
+            let chat = ensureChat(with: party.identity, myHash: myRoot.credentialIDHash)
+            if await sendPayload(MessagePayload(text: "", ttl: nil, kind: Introduction.confirmKind,
+                                                introduceConfirm: confirmation),
+                                 in: chat, from: myRoot) {
+                shipped += 1
+            }
+        }
+        // Only latch when BOTH are on their way. Half a confirmation is two
+        // people waiting on each other forever, and re-sending is free: the
+        // recipients key everything by commitment hash and a second copy
+        // changes nothing.
+        guard shipped == 2 else {
+            Introduction.log.error("confirm: only \(shipped, privacy: .public)/2 delivered for \(entry.shortID, privacy: .public) — will retry next refresh")
+            return
+        }
+        introductions.markConfirmationsSent(entry.commitmentHex)
+        Introduction.log.info("confirm: both parties notified for \(entry.shortID, privacy: .public)")
+    }
+
+    /// Create the linked friendship. Runs on a PARTY's device once both
+    /// acceptances are in hand, and re-verifies everything from scratch
+    /// against a force-refreshed directory before writing anything: the
+    /// acceptances arrived inside a bundle assembled by the introducer, who is
+    /// exactly the person this feature asks you to trust the least.
+    private func materialize(_ entry: IntroductionStore.Entry,
+                             myRoot: RootIdentity,
+                             friendStore: FriendStore) async {
+        let statement = entry.statement
+        let myHash = myRoot.credentialIDHash
+        guard let counterpartHash = statement.counterpartHash(for: myHash),
+              let mine = entry.acceptances[myHash],
+              let theirs = entry.acceptances[counterpartHash] else {
+            // Malformed for this device — not one of the two parties, or an
+            // acceptance we were told exists and don't hold. Nothing about
+            // that changes on a retry.
+            Introduction.log.error("materialize: abandoned \(entry.shortID, privacy: .public) — this phone isn't part of it, or an acceptance is missing")
+            introductions.markAbandoned(entry.commitmentHex)
+            return
+        }
+
+        // NEVER DOWNGRADE. If this person is already a friend, the existing
+        // edge is either in-person (strictly stronger) or already linked
+        // (identical) — either way, replacing it could only lose information,
+        // and a replayed confirmation must never turn a brass friendship into
+        // a silver one.
+        guard !friendStore.isFriend(counterpartHash) else {
+            introductions.markCompleted(entry.commitmentHex)
+            return
+        }
+        // The introducer must STILL be an in-person friend. Un-forging them
+        // between the offer and the confirmation is a deliberate act, and it
+        // should stop the introduction they were carrying.
+        if let reason = Introduction.introducerEligibility(statement, friendStore: friendStore) {
+            Introduction.log.error("materialize: abandoned \(entry.shortID, privacy: .public) — \(reason, privacy: .public)")
+            introductions.markAbandoned(entry.commitmentHex)
+            return
+        }
+        // Two kinds of failure below, and they must not be confused. A
+        // directory we couldn't REACH keeps retrying. A check that actually
+        // FAILED latches as abandoned — otherwise a dead introduction would
+        // force-refresh two identity records every four seconds, for the life
+        // of the install, and rewrite `lastError` each time (the open-chat
+        // poll calls this).
+        let counterpartEntry = (try? await directoryEntry(for: counterpartHash, forceRefresh: true)) ?? nil
+        let myEntry = (try? await directoryEntry(for: myHash, forceRefresh: true)) ?? nil
+        guard let (counterpartRoot, _) = counterpartEntry else {
+            Introduction.log.error("materialize: directory unreachable for \(counterpartHash, privacy: .public) — will retry")
+            return
+        }
+        guard myEntry != nil else {
+            Introduction.log.error("materialize: directory unreachable for this phone's own identity — will retry")
+            return
+        }
+        // Check (d) again, now, against a fresh directory read.
+        guard counterpartRoot.publicKey == statement.publicKey(for: counterpartHash) else {
+            Introduction.log.error("materialize: REFUSED — \(counterpartHash, privacy: .public) now publishes a different identity key than the introduction names")
+            lastError = "\(counterpartRoot.displayName)'s identity key changed since that introduction was made, so Seal didn't complete it. Ask to be introduced again."
+            introductions.markAbandoned(entry.commitmentHex)
+            return
+        }
+        guard Introduction.verifyAcceptance(theirs, for: statement, accepter: counterpartEntry, identity: identity) else {
+            Introduction.log.error("materialize: REFUSED — the other party's acceptance didn't verify")
+            introductions.markAbandoned(entry.commitmentHex)
+            return
+        }
+        // Our OWN acceptance is verified too, against our own published
+        // devices. That is what lets a phone complete an introduction from a
+        // confirmation alone after a reinstall: a signature we made is
+        // something nobody else can produce, so the bundle is self-sufficient.
+        guard Introduction.verifyAcceptance(mine, for: statement, accepter: myEntry, identity: identity) else {
+            Introduction.log.error("materialize: REFUSED — this phone's own acceptance didn't verify against its published devices")
+            introductions.markAbandoned(entry.commitmentHex)
+            return
+        }
+
+        let ordered = [statement.partyAHash, statement.partyBHash].compactMap { entry.acceptances[$0] }
+        let proof = IntroductionProof(statement: statement, acceptances: ordered)
+        guard let encoded = try? JSONEncoder().encode(proof) else {
+            // Cannot happen with this shape (Data, String, Int64) and cannot
+            // succeed later if it somehow did.
+            Introduction.log.error("materialize: abandoned \(entry.shortID, privacy: .public) — the proof wouldn't encode")
+            introductions.markAbandoned(entry.commitmentHex)
+            return
+        }
+        // `attestation` carries the proof, so a linked edge stays
+        // re-verifiable offline from the friendship alone — the same thing
+        // ForgeHandshake does with its handshake. The typed `introduction`
+        // field is the one anything reads; both come from this one encode, so
+        // they cannot drift.
+        friendStore.add(identity: counterpartRoot,
+                        friendship: Friendship(friendRootID: counterpartHash,
+                                               attestation: encoded,
+                                               reverseAttestation: nil,
+                                               forgedAt: .now,
+                                               autoReciprocated: nil,
+                                               introduction: proof))
+        _ = ensureChat(with: counterpartRoot, myHash: myHash)
+        introductions.markCompleted(entry.commitmentHex)
+        Introduction.log.info("materialize: LINKED with \(counterpartHash, privacy: .public) via \(statement.introducerHash, privacy: .public)")
+    }
+
+    /// One nudge per launch for an acceptance the introducer may never have
+    /// received (their phone was off, ours dropped the send). Bounded on
+    /// purpose: a permanent retry queue for a message that is probably already
+    /// delivered would be chatter nobody can see and nobody asked for.
+    private func resendAcceptanceOnce(_ entry: IntroductionStore.Entry,
+                                      myRoot: RootIdentity,
+                                      friendStore: FriendStore) async {
+        let myHash = myRoot.credentialIDHash
+        guard let acceptance = entry.myAcceptance(myHash),
+              // Give the first send a chance to land before nudging.
+              Date.now.timeIntervalSince(acceptance.acceptedAt) > 600,
+              !resentAcceptances.contains(entry.commitmentHex),
+              let introducer = friendStore.friends.first(where: { $0.id == entry.statement.introducerHash })
+        else { return }
+        resentAcceptances.insert(entry.commitmentHex)
+        let chat = ensureChat(with: introducer.identity, myHash: myHash)
+        await sendPayload(MessagePayload(text: "", ttl: nil, kind: Introduction.acceptKind,
+                                         introduceAccept: acceptance),
+                          in: chat, from: myRoot)
+    }
+
+    /// Re-run the checks on any offer that couldn't be checked when it landed
+    /// (directory unreachable). Updates the card in place, so "checking…"
+    /// resolves on its own instead of needing the message to arrive again —
+    /// which it never will, because the ratchet has already eaten the key.
+    private func retryUncheckedOffers(myRoot: RootIdentity) async {
+        var changed = false
+        for (chatID, messages) in messagesByChat {
+            guard let chat = chats.first(where: { $0.id == chatID }) else { continue }
+            for message in messages {
+                guard let offer = message.introduction, offer.unchecked != nil else { continue }
+                let rechecked = await checkedOffer(offer.statement, sender: message.senderHash,
+                                                   chat: chat, myRoot: myRoot)
+                guard rechecked.unchecked == nil else { continue }
+                // Re-find by id: this loop awaits, and a concurrent refresh
+                // may have appended to the same chat in the meantime.
+                if let index = messagesByChat[chatID]?.firstIndex(where: { $0.id == message.id }) {
+                    messagesByChat[chatID]?[index].introduction = rechecked
+                    changed = true
+                }
+            }
+        }
+        if changed { persist() }
+    }
+
+    /// Every cryptographic check on an inbound offer, plus the directory
+    /// lookups they need. Records the statement locally when it passes, so
+    /// the flow can be resumed from state rather than from the transcript.
+    private func checkedOffer(_ statement: IntroductionStatement,
+                              sender: String,
+                              chat: Chat,
+                              myRoot: RootIdentity) async -> IntroductionOffer {
+        let introducer = (try? await directoryEntry(for: statement.introducerHash)) ?? nil
+        var counterpart: (RootIdentity, [DeviceEndorsement])? = nil
+        if let hash = statement.counterpartHash(for: myRoot.credentialIDHash) {
+            counterpart = (try? await directoryEntry(for: hash)) ?? nil
+        }
+        let offer = Introduction.checkOffer(statement,
+                                            senderHash: sender,
+                                            isOneToOneChat: chat.memberHashes.count == 2,
+                                            myHash: myRoot.credentialIDHash,
+                                            myPublicKey: myRoot.publicKey,
+                                            introducer: introducer,
+                                            counterpart: counterpart,
+                                            now: .now,
+                                            identity: identity)
+        // One check the pure function can't make: blocking is local, and
+        // completing an introduction to someone this phone has blocked would
+        // quietly re-add them to the friend list while their messages stayed
+        // hidden — a friendship the owner can't see and didn't ask for.
+        if offer.isActionable,
+           let counterpartHash = statement.counterpartHash(for: myRoot.credentialIDHash),
+           blockedHashes.contains(counterpartHash) {
+            return .refused(statement, "You've blocked the person in this introduction. Unblock them first, then ask to be introduced again.")
+        }
+        if offer.isActionable {
+            introductions.record(statement)
+        } else if let refusal = offer.refusal {
+            Introduction.log.error("offer: REFUSED \(statement.shortID, privacy: .public) from \(sender, privacy: .public) — \(refusal, privacy: .public)")
+        }
+        return offer
+    }
+
+    /// Demo mode (FR-22/23) has no keys and never touches a verification path
+    /// — fixtures are trusted by construction. Accepting a demo introduction
+    /// therefore skips the protocol entirely and produces the OUTCOME, so the
+    /// whole three-party flow can be walked through on one simulator with
+    /// `-SealDemoMode`. Nothing here runs outside demo mode.
+    private func demoAccept(_ statement: IntroductionStatement,
+                            from myRoot: RootIdentity,
+                            friendStore: FriendStore) -> String? {
+        let myHash = myRoot.credentialIDHash
+        guard let counterpartHash = statement.counterpartHash(for: myHash) else {
+            return "This introduction is addressed to someone else."
+        }
+        let stamp = Int64(Date.now.timeIntervalSince1970)
+        func acceptance(_ hash: String) -> IntroductionAcceptance {
+            IntroductionAcceptance(introductionCommitment: statement.commitment,
+                                   accepterHash: hash,
+                                   accepterDevicePublicKey: Data(),
+                                   acceptedAtEpoch: stamp,
+                                   signature: Data())
+        }
+        introductions.recordAcceptance(acceptance(myHash), for: statement)
+        introductions.recordAcceptance(acceptance(counterpartHash), for: statement)
+        guard let counterpart = DemoFixtures.person(hash: counterpartHash) else { return nil }
+        let proof = IntroductionProof(
+            statement: statement,
+            acceptances: [acceptance(statement.partyAHash), acceptance(statement.partyBHash)])
+        if !friendStore.isFriend(counterpartHash), let encoded = try? JSONEncoder().encode(proof) {
+            friendStore.add(identity: counterpart,
+                            friendship: Friendship(friendRootID: counterpartHash,
+                                                   attestation: encoded,
+                                                   reverseAttestation: nil,
+                                                   forgedAt: .now,
+                                                   autoReciprocated: nil,
+                                                   introduction: proof))
+            _ = ensureChat(with: counterpart, myHash: myHash)
+        }
+        introductions.markCompleted(statement.commitmentHex)
+        return nil
     }
 
     // MARK: - Receive
@@ -960,6 +1534,20 @@ final class ChatEngine {
 
                     let payload = (try? JSONDecoder().decode(MessagePayload.self, from: plaintext))
                         ?? MessagePayload(text: String(decoding: plaintext, as: UTF8.self), ttl: nil)
+
+                    // An introduction offer is a BUBBLE kind — it renders a
+                    // card and fires a push, like a sealed card — so it falls
+                    // through to `default:` with its verdict attached.
+                    // Everything cryptographic about it is settled HERE,
+                    // before the bubble exists, because the card must be a
+                    // pure function of stored state: `body` cannot fetch a
+                    // directory, and a message is only decryptable once.
+                    var introductionOffer: IntroductionOffer? = nil
+                    if payload.kind == Introduction.offerKind, let statement = payload.introduce {
+                        introductionOffer = await checkedOffer(statement, sender: sender,
+                                                               chat: liveChat, myRoot: myRoot)
+                    }
+
                     switch payload.kind ?? "" {
                     case "reaction":
                         // Mutates an existing bubble; never appended as its own.
@@ -969,6 +1557,51 @@ final class ChatEngine {
                         applyRead(chatID: chat.id, readerHash: sender, upTo: payload.readUpTo)
                     case "typing":
                         markTyping(chatID: chat.id, memberHash: sender)
+                    case Introduction.acceptKind:
+                        // Someone answered an introduction WE made. Verified
+                        // against the accepter's published devices before it
+                        // is recorded — the sender of a message and the
+                        // signer of the acceptance inside it must be the same
+                        // person, or an introducer could be told a party
+                        // agreed when they never did.
+                        guard let acceptance = payload.introduceAccept,
+                              acceptance.accepterHash == sender,
+                              let record = introductions.entry(acceptance.introductionCommitment.hexString),
+                              record.isIntroducer(myRoot.credentialIDHash),
+                              record.statement.involves(sender),
+                              Introduction.verifyAcceptance(acceptance, for: record.statement,
+                                                            accepter: entry, identity: identity)
+                        else {
+                            Introduction.log.error("accept: dropped an acceptance that didn't check out (from \(sender, privacy: .public))")
+                            break
+                        }
+                        introductions.recordAcceptance(acceptance, for: record.statement)
+                        Introduction.log.info("accept: \(sender, privacy: .public) accepted \(record.shortID, privacy: .public)")
+                    case Introduction.confirmKind:
+                        // Both parties said yes and the introducer is handing
+                        // us the other side's signed acceptance. The whole
+                        // bundle is re-checked: the statement as if it had
+                        // just arrived, then each acceptance against the
+                        // accepter's own published devices. `materialize`
+                        // checks all of it AGAIN against a forced directory
+                        // refresh before a friend record is written — the
+                        // introducer assembled this bundle, and they are the
+                        // party this feature trusts least.
+                        guard let confirmation = payload.introduceConfirm,
+                              confirmation.statement.introducerHash == sender else { break }
+                        let checked = await checkedOffer(confirmation.statement, sender: sender,
+                                                         chat: liveChat, myRoot: myRoot)
+                        guard checked.isActionable else { break }
+                        for acceptance in confirmation.acceptances {
+                            guard confirmation.statement.involves(acceptance.accepterHash) else { continue }
+                            let accepter = (try? await directoryEntry(for: acceptance.accepterHash)) ?? nil
+                            guard Introduction.verifyAcceptance(acceptance, for: confirmation.statement,
+                                                                accepter: accepter, identity: identity) else {
+                                Introduction.log.error("confirm: dropped an acceptance that didn't verify (claimed \(acceptance.accepterHash, privacy: .public))")
+                                continue
+                            }
+                            introductions.recordAcceptance(acceptance, for: confirmation.statement)
+                        }
                     default:
                         // Idempotent display: a message can be processed more
                         // than once (overlapping refreshes, a re-fetch after a
@@ -976,6 +1609,17 @@ final class ChatEngine {
                         // it's already on screen, don't append a duplicate.
                         let wireID = "\(sender).e\(epoch).\(idx)"
                         if messagesByChat[chat.id]?.contains(where: { $0.wireID == wireID }) == true {
+                            break
+                        }
+                        // One card per introduction, whatever the transport
+                        // does. The introducer can re-send the identical
+                        // signed statement (their card offers "Send again"),
+                        // and that must reappear if the first card burned on a
+                        // TTL — but never stack two live cards for one offer.
+                        if let introductionOffer,
+                           messagesByChat[chat.id]?.contains(where: {
+                               $0.introduction?.statement.commitmentHex == introductionOffer.statement.commitmentHex
+                           }) == true {
                             break
                         }
                         // A real message from them ends any "typing" state.
@@ -1007,7 +1651,8 @@ final class ChatEngine {
                                     groupID: groupID, epoch: epoch, chainIndex: idx,
                                     prevMessageHash: prevHash,
                                     cardDigest: card.digest)
-                            }))
+                            },
+                            introduction: introductionOffer))
                         messagesByChat[chat.id] = local
                     }
                     chain.lastMessageHash = Data(SHA256.hash(data: wire.ciphertext))

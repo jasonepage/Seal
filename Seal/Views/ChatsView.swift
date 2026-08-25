@@ -112,7 +112,8 @@ struct ChatsView: View {
         let tier = tierFor(chat)
         let last = chatEngine.messages(for: chat).last { $0.kind != "screenshot" }
         return HStack(spacing: 12) {
-            IdentityRing(displayName: chat.name, tier: tier, size: parentMode ? 56 : 44)
+            IdentityRing(displayName: chat.name, tier: tier, size: parentMode ? 56 : 44,
+                         linked: isLinked(chat))
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(chat.name)
@@ -153,6 +154,17 @@ struct ChatsView: View {
             }
         }
         .padding(.vertical, 4)
+    }
+
+    /// A 1:1 chat with a LINKED friend gets the silver link ring here too
+    /// (docs/INTRODUCTIONS.md). Groups never do — a colony's ring is a chat
+    /// avatar, not a claim about one person.
+    private func isLinked(_ chat: ChatEngine.Chat) -> Bool {
+        guard chat.memberHashes.count == 2,
+              let other = chat.memberHashes.first(where: { $0 != myRoot.credentialIDHash }),
+              let friend = friendStore.friends.first(where: { $0.id == other })
+        else { return false }
+        return !friend.friendship.isInPerson
     }
 
     private func tierFor(_ chat: ChatEngine.Chat) -> IdentityTier {

@@ -37,7 +37,17 @@ struct FriendsView: View {
     @State private var showModerationAlert = false
     @State private var moderationTitle = ""
     @State private var moderationMessage = ""
+    /// Set when "Introduce … to" is tapped on a friend's row
+    /// (docs/INTRODUCTIONS.md). Only ever set for an IN-PERSON friend — the
+    /// menu item isn't drawn for a linked one, because introduction doesn't
+    /// chain.
+    @State private var introducing: FriendStore.StoredFriend?
     @Environment(\.openURL) private var openURL
+    /// Circle isn't reachable in Parent Mode (HomeView renders the chat list
+    /// alone), so this is belt and braces — but the rule "accepting an
+    /// introduction is simplified-mode work, MAKING one is not" belongs on the
+    /// control, not only in the shell that happens to hide it today.
+    @Environment(\.parentMode) private var parentMode
 
     var body: some View {
         NavigationStack {
@@ -60,6 +70,10 @@ struct FriendsView: View {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(moderationMessage)
+            }
+            .sheet(item: $introducing) { friend in
+                IntroduceSheet(subject: friend, myRoot: myRoot,
+                               engine: chatEngine, friendStore: friendStore)
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -402,6 +416,10 @@ struct FriendsView: View {
 
     private func friendRow(_ friend: FriendStore.StoredFriend) -> some View {
         let blocked = chatEngine.isBlocked(friend.identity.credentialIDHash)
+        // Introduced, not forged: silver link glyph, never the brass seal
+        // check. A linked friend is a real friend — they just aren't a
+        // friend this phone watched somebody prove (docs/INTRODUCTIONS.md).
+        let linked = !friend.friendship.isInPerson
         return NavigationLink {
             ChatView(
                 chat: chatEngine.ensureChat(with: friend.identity, myHash: myRoot.credentialIDHash),
@@ -410,9 +428,11 @@ struct FriendsView: View {
                 friendStore: friendStore)
         } label: {
             HStack {
-                Image(systemName: blocked ? "hand.raised.fill" : "checkmark.seal.fill")
+                Image(systemName: blocked ? "hand.raised.fill"
+                                          : (linked ? "link" : "checkmark.seal.fill"))
                     .foregroundStyle(blocked ? .orange.opacity(0.8)
-                                     : (friend.identity.tier == .verified ? SealTheme.brass : SealTheme.silver))
+                                     : (linked ? SealTheme.silver
+                                        : (friend.identity.tier == .verified ? SealTheme.brass : SealTheme.silver)))
                 Text(friend.identity.displayName)
                     .foregroundStyle(.white.opacity(blocked ? 0.4 : 1.0))
                 Spacer()
@@ -420,6 +440,10 @@ struct FriendsView: View {
                     Text("Blocked")
                         .font(.caption2)
                         .foregroundStyle(.orange.opacity(0.8))
+                } else if linked {
+                    Text("Linked")
+                        .font(.caption2)
+                        .foregroundStyle(SealTheme.silver.opacity(0.9))
                 } else {
                     Text(friend.friendship.forgedAt, style: .date)
                         .font(.caption2)
@@ -429,6 +453,18 @@ struct FriendsView: View {
         }
         .listRowBackground(Color.white.opacity(0.05))
         .contextMenu {
+            // Only an in-person friend can be introduced, and only to another
+            // in-person friend. The absence of this item is the UI half of
+            // "introduction does not chain"; the enforcing halves are in
+            // ChatEngine.sendIntroduction and on both recipients' phones.
+            if !parentMode, !blocked, !linked {
+                Button {
+                    introducing = friend
+                } label: {
+                    Label("Introduce \(friend.identity.displayName) to…", systemImage: "link")
+                }
+                Divider()
+            }
             if blocked {
                 Button {
                     chatEngine.unblock(friend.identity.credentialIDHash)

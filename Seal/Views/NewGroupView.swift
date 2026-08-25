@@ -38,7 +38,8 @@ struct NewGroupView: View {
                                 } label: {
                                     HStack {
                                         IdentityRing(displayName: friend.identity.displayName,
-                                                     tier: friend.identity.tier, size: 36)
+                                                     tier: friend.identity.tier, size: 36,
+                                                     linked: !friend.friendship.isInPerson)
                                         Text(friend.identity.displayName)
                                             .foregroundStyle(.white)
                                         Spacer()

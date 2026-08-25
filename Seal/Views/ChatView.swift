@@ -193,6 +193,13 @@ struct ChatView: View {
             while !Task.isCancelled {
                 await engine.refresh(chat, myRoot: myRoot)
                 await engine.markRead(in: chat, from: myRoot)   // ack what I've now seen
+                // An acceptance or a confirmation may have just landed. Doing
+                // this here as well as in refreshAll is what makes the last
+                // step of an introduction complete while both people are
+                // looking at the chat, instead of on the next cold launch.
+                if let friendStore {
+                    await engine.ensureIntroductionsProgressed(myRoot: myRoot, friendStore: friendStore)
+                }
                 try? await Task.sleep(for: .seconds(4))
             }
         }
@@ -265,6 +272,12 @@ struct ChatView: View {
             .foregroundStyle(.orange.opacity(0.75))
             .frame(maxWidth: .infinity)
             .padding(.vertical, 2)
+        } else if let offer = message.introduction {
+            // An introduction is a bubble kind but not a bubble shape — like a
+            // sealed card it spans the content width, because it asks for a
+            // decision and must not be skimmed past as ordinary chat.
+            IntroductionBubble(message: message, offer: offer, chat: chat, myRoot: myRoot,
+                               engine: engine, friendStore: friendStore)
         } else if let card = message.card {
             // A card is a bubble kind, but not a bubble shape — it spans the
             // content width so it can never be skimmed past as ordinary chat.
@@ -275,6 +288,7 @@ struct ChatView: View {
                 SealedCardBubble(message: message, card: card, mine: mine,
                                  senderName: cardSenderName(message, mine: mine),
                                  senderIdentity: identity(for: message.senderHash),
+                                 senderLinked: isLinkedFriend(message.senderHash),
                                  engine: engine)
                     .contextMenu { cardMenu(message, mine: mine) }
                 reactionChips(message)
@@ -315,6 +329,13 @@ struct ChatView: View {
                 Label("Block \(senderName(message))", systemImage: "hand.raised")
             }
         }
+    }
+
+    /// True when this sender is an INTRODUCED friend, so the card's ring and
+    /// fingerprint phrase drop brass (docs/INTRODUCTIONS.md).
+    private func isLinkedFriend(_ hash: String) -> Bool {
+        guard let friend = friendStore?.friends.first(where: { $0.id == hash }) else { return false }
+        return !friend.friendship.isInPerson
     }
 
     /// Full identity for a member hash — the card detail sheet needs the tier
@@ -560,6 +581,10 @@ struct VerificationSheet: View {
     let friendStore: FriendStore?
     var engine: ChatEngine? = nil
     @State private var removing: RootIdentity?
+    /// Set from the "Introduce … to" row (docs/INTRODUCTIONS.md). 1:1 chats
+    /// only, in-person friends only, and never in Parent Mode — accepting an
+    /// introduction is simplified-mode work, making one is not.
+    @State private var introducing: FriendStore.StoredFriend?
     /// Verified perks per member hash — seeded from the FriendStore cache,
     /// refreshed from the directory while the drawer is open.
     @State private var perksByMember: [String: [PerkAttestation]] = [:]
@@ -604,7 +629,16 @@ struct VerificationSheet: View {
                             HStack {
                                 memberRow(name: member.displayName, tier: member.tier, publicKey: member.publicKey,
                                           perks: perksByMember[member.credentialIDHash] ?? [],
-                                          plainLine: parentMode ? "This is really \(member.displayName)." : nil)
+                                          // A linked friend NEVER gets the
+                                          // "This is really <name>." line: this
+                                          // phone has no idea whether it is,
+                                          // and saying so would be the exact
+                                          // lie the tier exists to prevent.
+                                          plainLine: parentMode && !isLinked(member.credentialIDHash)
+                                              ? "This is really \(member.displayName)." : nil,
+                                          linked: isLinked(member.credentialIDHash),
+                                          provenance: provenanceLine(member.credentialIDHash),
+                                          vouchLine: vouchLine(member))
                                 if iAmAdmin {
                                     Button { removing = member } label: {
                                         Image(systemName: "minus.circle")
@@ -629,6 +663,34 @@ struct VerificationSheet: View {
                     .padding(16)
                     .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
                     .padding(.horizontal, 24)
+
+                    // Introduce this person to someone else you've met in
+                    // person. 1:1 only (an introduction names exactly two
+                    // people), in-person only (it doesn't chain), and not in
+                    // Parent Mode (UI.md §Parent Mode: accepting yes,
+                    // initiating no — that's the helper's job).
+                    if !parentMode, let candidate = introduceCandidate {
+                        Button {
+                            introducing = candidate
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "link")
+                                    .foregroundStyle(SealTheme.silver)
+                                Text("Introduce \(candidate.identity.displayName) to…")
+                                    .font(.system(.callout, design: .rounded, weight: .medium))
+                                    .foregroundStyle(.white.opacity(0.9))
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.white.opacity(0.3))
+                            }
+                            .padding(14)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
+                        .padding(.horizontal, 24)
+                    }
 
                     if parentMode {
                         parentDetails
@@ -666,6 +728,12 @@ struct VerificationSheet: View {
             .scrollBounceBehavior(.basedOnSize)
         }
         .preferredColorScheme(.dark)
+        .sheet(item: $introducing) { friend in
+            if let friendStore, let engine {
+                IntroduceSheet(subject: friend, myRoot: myRoot,
+                               engine: engine, friendStore: friendStore)
+            }
+        }
         .task { await refreshPerks() }
         .confirmationDialog(
             "Remove \(removing?.displayName ?? "")? Group keys rotate — they can't read anything sent after this.",
@@ -684,6 +752,50 @@ struct VerificationSheet: View {
         }
     }
 
+    /// The one friend in a 1:1 chat this device may introduce to somebody
+    /// else. nil for groups, for non-friends, and for linked friends.
+    private var introduceCandidate: FriendStore.StoredFriend? {
+        guard chat.memberHashes.count == 2,
+              // The sheet needs both of these; drawing the row without them
+              // would present an empty sheet the user can only swipe away.
+              friendStore != nil, engine != nil,
+              let other = chat.memberHashes.first(where: { $0 != myRoot.credentialIDHash }),
+              let friend = friendStore?.friends.first(where: { $0.id == other }),
+              friend.friendship.isInPerson
+        else { return nil }
+        return friend
+    }
+
+    private func friendship(_ hash: String) -> Friendship? {
+        friendStore?.friends.first(where: { $0.id == hash })?.friendship
+    }
+
+    private func isLinked(_ hash: String) -> Bool {
+        guard let friendship = friendship(hash) else { return false }
+        return !friendship.isInPerson
+    }
+
+    private func introducerName(_ hash: String) -> String {
+        friendStore?.friends.first(where: { $0.id == hash })?.identity.displayName
+            ?? engine?.cachedIdentity(for: hash)?.displayName
+            ?? "a mutual friend"
+    }
+
+    /// "Introduced by Mom · 25 Aug 2026" — the provenance line the drawer owes
+    /// anyone looking at a linked friend.
+    private func provenanceLine(_ hash: String) -> String? {
+        guard let proof = friendship(hash)?.introduction else { return nil }
+        return "Introduced by \(introducerName(proof.introducerHash)) · "
+            + proof.introducedAt.formatted(date: .abbreviated, time: .omitted)
+    }
+
+    /// The honest claim, in the words the design specifies. Never "Verified".
+    private func vouchLine(_ member: RootIdentity) -> String? {
+        guard let proof = friendship(member.credentialIDHash)?.introduction else { return nil }
+        let by = introducerName(proof.introducerHash)
+        return "You haven't met \(member.displayName) in person through Seal. \(by) has, and vouched for this connection."
+    }
+
     private var otherMembers: [RootIdentity] {
         chat.memberHashes
             .filter { $0 != myRoot.credentialIDHash }
@@ -692,13 +804,30 @@ struct VerificationSheet: View {
 
     private func memberRow(name: String, tier: IdentityTier, publicKey: Data,
                            perks: [PerkAttestation] = [],
-                           plainLine: String? = nil) -> some View {
+                           plainLine: String? = nil,
+                           linked: Bool = false,
+                           provenance: String? = nil,
+                           vouchLine: String? = nil) -> some View {
         HStack(spacing: 12) {
-            IdentityRing(displayName: name, tier: tier, size: parentMode ? 46 : 38)
+            IdentityRing(displayName: name, tier: tier, size: parentMode ? 46 : 38, linked: linked)
             VStack(alignment: .leading, spacing: 2) {
                 Text(name)
                     .font(.system(.callout, design: .rounded, weight: .medium))
                     .foregroundStyle(.white)
+                // Provenance first, because it changes what every line under
+                // it means (docs/INTRODUCTIONS.md).
+                if let provenance {
+                    Text(provenance)
+                        .font(.caption)
+                        .foregroundStyle(SealTheme.silver)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let vouchLine {
+                    Text(vouchLine)
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.6))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 if let plainLine {
                     // The same claim in words instead of key material. Not
                     // brass: brass stays attached to the actual key facts, and
@@ -707,10 +836,22 @@ struct VerificationSheet: View {
                         .font(.callout)
                         .foregroundStyle(.white.opacity(0.75))
                         .fixedSize(horizontal: false, vertical: true)
-                } else {
+                } else if !parentMode {
+                    // Brass is for people whose key was tapped in front of
+                    // somebody. A linked friend's phrase is the same fact
+                    // rendered in silver — still worth saying out loud, still
+                    // not a claim that you have met.
+                    //
+                    // `!parentMode` because a linked friend gets no plainLine
+                    // (this phone cannot say "this is really them"), and
+                    // without this guard that nil would drop the raw phrase
+                    // into the top-level row — the exact thing UI.md §6.5 moves
+                    // behind Details. The provenance and vouch lines above are
+                    // the plain words in that mode; the phrase is one
+                    // disclosure away, as it is for everyone else.
                     Text(FingerprintPhrase.phrase(for: publicKey))
                         .font(.callout)
-                        .foregroundStyle(SealTheme.brass)
+                        .foregroundStyle(linked ? SealTheme.silver : SealTheme.brass)
                 }
                 // Founder EDITION line (never a tier change): only rendered
                 // after the full grant+claim chain verified (PerkAuthority).
@@ -740,7 +881,8 @@ struct VerificationSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
                 phraseRow("\(myRoot.displayName) (you)", myRoot.publicKey)
                 ForEach(otherMembers, id: \.credentialIDHash) { member in
-                    phraseRow(member.displayName, member.publicKey)
+                    phraseRow(member.displayName, member.publicKey,
+                              linked: isLinked(member.credentialIDHash))
                 }
                 Text("Say these phrases out loud together — matching phrases mean matching keys.")
                     .font(.caption2)
@@ -761,14 +903,18 @@ struct VerificationSheet: View {
         .foregroundStyle(.white.opacity(0.85))
     }
 
-    private func phraseRow(_ name: String, _ publicKey: Data) -> some View {
+    private func phraseRow(_ name: String, _ publicKey: Data, linked: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(name)
                 .font(.caption)
                 .foregroundStyle(.white.opacity(0.55))
+            // Same rule as the row above, and it has to be repeated here
+            // because Parent Mode's Details is the OTHER place a phrase
+            // renders: brass never describes a friendship nobody's device
+            // watched being forged.
             Text(FingerprintPhrase.phrase(for: publicKey))
                 .font(.callout)
-                .foregroundStyle(SealTheme.brass)
+                .foregroundStyle(linked ? SealTheme.silver : SealTheme.brass)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

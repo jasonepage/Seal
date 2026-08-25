@@ -77,6 +77,34 @@ struct Friendship: Codable, Identifiable, Hashable {
     /// default so friendships already in the keychain still decode, and so the
     /// memberwise initialiser stays source-compatible with existing callers.
     var autoReciprocated: Bool? = nil
+    /// The signed remote vouch that created this friendship, if one did
+    /// (Seal/Introductions/Introduction.swift, docs/INTRODUCTIONS.md).
+    ///
+    /// **Non-nil is what MAKES a friendship LINKED.** There is deliberately no
+    /// separate tier field: a tier and its evidence stored as two values can
+    /// drift into disagreeing, and the safe direction — "no proof, no linked
+    /// tier" — is the only one this shape can express. Every friendship
+    /// already in the keychain decodes with nil, which is correct: they all
+    /// came from a ceremony.
+    ///
+    /// A linked friendship is NEVER brass and never reads "Verified". It says
+    /// exactly what it is: someone this phone met in person vouched for the
+    /// connection. See `isInPerson`.
+    var introduction: IntroductionProof? = nil
+
+    /// True when this edge came from a physical ceremony rather than a remote
+    /// vouch — the gate on introducing, on brass styling, and on ForgeRank
+    /// weight (docs/TRUST.md §5.1).
+    ///
+    /// `autoReciprocated` edges COUNT as in-person. They are weaker as proof
+    /// TO THIS DEVICE (the peer's phone witnessed the tap; ours holds their
+    /// signed word for it — ForgeHandshake.swift), but they are still the
+    /// record of a meeting that physically happened, not a remote vouch.
+    /// Excluding them would forbid introducing to exactly the person this
+    /// feature exists for: whoever taps THEIR key on somebody else's phone
+    /// ends up holding nothing but auto-reciprocal edges, and Mom introducing
+    /// her son to her sister is the entire use case.
+    var isInPerson: Bool { introduction == nil }
 }
 
 /// Signed, append-only membership log entry (SDS §4).

@@ -86,6 +86,13 @@ enum DemoFixtures {
     private struct DemoFriend {
         let identity: RootIdentity
         let forgedDaysAgo: Int
+        /// Set for a LINKED friend (docs/INTRODUCTIONS.md): the display name
+        /// of the mutual friend who vouched. The fixture then carries a real
+        /// `IntroductionProof`, so the silver link ring, the provenance line
+        /// and the "you haven't met them" copy all render from the same field
+        /// a real linked friendship uses — nothing about the tier is faked at
+        /// the view layer.
+        var introducedBy: String? = nil
     }
 
     private static let friends: [DemoFriend] = [
@@ -94,10 +101,57 @@ enum DemoFixtures {
         DemoFriend(identity: identity("Alex", tier: .passkey), forgedDaysAgo: 69),
         DemoFriend(identity: identity("Mom", tier: .passkey), forgedDaysAgo: 34),
         DemoFriend(identity: identity("Dad", tier: .passkey), forgedDaysAgo: 34),
+        // The introduction story, already finished: Mom is brass with both of
+        // us, and vouched for Linda nine days ago.
+        DemoFriend(identity: identity("Aunt Linda", tier: .passkey), forgedDaysAgo: 9,
+                   introducedBy: "Mom"),
+    ]
+
+    /// People who exist in the directory but are NOT friends — the other end
+    /// of the introduction that is still pending in the Mom chat.
+    private static let strangers: [RootIdentity] = [
+        identity("Uncle Ray", tier: .passkey)
     ]
 
     private static func friendIdentity(_ name: String) -> RootIdentity {
         friends.first { $0.identity.displayName == name }!.identity
+    }
+
+    /// Any demo person by root hash — friends, strangers, or the demo user.
+    /// Used by `ChatEngine.demoAccept` to complete an introduction locally.
+    static func person(hash: String) -> RootIdentity? {
+        if hash == me.credentialIDHash { return me }
+        return friends.first { $0.identity.credentialIDHash == hash }?.identity
+            ?? strangers.first { $0.credentialIDHash == hash }
+    }
+
+    /// A synthetic, UNSIGNED introduction statement. Nothing in demo mode
+    /// verifies anything (fixtures are trusted by construction, FR-22), so
+    /// the signature is a label rather than a signature — exactly like the
+    /// synthetic friendship attestations beside it.
+    private static func demoStatement(introducer: RootIdentity,
+                                      _ first: RootIdentity,
+                                      _ second: RootIdentity,
+                                      days: Int) -> IntroductionStatement {
+        let pair = Introduction.canonical(
+            (hash: first.credentialIDHash, publicKey: first.publicKey),
+            (hash: second.credentialIDHash, publicKey: second.publicKey))
+        return IntroductionStatement(
+            introducerHash: introducer.credentialIDHash,
+            introducerDevicePublicKey: publicKey("device.\(introducer.displayName)"),
+            partyAHash: pair.a.hash, partyAPublicKey: pair.a.publicKey,
+            partyBHash: pair.b.hash, partyBPublicKey: pair.b.publicKey,
+            createdAtEpoch: Int64(daysAgo(days).timeIntervalSince1970),
+            signature: Data("seal.demo.introduction".utf8))
+    }
+
+    private static func demoAcceptance(_ hash: String, statement: IntroductionStatement,
+                                       days: Int) -> IntroductionAcceptance {
+        IntroductionAcceptance(introductionCommitment: statement.commitment,
+                               accepterHash: hash,
+                               accepterDevicePublicKey: publicKey("device.accept.\(hash)"),
+                               acceptedAtEpoch: Int64(daysAgo(days).timeIntervalSince1970),
+                               signature: Data("seal.demo.acceptance".utf8))
     }
 
     // MARK: - Install / uninstall
@@ -136,13 +190,31 @@ enum DemoFixtures {
         ParentMode.wipe(ownerHash: owner)
 
         // Friends + forge log (FR-5/FR-6 shapes, synthetic attestations).
-        let stored = friends.map { f in
-            FriendStore.StoredFriend(
+        let stored = friends.map { f -> FriendStore.StoredFriend in
+            guard let introducerName = f.introducedBy,
+                  let introducer = friends.first(where: { $0.identity.displayName == introducerName })?.identity
+            else {
+                return FriendStore.StoredFriend(
+                    identity: f.identity,
+                    friendship: Friendship(friendRootID: f.identity.credentialIDHash,
+                                           attestation: Data("seal.demo.attestation".utf8),
+                                           reverseAttestation: Data("seal.demo.attestation".utf8),
+                                           forgedAt: daysAgo(f.forgedDaysAgo)))
+            }
+            let statement = demoStatement(introducer: introducer, me, f.identity,
+                                          days: f.forgedDaysAgo)
+            let proof = IntroductionProof(
+                statement: statement,
+                acceptances: [demoAcceptance(statement.partyAHash, statement: statement, days: f.forgedDaysAgo),
+                              demoAcceptance(statement.partyBHash, statement: statement, days: f.forgedDaysAgo)])
+            return FriendStore.StoredFriend(
                 identity: f.identity,
                 friendship: Friendship(friendRootID: f.identity.credentialIDHash,
-                                       attestation: Data("seal.demo.attestation".utf8),
-                                       reverseAttestation: Data("seal.demo.attestation".utf8),
-                                       forgedAt: daysAgo(f.forgedDaysAgo)))
+                                       attestation: (try? JSONEncoder().encode(proof)) ?? Data(),
+                                       reverseAttestation: nil,
+                                       forgedAt: daysAgo(f.forgedDaysAgo),
+                                       autoReciprocated: nil,
+                                       introduction: proof))
         }
         if let data = try? JSONEncoder().encode(stored) {
             KeychainStore.save(data, for: "seal.friends.\(owner)")   // FriendStore format
@@ -192,6 +264,10 @@ enum DemoFixtures {
         var reactions: [String: String]? = nil
         var replyTo: Int? = nil
         var card: SealedCard? = nil
+        /// An inbound introduction card (docs/INTRODUCTIONS.md), already
+        /// checked — which in demo means "trusted by construction", the same
+        /// short-circuit every other fixture takes.
+        var introduction: IntroductionOffer? = nil
     }
 
     /// The seeded Sealed Card (docs/CARDS.md), so App Review and the App Store
@@ -237,6 +313,14 @@ enum DemoFixtures {
         let alex = friendIdentity("Alex").credentialIDHash
         let mom = friendIdentity("Mom").credentialIDHash
         let dad = friendIdentity("Dad").credentialIDHash
+        let linda = friendIdentity("Aunt Linda").credentialIDHash
+        let ray = strangers[0]
+        // The third party of the walkthrough: Mom is brass with Nathan and
+        // brass with Ray, and has just introduced them. This is the card the
+        // Accept / Not now flow runs on with `-SealDemoMode`.
+        let rayIntroduction = IntroductionOffer.verified(
+            demoStatement(introducer: friendIdentity("Mom"), me, ray, days: 0),
+            counterpart: ray)
 
         var chats: [ChatEngine.Chat] = []
         var messages: [UUID: [ChatEngine.ChatMessage]] = [:]
@@ -258,11 +342,14 @@ enum DemoFixtures {
                     delivered: true,
                     expiresAt: chat.ttl.map { Date.now.addingTimeInterval($0) },
                     mediaRef: nil, mediaKey: nil,
-                    kind: line.card == nil ? nil : "card",
+                    kind: line.card != nil ? "card"
+                        : (line.introduction != nil ? Introduction.offerKind : nil),
                     wireID: "demo.\(cid).\(i)",
                     reactions: line.reactions,
                     replyTo: replyTo, replyPreview: replyPreview, replySenderHash: replySender,
-                    card: line.card)
+                    card: line.card,
+                    proof: nil,
+                    introduction: line.introduction)
             }
             // Everyone else has caught up — drives the "Read" / "Read by N" labels.
             readMarks[chat.id] = Dictionary(uniqueKeysWithValues:
@@ -301,6 +388,26 @@ enum DemoFixtures {
              Line(sender: owner, text: "dad what's the account for the roof deposit?", minutesAgo: 34),
              Line(sender: dad, text: demoPaymentCard.fallbackText, minutesAgo: 26,
                   card: demoPaymentCard)])
+
+        // 1:1 with Mom — the introducer. Carries the pending introduction.
+        add(ChatEngine.Chat(id: ChatEngine.pairChatID(owner, mom),
+                            name: "Mom",
+                            memberHashes: [owner, mom], ttl: nil),
+            [Line(sender: mom, text: "Your uncle Ray finally got a phone that works",
+                  minutesAgo: 64),
+             Line(sender: owner, text: "no way", minutesAgo: 61),
+             Line(sender: mom,
+                  text: "Mom would like to introduce you to Uncle Ray. Update Seal to accept.",
+                  minutesAgo: 58, introduction: rayIntroduction)])
+
+        // 1:1 with the friendship an introduction already produced.
+        add(ChatEngine.Chat(id: ChatEngine.pairChatID(owner, linda),
+                            name: "Aunt Linda",
+                            memberHashes: [owner, linda], ttl: nil),
+            [Line(sender: linda, text: "Your mother says you're the one to ask about the photos",
+                  minutesAgo: 210),
+             Line(sender: owner, text: "sending them tonight", minutesAgo: 205,
+                  reactions: [linda: "❤️"])])
 
         add(ChatEngine.Chat(id: ChatEngine.pairChatID(owner, alex),
                             name: "Alex",

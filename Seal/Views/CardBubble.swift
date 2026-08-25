@@ -27,6 +27,12 @@ struct SealedCardBubble: View {
     let mine: Bool
     let senderName: String
     let senderIdentity: RootIdentity?
+    /// The sender is an INTRODUCED friend (docs/INTRODUCTIONS.md), so nothing
+    /// about them renders brass — including the ring and fingerprint phrase in
+    /// the detail sheet. A linked friend can absolutely send a sealed card;
+    /// what changes is that this phone never watched anyone prove their key,
+    /// and a money card is the last place to blur that.
+    var senderLinked: Bool = false
     @Bindable var engine: ChatEngine
 
     @State private var showDetail = false
@@ -61,7 +67,7 @@ struct SealedCardBubble: View {
         .sheet(isPresented: $showDetail) {
             SealedCardDetailSheet(message: message, card: card, mine: mine,
                                   senderName: senderName, senderIdentity: senderIdentity,
-                                  engine: engine)
+                                  senderLinked: senderLinked, engine: engine)
                 .presentationDetents([.large])
                 // A sheet is a separate branch of the view tree; the type scale
                 // is inherited from the presenter, but re-assert the flag so the
@@ -366,6 +372,8 @@ struct SealedCardDetailSheet: View {
     let mine: Bool
     let senderName: String
     let senderIdentity: RootIdentity?
+    /// See `SealedCardBubble.senderLinked`.
+    var senderLinked: Bool = false
     @Bindable var engine: ChatEngine
 
     @State private var verification: CardVerification = .checking
@@ -463,7 +471,8 @@ struct SealedCardDetailSheet: View {
                 // the actual name — "You" would render a "Y" beside a label
                 // reading "Nathan (you)".
                 IdentityRing(displayName: resolvedName,
-                             tier: resolvedIdentity?.tier ?? .passkey, size: 42)
+                             tier: resolvedIdentity?.tier ?? .passkey, size: 42,
+                             linked: senderLinked)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(mine ? "\(resolvedName) (you)" : resolvedName)
                         .font(.callout.weight(.medium))
@@ -473,7 +482,7 @@ struct SealedCardDetailSheet: View {
                     if !parentMode, let publicKey = resolvedIdentity?.publicKey {
                         Text(FingerprintPhrase.phrase(for: publicKey))
                             .font(.callout)
-                            .foregroundStyle(SealTheme.brass)
+                            .foregroundStyle(senderLinked ? SealTheme.silver : SealTheme.brass)
                     }
                 }
                 Spacer(minLength: 0)
@@ -549,7 +558,10 @@ struct SealedCardDetailSheet: View {
                         sectionLabel("Fingerprint phrase")
                         Text(FingerprintPhrase.phrase(for: publicKey))
                             .font(.callout)
-                            .foregroundStyle(SealTheme.brass)
+                            // Same rule as the header above: never brass for a
+                            // sender this phone has only been vouched for
+                            // (docs/INTRODUCTIONS.md).
+                            .foregroundStyle(senderLinked ? SealTheme.silver : SealTheme.brass)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
