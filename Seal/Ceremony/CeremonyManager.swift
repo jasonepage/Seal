@@ -410,6 +410,52 @@ final class CeremonyManager: NSObject {
         }
     }
 
+    /// Handover ceremony (CustodyReceipt.swift). Identical machinery to the
+    /// friend forge — the counterparty taps THEIR key on THIS phone — but the
+    /// challenge is a receipt commitment binding both identities to a specific
+    /// item, photo hash and moment. It inherits the same guarantee: it cannot
+    /// be produced remotely, and the signature is the receiver saying "I took
+    /// this," not the giver claiming they handed it over.
+    ///
+    /// Throws rather than returning anything unverified — an unverified receipt
+    /// is worse than no receipt, because it still looks like evidence.
+    func signReceipt(commitment: Data, counterparty: RootIdentity) async throws -> WebAuthnAssertion {
+        guard let credentialID = counterparty.rawCredentialID else {
+            throw CeremonyError.missingCredentialID
+        }
+        phase = .searching
+        do {
+            let credential = try await performRequests(
+                makeFriendAssertionRequests(friendCredentialID: credentialID, challenge: commitment))
+            guard let assertion = credential as? ASAuthorizationPublicKeyCredentialAssertion else {
+                throw CeremonyError.unexpectedCredential
+            }
+            phase = .reading
+            let stored = WebAuthnAssertion(
+                credentialID: assertion.credentialID,
+                clientDataJSON: assertion.rawClientDataJSON,
+                authenticatorData: assertion.rawAuthenticatorData,
+                signature: assertion.signature)
+
+            // Verify against the directory's published key, and confirm the
+            // authenticator signed OUR commitment rather than something else.
+            let publicKey = try P256.Signing.PublicKey(rawRepresentation: counterparty.publicKey)
+            guard stored.verify(with: publicKey),
+                  Self.clientDataChallengeMatches(stored.clientDataJSON, expected: commitment) else {
+                throw CeremonyError.verificationFailed
+            }
+            phase = .sealed
+            SealTheme.sealHaptic()
+            return stored
+        } catch let error as ASAuthorizationError where error.code == .canceled {
+            phase = .failed(CeremonyError.cancelled.localizedDescription)
+            throw CeremonyError.cancelled
+        } catch {
+            phase = .failed((error as? LocalizedError)?.errorDescription ?? "Something went wrong. Tap to try again.")
+            throw error
+        }
+    }
+
     /// Commitment for the RECIPROCAL half of a forge (see ForgeHandshake.swift).
     /// Deliberately a different domain string from `friendChallenge` so a
     /// device-key reciprocal signature can never be replayed as, or mistaken

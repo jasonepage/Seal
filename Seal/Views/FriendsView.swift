@@ -70,6 +70,18 @@ struct FriendsView: View {
                             .foregroundStyle(SealTheme.brass)
                     }
                 }
+                // Handovers live beside the forge log because they're the same
+                // kind of object: signed evidence of something that happened in
+                // person. See CustodyReceipt.swift.
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink {
+                        ReceiptsView(myRoot: myRoot, identity: ceremony.identity,
+                                     ceremony: ceremony, sync: sync)
+                    } label: {
+                        Image(systemName: "shippingbox.fill")
+                            .foregroundStyle(SealTheme.brass)
+                    }
+                }
             }
         }
         .preferredColorScheme(.dark)
@@ -132,15 +144,54 @@ struct FriendsView: View {
         .padding(.top, 24)
     }
 
+    /// Scrollable body + an action footer pinned above the tab bar.
+    ///
+    /// The ceremony screens used to be a bare VStack with Spacers. A VStack
+    /// does not clip or scroll — when its content is taller than the screen it
+    /// simply overflows in BOTH directions, so the step rail slid up under the
+    /// status bar while the primary button slid down under the tab bar, with no
+    /// way to reach it. That is why the "Ready — they tap their key" button was
+    /// unreachable on a smaller/older phone: the screen wasn't just clipped, it
+    /// was unscrollable. Long role banners, the passkey explainer and large
+    /// Dynamic Type all make this worse.
+    ///
+    /// ScrollView makes every screen reachable at any text size; safeAreaInset
+    /// keeps the actions above the tab bar and home indicator, where nothing
+    /// can cover them.
+    private func ceremonyLayout<BodyContent: View, ActionsContent: View>(
+        @ViewBuilder body: () -> BodyContent,
+        @ViewBuilder actions: () -> ActionsContent
+    ) -> some View {
+        ScrollView {
+            VStack(spacing: 18) {
+                body()
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 8)
+            .padding(.bottom, 16)
+        }
+        // Don't rubber-band when everything already fits — on a big phone the
+        // short screens should feel static, not loose.
+        .scrollBounceBehavior(.basedOnSize)
+        .safeAreaInset(edge: .bottom) {
+            VStack(spacing: 4) {
+                actions()
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 10)
+            .padding(.bottom, 6)
+            .background(.ultraThinMaterial)
+        }
+    }
+
     /// One-time (and re-openable) how-to before the first scan.
     private var guideView: some View {
-        VStack(spacing: 24) {
-            Spacer()
+        ceremonyLayout {
             SealMascot(size: 48,
                        line: "Forge a friend",
                        sub: "Two humans, one tap. Here's the whole thing.")
             ForgeHowToCard()
-            Spacer()
+        } actions: {
             Button {
                 forgeGuideSeen = true
                 stage = .scanning
@@ -151,11 +202,9 @@ struct FriendsView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(SealTheme.brass)
-            .padding(.horizontal, 24)
 
             Button("Not now") { stage = .list }
                 .foregroundStyle(.white.opacity(0.7))
-                .padding(.bottom, 24)
         }
     }
 
@@ -171,20 +220,30 @@ struct FriendsView: View {
                 Task { await lookup(hash) }
             }
             .clipShape(RoundedRectangle(cornerRadius: 20))
+            // The camera is the flexible child that soaks up slack, so at large
+            // Dynamic Type the role banner could squeeze it to nothing and push
+            // Cancel off-screen — trapping the user in a live camera with no
+            // exit. A floor here keeps the preview usable.
+            .frame(minHeight: 180)
             .padding(.horizontal, 24)
             Text("Point at your friend's seal")
                 .font(.caption)
                 .foregroundStyle(.white.opacity(0.5))
+        }
+        // NOT ceremonyLayout: a ScrollView proposes unbounded height, and a
+        // UIViewControllerRepresentable camera preview sizes ambiguously under
+        // that. Only the pinned-footer half applies here.
+        .safeAreaInset(edge: .bottom) {
             Button("Cancel") { stage = .list }
                 .foregroundStyle(.white.opacity(0.7))
-                .padding(.bottom, 24)
+                .padding(.top, 10)
+                .padding(.bottom, 6)
         }
     }
 
     private func confirmView(_ friend: RootIdentity) -> some View {
-        VStack(spacing: 18) {
+        ceremonyLayout {
             ForgeStepRail(active: 2)
-            Spacer()
             Image(systemName: "person.crop.circle.badge.questionmark")
                 .font(.system(size: 56))
                 .foregroundStyle(SealTheme.silver)
@@ -201,8 +260,7 @@ struct FriendsView: View {
             if friend.tier == .passkey {
                 PasskeyHybridCard(friendName: friend.displayName)
             }
-
-            Spacer()
+        } actions: {
             Button { Task { await forge(friend) } } label: {
                 Label("Ready — \(friend.displayName) taps their key", systemImage: "key.radiowaves.forward.fill")
                     .frame(maxWidth: .infinity)
@@ -210,12 +268,9 @@ struct FriendsView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(SealTheme.brass)
-            .padding(.horizontal, 24)
             Button("Cancel") { stage = .list }
                 .foregroundStyle(.white.opacity(0.7))
-                .padding(.bottom, 24)
         }
-        .padding(.top, 8)
     }
 
     private func forgingView(_ friend: RootIdentity) -> some View {
@@ -238,9 +293,8 @@ struct FriendsView: View {
     }
 
     private func sealedView(_ friend: RootIdentity) -> some View {
-        VStack(spacing: 18) {
+        ceremonyLayout {
             ForgeStepRail(active: 3)
-            Spacer()
             Image(systemName: "checkmark.seal.fill")
                 .font(.system(size: 72))
                 .foregroundStyle(SealTheme.brass)
@@ -258,8 +312,7 @@ struct FriendsView: View {
 
             RoleBanner(icon: "arrow.triangle.2.circlepath",
                        text: "One direction done. For \(friend.displayName) to message you, run it once more on THEIR phone: they scan your seal, you tap your key.")
-
-            Spacer()
+        } actions: {
             Button { stage = .list } label: {
                 Label("Show my seal for the other direction", systemImage: "qrcode")
                     .frame(maxWidth: .infinity)
@@ -267,15 +320,16 @@ struct FriendsView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(SealTheme.brass)
-            .padding(.horizontal, 24)
             Button("Done") { stage = .list }
                 .foregroundStyle(.white.opacity(0.7))
-                .padding(.bottom, 24)
         }
-        .padding(.top, 8)
     }
 
     private func failedView(_ reason: String) -> some View {
+        // Deliberately NOT ceremonyLayout. This screen is short, and a
+        // ScrollView would pin two lines of text under the nav bar above a
+        // screenful of dead ink. Spacers keep it centred; safeAreaInset still
+        // guarantees the button clears the tab bar.
         VStack(spacing: 20) {
             Spacer()
             Image(systemName: "xmark.seal.fill")
@@ -287,10 +341,13 @@ struct FriendsView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
             Spacer()
+        }
+        .safeAreaInset(edge: .bottom) {
             Button("Try again") { stage = .list }
                 .buttonStyle(.borderedProminent)
                 .tint(SealTheme.brass)
-                .padding(.bottom, 24)
+                .padding(.top, 10)
+                .padding(.bottom, 6)
         }
     }
 
@@ -417,7 +474,7 @@ struct FriendsView: View {
         """
         let s = subject.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
         let b = body.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
-        return URL(string: "mailto:jaysubplays@gmail.com?subject=\(s)&body=\(b)")
+        return URL(string: "mailto:jasonepage@gmail.com?subject=\(s)&body=\(b)")
     }
 
     // MARK: - QR

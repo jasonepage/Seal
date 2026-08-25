@@ -1,0 +1,199 @@
+<title>The Verified Host Line</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,640&family=Source+Sans+3:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --paper:#F7F4EC;
+    --ink:#1B241E;
+    --ink-soft:#4A5750;
+    --felt:#1F3D2E;
+    --felt-soft:#E7EDE6;
+    --brass:#A87F2E;
+    --brass-deep:#8A6722;
+    --line:#D8D6CB;
+    --card:#FFFFFF;
+    --mono-bg:#EFECE2;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#141A16;
+      --ink:#EAE7DC;
+      --ink-soft:#A6B0A8;
+      --felt:#8FBBA2;
+      --felt-soft:#1E2B23;
+      --brass:#C9A050;
+      --brass-deep:#D8B268;
+      --line:#2C362F;
+      --card:#1B241E;
+      --mono-bg:#20291F;
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#141A16;
+    --ink:#EAE7DC;
+    --ink-soft:#A6B0A8;
+    --felt:#8FBBA2;
+    --felt-soft:#1E2B23;
+    --brass:#C9A050;
+    --brass-deep:#D8B268;
+    --line:#2C362F;
+    --card:#1B241E;
+    --mono-bg:#20291F;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;background:var(--paper);color:var(--ink);
+    font-family:"Source Sans 3",system-ui,sans-serif;
+    font-size:17px;line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1000px;margin:0 auto;padding:56px 28px 72px}
+  .eyebrow{
+    font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--brass-deep);font-weight:700;margin:0 0 14px;
+  }
+  h1{
+    font-family:"Fraunces",Georgia,serif;font-weight:640;
+    font-size:clamp(34px,5vw,50px);line-height:1.08;margin:0 0 18px;
+    text-wrap:balance;letter-spacing:-.01em;
+  }
+  .lede{font-size:20px;color:var(--ink-soft);max-width:60ch;margin:0}
+  .lede strong{color:var(--ink)}
+  .hero{display:grid;grid-template-columns:1.15fr .85fr;gap:48px;align-items:center;margin-bottom:64px}
+  @media(max-width:820px){.hero{grid-template-columns:1fr}}
+
+  /* phone mock */
+  .phone{
+    width:300px;max-width:100%;margin:0 auto;background:var(--card);
+    border:1px solid var(--line);border-radius:34px;padding:18px 16px 22px;
+    box-shadow:0 18px 40px rgba(20,30,24,.14);
+  }
+  .phone-head{display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:12px}
+  .seal-dot{
+    width:38px;height:38px;border-radius:50%;flex:none;
+    background:radial-gradient(circle at 35% 30%, var(--brass), var(--brass-deep));
+    display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px;
+  }
+  .phone-name{font-weight:700;font-size:15px;line-height:1.2}
+  .phone-sub{font-size:12px;color:var(--felt);display:flex;align-items:center;gap:5px;font-weight:600}
+  .phone-sub svg{flex:none}
+  .msg{max-width:85%;padding:9px 12px;border-radius:14px;font-size:14px;line-height:1.4;margin:7px 0}
+  .msg.them{background:var(--felt-soft);border-bottom-left-radius:4px}
+  .msg.me{background:var(--felt);color:var(--paper);margin-left:auto;border-bottom-right-radius:4px}
+  :root[data-theme="dark"] .msg.me, .msg.me{color:#F7F4EC}
+  .msg .who{font-size:11px;font-weight:700;color:var(--brass-deep);display:block;margin-bottom:2px}
+  .verify-strip{
+    margin-top:12px;background:var(--mono-bg);border:1px dashed var(--brass);
+    border-radius:10px;padding:8px 10px;font-family:"IBM Plex Mono",monospace;
+    font-size:11px;color:var(--ink-soft);
+  }
+  .verify-strip b{color:var(--brass-deep);font-weight:600}
+
+  h2{
+    font-family:"Fraunces",Georgia,serif;font-weight:600;font-size:26px;
+    margin:0 0 14px;letter-spacing:-.005em;
+  }
+  section{margin-bottom:56px}
+  .cols{display:grid;grid-template-columns:1fr 1fr 1fr;gap:28px}
+  @media(max-width:820px){.cols{grid-template-columns:1fr}}
+  .step h3{font-size:16px;margin:0 0 6px;font-weight:700}
+  .step p{margin:0;color:var(--ink-soft);font-size:15.5px}
+  .step .n{
+    font-family:"IBM Plex Mono",monospace;color:var(--brass-deep);
+    font-size:13px;display:block;margin-bottom:8px;font-weight:500;
+  }
+  .prose{max-width:66ch}
+  .prose p{margin:0 0 14px;color:var(--ink-soft)}
+  .prose p strong{color:var(--ink)}
+  .rule{border:none;border-top:1px solid var(--line);margin:0 0 56px}
+  .facts{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:8px}
+  @media(max-width:640px){.facts{grid-template-columns:1fr}}
+  .fact{background:var(--card);padding:18px 20px}
+  .fact .k{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);font-weight:700;margin-bottom:4px}
+  .fact .v{font-family:"Fraunces",Georgia,serif;font-size:19px;font-weight:600}
+  .ask{
+    background:var(--felt);color:#F2F0E6;border-radius:16px;padding:34px 36px;
+  }
+  .ask h2{color:#F2F0E6;margin-bottom:10px}
+  .ask p{margin:0 0 10px;max-width:64ch;color:#D7DCCE}
+  .ask p strong{color:#fff}
+  .ask .sig{font-family:"IBM Plex Mono",monospace;font-size:13px;color:#C9A050;margin-top:18px}
+  footer{margin-top:48px;font-size:13px;color:var(--ink-soft)}
+</style>
+
+<div class="wrap">
+  <div class="hero">
+    <div>
+      <p class="eyebrow">Seal · A proposal for Spirit Mountain Casino &amp; the Confederated Tribes of Grand Ronde</p>
+      <h1>The Verified Host Line</h1>
+      <p class="lede">A private message channel between your casino hosts and your highest-value guests where <strong>impersonation is cryptographically impossible</strong> — because the connection can only be made in person, on your property.</p>
+    </div>
+    <div class="phone" aria-label="Product mockup: a verified chat between a casino host and a guest">
+      <div class="phone-head">
+        <div class="seal-dot">M</div>
+        <div>
+          <div class="phone-name">Marcus — Executive Host</div>
+          <div class="phone-sub">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M6 1l4 1.6v2.9c0 2.6-1.7 4.6-4 5.5-2.3-.9-4-2.9-4-5.5V2.6L6 1z" fill="currentColor"/></svg>
+            Verified in person · Spirit Mountain
+          </div>
+        </div>
+      </div>
+      <div class="msg them"><span class="who">Marcus</span>Good evening Mr. Chen — your suite is ready for Friday. Table minimums arranged as discussed.</div>
+      <div class="msg me">Perfect. Same wire instructions as last time?</div>
+      <div class="msg them"><span class="who">Marcus</span>Never by message — I'll confirm everything at the cage in person, as always.</div>
+      <div class="verify-strip"><b>SEAL VERIFIED</b> · keys exchanged 03/14 at Spirit Mountain · noon jade pebble 🦭</div>
+    </div>
+  </div>
+
+  <hr class="rule">
+
+  <section>
+    <h2>The problem</h2>
+    <div class="prose">
+      <p>Your best guests are the most valuable fraud targets in the building. A text that says <em>"this is your host — send your deposit here"</em> costs an attacker nothing and can cost a VIP relationship everything. Phone numbers get spoofed, SMS gets phished, and personal texting between hosts and guests leaves the casino with no record and no control.</p>
+      <p><strong>Today there is no channel where a guest can be certain the person messaging them is really their host.</strong></p>
+    </div>
+  </section>
+
+  <section>
+    <h2>How it works</h2>
+    <div class="cols">
+      <div class="step">
+        <span class="n">01 — On property</span>
+        <h3>The ceremony</h3>
+        <p>When a guest joins the program, their host taps a physical security key on the guest's phone — in person, at the casino. That thirty-second moment creates a cryptographic bond that cannot be faked, phished, or reset remotely.</p>
+      </div>
+      <div class="step">
+        <span class="n">02 — Everywhere after</span>
+        <h3>The channel</h3>
+        <p>From then on, every message is end-to-end encrypted and signed by that key. If a message appears in the Seal channel, it came from your host. Anything arriving anywhere else, the guest knows to ignore.</p>
+      </div>
+      <div class="step">
+        <span class="n">03 — For the house</span>
+        <h3>The record</h3>
+        <p>Unlike hosts texting from personal phones, the property holds an audit copy of every conversation — supporting Title 31 and gaming-commission expectations instead of working around them.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Why the inconvenience is the product</h2>
+    <div class="prose">
+      <p>Every other messaging app is easy to join — which is exactly why fraud is easy. Seal is deliberately hard to join: identity lives on a physical key, and connections only form face to face. For a consumer app that's a flaw. <strong>For a VIP program it's a feature that doubles as hospitality</strong> — a brass-key enrollment ceremony that tells your best guests they've entered something exclusive, and tells fraudsters the door is closed.</p>
+    </div>
+    <div class="facts">
+      <div class="fact"><div class="k">Identity</div><div class="v">Hardware key, issued by you</div></div>
+      <div class="fact"><div class="k">Enrollment</div><div class="v">In person, on property only</div></div>
+      <div class="fact"><div class="k">Servers</div><div class="v">None to breach or subpoena</div></div>
+    </div>
+  </section>
+
+  <section class="ask">
+    <h2>The ask</h2>
+    <p>A conversation with player development and the gaming commission — not a sale. We want to learn whether host–guest impersonation and off-channel texting are problems Spirit Mountain feels today, and what a compliant pilot with <strong>five hosts and twenty invited guests</strong> would need to look like.</p>
+    <p>The core technology is built and working on iPhone today. The audit and administration layer would be shaped by your compliance requirements — which is exactly why we're asking first.</p>
+    <div class="sig">Nathan Page · natepage67@gmail.com · sealmessenger.com</div>
+  </section>
+
+  <footer>Seal — provably human, provably yours. Built on FIDO2 hardware keys, end-to-end encryption, and in-person verification.</footer>
+</div>

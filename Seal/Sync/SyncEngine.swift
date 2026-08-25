@@ -60,60 +60,121 @@ final class SyncEngine {
     /// Publish (or refresh) our Identity record in the public database so
     /// friends' clients can fetch and verify it. Record name = credentialIDHash,
     /// so lookups are direct fetches — no queries needed.
-    func publishIdentity(_ root: RootIdentity, endorsement: DeviceEndorsement) async {
+    enum PublishOutcome {
+        case published      // our endorsement is confirmed in the directory
+        case refused        // permanent: tombstoned. Never retry.
+        case failed         // transient: offline, contention. Retry later.
+    }
+
+    /// Why this reports three outcomes rather than a Bool: a caller that
+    /// self-heals (ChatEngine.ensureSelfPublished) has to retry a `failed`,
+    /// but must NOT retry a `refused` — a tombstoned identity can never
+    /// publish, and retrying it on every launch, foreground and silent push
+    /// would hammer CloudKit forever for a result that cannot change.
+    ///
+    /// Getting this right matters because an endorsement that never lands is
+    /// invisible to peers, so every message this device signs is dropped by
+    /// everyone as "signed by a device not among the sender's endorsed
+    /// devices" — and receivers skip slots they can't verify, so those
+    /// messages are lost for good. Silent failure here is the most expensive
+    /// failure in the app.
+    @discardableResult
+    func publishIdentity(_ root: RootIdentity, endorsement: DeviceEndorsement) async -> PublishOutcome {
         status = .publishing
-        do {
-            // Never resurrect a permanently-deleted identity. The write-once
-            // tombstone record is authoritative and survives the Identity
-            // record being overwritten OR removed outright, so this closes the
-            // revival paths the `tier` flag alone missed (sign-in republish,
-            // other-device refresh, ensureSelfPublished, console deletion).
-            if await isTombstoned(credentialIDHash: root.credentialIDHash) {
-                status = .error("This identity was deleted and can't be republished.")
-                WebAuthnDiag.log.info("publishIdentity: refused to revive tombstoned identity")
-                return
-            }
-            let recordID = CKRecord.ID(recordName: root.credentialIDHash)
-            let record: CKRecord
-            if let existing = try? await publicDB.record(for: recordID) {
-                // Belt-and-suspenders: also honor the legacy tier flag (covers
-                // identities deleted before the tombstone record existed).
-                if existing["tier"] as? String == Self.deletedTier {
-                    status = .error("This identity was deleted and can't be republished.")
-                    WebAuthnDiag.log.info("publishIdentity: refused to revive tombstoned identity (tier flag)")
-                    return
-                }
-                record = existing
-            } else {
-                record = CKRecord(recordType: "Identity", recordID: recordID)
-            }
-            record["publicKey"] = root.publicKey
-            record["tier"] = root.tier.rawValue
-            record["displayName"] = root.displayName
-            if let credID = root.rawCredentialID {
-                record["credentialID"] = credID
-            }
-            // Merge, don't overwrite: sign-in on a new device APPENDS its
-            // endorsement; existing devices stay valid (FR-18 groundwork).
-            var endorsements: [DeviceEndorsement] = []
-            if let existing = record["deviceEndorsements"] as? Data,
-               let decoded = try? JSONDecoder().decode([DeviceEndorsement].self, from: existing) {
-                endorsements = decoded
-            }
-            endorsements.removeAll { $0.devicePublicKey == endorsement.devicePublicKey }
-            endorsements.append(endorsement)
-            record["deviceEndorsements"] = try JSONEncoder().encode(endorsements)
-            // TODO: revocations list, backup-key endorsements, head-hash chain
-            //       for peer-to-peer key transparency (SDS §2)
-
-            try await publicDB.save(record)
-
-            // Round-trip check: prove the directory actually works.
-            _ = try await publicDB.record(for: recordID)
-            status = .published
-        } catch {
-            status = .error(Self.friendly(error))
+        // Never resurrect a permanently-deleted identity. The write-once
+        // tombstone record is authoritative and survives the Identity record
+        // being overwritten OR removed outright, so this closes the revival
+        // paths the `tier` flag alone missed (sign-in republish, other-device
+        // refresh, ensureSelfPublished, console deletion).
+        if await isTombstoned(credentialIDHash: root.credentialIDHash) {
+            status = .error("This identity was deleted and can't be republished.")
+            WebAuthnDiag.log.info("publishIdentity: refused to revive tombstoned identity")
+            return .refused
         }
+        let recordID = CKRecord.ID(recordName: root.credentialIDHash)
+
+        // Read-merge-write against a shared record is a race: this identity's
+        // OTHER devices (and the peer signing in at the same moment during a
+        // forge) publish to the SAME record name, so the change tag we read
+        // can be stale by the time we save. CloudKit then rejects the write
+        // with .serverRecordChanged. That used to end the attempt with nothing
+        // published and nothing retrying. Re-read and re-merge instead — the
+        // merge is idempotent (dedupe by device key), so replaying it is safe.
+        for attempt in 1...3 {
+            do {
+                let record: CKRecord
+                if let existing = try? await publicDB.record(for: recordID) {
+                    // Belt-and-suspenders: also honor the legacy tier flag
+                    // (covers identities deleted before the tombstone record).
+                    if existing["tier"] as? String == Self.deletedTier {
+                        status = .error("This identity was deleted and can't be republished.")
+                        WebAuthnDiag.log.info("publishIdentity: refused to revive tombstoned identity (tier flag)")
+                        return .refused
+                    }
+                    record = existing
+                } else {
+                    record = CKRecord(recordType: "Identity", recordID: recordID)
+                }
+                record["publicKey"] = root.publicKey
+                record["tier"] = root.tier.rawValue
+                record["displayName"] = root.displayName
+                if let credID = root.rawCredentialID {
+                    record["credentialID"] = credID
+                }
+                // Merge, don't overwrite: sign-in on a new device APPENDS its
+                // endorsement; existing devices stay valid (FR-18 groundwork).
+                var endorsements: [DeviceEndorsement] = []
+                if let existing = record["deviceEndorsements"] as? Data,
+                   let decoded = try? JSONDecoder().decode([DeviceEndorsement].self, from: existing) {
+                    endorsements = decoded
+                }
+                endorsements.removeAll { $0.devicePublicKey == endorsement.devicePublicKey }
+                endorsements.append(endorsement)
+                record["deviceEndorsements"] = try JSONEncoder().encode(endorsements)
+                // TODO: revocations list, backup-key endorsements, head-hash
+                //       chain for peer-to-peer key transparency (SDS §2)
+
+                try await publicDB.save(record)
+
+                // Round-trip check: prove the directory actually works, and
+                // that OUR endorsement survived somebody else's concurrent
+                // merge. A save that "succeeded" but left us out is the same
+                // failure as not publishing at all, so treat it as a retry.
+                // Read back and confirm OUR endorsement survived: a save that
+                // "succeeded" but got clobbered by somebody else's concurrent
+                // merge is the same outcome as never publishing.
+                // A read that FAILS is not evidence of either — the save
+                // already succeeded, so treat an unreadable read-back as
+                // published rather than raising a false alarm about keys.
+                guard let saved = try? await publicDB.record(for: recordID) else {
+                    WebAuthnDiag.log.info("publishIdentity: saved, but read-back failed — assuming published")
+                    status = .published
+                    return .published
+                }
+                let landed = (saved["deviceEndorsements"] as? Data)
+                    .flatMap { try? JSONDecoder().decode([DeviceEndorsement].self, from: $0) } ?? []
+                guard landed.contains(where: { $0.devicePublicKey == endorsement.devicePublicKey }) else {
+                    WebAuthnDiag.log.error("publishIdentity: endorsement absent after save — concurrent merge dropped it (attempt \(attempt, privacy: .public))")
+                    try? await Task.sleep(for: .milliseconds(200 << attempt))
+                    continue
+                }
+                status = .published
+                return .published
+            } catch let error as CKError where error.code == .serverRecordChanged {
+                WebAuthnDiag.log.info("publishIdentity: record changed under us, re-merging (attempt \(attempt, privacy: .public))")
+                // Back off before re-reading. Retrying instantly tends to lose
+                // to the same writer three times in a row; a little jittered
+                // space lets the winner's save settle first.
+                try? await Task.sleep(for: .milliseconds(200 << attempt))
+                continue
+            } catch {
+                status = .error(Self.friendly(error))
+                return .failed
+            }
+        }
+        status = .error("Couldn't publish this device's key — others won't be able to read your messages. It'll retry.")
+        WebAuthnDiag.log.error("publishIdentity: gave up after 3 attempts")
+        return .failed
     }
 
     /// Fetch a (claimed) identity from the directory. The caller must still
@@ -526,6 +587,41 @@ final class SyncEngine {
         record["recipient"] = recipientHash
         record["payload"] = payload
         try await publicDB.save(record)
+    }
+
+    // MARK: - Custody receipts (CustodyReceipt.swift)
+
+    /// Deliver the receiver's copy. Reuses the GroupInvite record type and its
+    /// already-queryable `recipient` field — **no schema change** — exactly as
+    /// ForgeHandshake does. Both fields are ciphertext: the public database is
+    /// world-readable, and a receipt can name an expensive object and carry a
+    /// photo key, so nothing here may be published in the clear.
+    func publishReceipt(receiptID: String,
+                        recipientHash: String,
+                        envelope: Data,
+                        ciphertext: Data) async throws {
+        let id = CKRecord.ID(recordName: "rcpt.\(recipientHash).\(receiptID)")
+        let record = (try? await publicDB.record(for: id))
+            ?? CKRecord(recordType: "GroupInvite", recordID: id)
+        record["recipient"] = recipientHash
+        record["payload"] = try JSONEncoder().encode(
+            ReceiptEnvelope(receiptID: receiptID, envelope: envelope, ciphertext: ciphertext))
+        try await publicDB.save(record)
+    }
+
+    /// Wire wrapper, so the whole thing round-trips through the single existing
+    /// `payload` Bytes field. Group invites and forge handshakes share this
+    /// query and simply fail to decode as this, and vice versa.
+    struct ReceiptEnvelope: Codable {
+        let receiptID: String
+        let envelope: Data      // content key wrapped to the receiver's KEM keys
+        let ciphertext: Data    // AES-GCM sealed CustodyReceipt JSON
+    }
+
+    func fetchReceipts(recipientHash: String) async throws -> [ReceiptEnvelope] {
+        try await fetchGroupInvites(recipientHash: recipientHash).compactMap {
+            try? JSONDecoder().decode(ReceiptEnvelope.self, from: $0)
+        }
     }
 
     /// Deterministic name so re-forging the same pair REPLACES the handshake

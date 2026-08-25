@@ -359,7 +359,7 @@ struct ChatView: View {
         """
         let s = subject.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
         let b = body.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
-        return URL(string: "mailto:jaysubplays@gmail.com?subject=\(s)&body=\(b)")
+        return URL(string: "mailto:jasonepage@gmail.com?subject=\(s)&body=\(b)")
     }
 
     /// Quick-pick reactions surfaced on long-press (FR-11).

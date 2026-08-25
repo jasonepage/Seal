@@ -41,7 +41,14 @@ struct HomeView: View {
             // Demo mode is fully local: no publishing, no push prompt, no sync
             // (FR-22/23 — demo identities never touch CloudKit or real users).
             guard !DemoFixtures.isActive else { return }
-            if let endorsement = identity.deviceEndorsement, sync.status == .idle {
+            // Publish unconditionally. This used to be gated on
+            // `sync.status == .idle`, which meant that once a publish failed
+            // the status stuck at .error and EVERY later launch skipped
+            // publishing entirely — the one device that most needed to
+            // republish was the only one that never did. An unpublished
+            // endorsement makes every message this device signs unverifiable
+            // to everyone, so this must not be conditional on prior state.
+            if let endorsement = identity.deviceEndorsement {
                 await sync.publishIdentity(myRoot, endorsement: endorsement)
             }
             // Push: ask for alert/sound/badge permission for visible banners…
