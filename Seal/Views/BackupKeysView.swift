@@ -314,7 +314,7 @@ struct AddBackupKeySheet: View {
                         .disabled(busy)
                         .padding(.horizontal, 24)
 
-                        Text("A passkey saved in iCloud comes back on a new phone. A security key survives even if the Apple account doesn't. Either is a real backup; neither can be the one you already use.")
+                        Text("A passkey is saved to this phone's Apple ID unless iOS offers to put it on another device — so if the plan is \"my son's phone holds the backup\", make it on his phone, or use a security key. A passkey comes back on a new phone; a security key survives even if the Apple account doesn't. Either is a real backup; neither can be the one you already use.")
                             .font(.caption2)
                             .foregroundStyle(.white.opacity(0.4))
                             .multilineTextAlignment(.center)

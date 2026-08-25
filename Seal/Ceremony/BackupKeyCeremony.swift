@@ -57,6 +57,14 @@ extension CeremonyManager {
             setPhase(.reading)
             let parsed = try WebAuthnParsing.parseRegistration(attestationObject: attestation)
             let backupPublicKey = parsed.publicKey.rawRepresentation
+            // Tier from what iOS ACTUALLY made, not from the button pressed.
+            // The two normally agree, but the button is a request and this is
+            // the answer — and the ring colour, the icon and the recovery
+            // instructions all key off it, so a mislabelled backup key would
+            // send someone hunting for a security key that is really a passkey
+            // at the worst possible moment.
+            let actualTier: IdentityTier =
+                registration is ASAuthorizationPlatformPublicKeyCredentialRegistration ? .passkey : .verified
 
             // 2. The NEW key signs its ACCEPTANCE: "I belong to this root."
             //
@@ -123,7 +131,7 @@ extension CeremonyManager {
             let backup = BackupCredential(
                 credentialID: registration.credentialID,
                 publicKey: backupPublicKey,
-                tier: tier,
+                tier: actualTier,
                 label: label.trimmingCharacters(in: .whitespacesAndNewlines),
                 assertion: try JSONEncoder().encode(stored),
                 acceptance: try JSONEncoder().encode(acceptance),
