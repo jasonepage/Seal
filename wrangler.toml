@@ -1,0 +1,7 @@
+# Deploys the static site in ./site to the existing Worker serving sealmessenger.com.
+# Usage: npx wrangler deploy   (from the repo root)
+name = "plain-darkness-c20d"
+compatibility_date = "2026-08-25"
+
+[assets]
+directory = "site"
