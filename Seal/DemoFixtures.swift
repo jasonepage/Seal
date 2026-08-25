@@ -167,14 +167,33 @@ enum DemoFixtures {
 
     /// One scripted line. `reactions` (reactorHash → emoji) and `replyTo`
     /// (index of an earlier line in the same chat) drive the reaction pills and
-    /// quoted headers in screenshots.
+    /// quoted headers in screenshots; `card` renders a Sealed Card instead of a
+    /// bubble (docs/CARDS.md).
     private struct Line {
         let sender: String
         let text: String
         let minutesAgo: TimeInterval
         var reactions: [String: String]? = nil
         var replyTo: Int? = nil
+        var card: SealedCard? = nil
     }
+
+    /// The seeded Sealed Card (docs/CARDS.md), so App Review and the App Store
+    /// screenshots show the feature without a hardware key or a second phone.
+    ///
+    /// The address is a synthetic string: bech32-shaped and in the bech32
+    /// character set so it renders and chunks realistically, but not a real
+    /// wallet — its checksum doesn't compute, so any wallet would reject it
+    /// outright. Demo fixtures are never signed (nothing in demo mode touches
+    /// the verification paths), so the card's detail sheet reports `.demo`
+    /// rather than claiming a signature it doesn't have.
+    private static let demoCard = SealedCard(
+        cardType: .cryptoAddress,
+        title: "My BTC wallet",
+        value: "bc1qzr5x8g2tvdw0s3jn54khce6mua7lqpzry9x8gf",
+        asset: "BTC",
+        note: "Cold wallet — not the exchange one.",
+        fallbackText: SealedCard.fallbackText(for: .cryptoAddress, asset: "BTC"))
 
     private static func seedConversations(owner: String)
         -> ([ChatEngine.Chat], [UUID: [ChatEngine.ChatMessage]], [UUID: [String: Date]]) {
@@ -204,10 +223,12 @@ enum DemoFixtures {
                     sentAt: Date.now.addingTimeInterval(-line.minutesAgo * 60),
                     delivered: true,
                     expiresAt: chat.ttl.map { Date.now.addingTimeInterval($0) },
-                    mediaRef: nil, mediaKey: nil, kind: nil,
+                    mediaRef: nil, mediaKey: nil,
+                    kind: line.card == nil ? nil : "card",
                     wireID: "demo.\(cid).\(i)",
                     reactions: line.reactions,
-                    replyTo: replyTo, replyPreview: replyPreview, replySenderHash: replySender)
+                    replyTo: replyTo, replyPreview: replyPreview, replySenderHash: replySender,
+                    card: line.card)
             }
             // Everyone else has caught up — drives the "Read" / "Read by N" labels.
             readMarks[chat.id] = Dictionary(uniqueKeysWithValues:
@@ -251,10 +272,18 @@ enum DemoFixtures {
                   minutesAgo: 1_320, reactions: [owner: "🔥"]),
              Line(sender: owner, text: "your forge log is growing fast", minutesAgo: 1_290)])
 
+        // 1:1 carrying the Sealed Card (docs/CARDS.md). The card is INBOUND on
+        // purpose: the recipient's side is the one with the Copy button and the
+        // full detail sheet, so this is the frame worth showing. `text` holds
+        // the same fallback string the wire would carry, so the fixture matches
+        // a real card byte for byte in every field the UI reads.
         add(ChatEngine.Chat(id: ChatEngine.pairChatID(owner, sam),
                             name: "Sam",
                             memberHashes: [owner, sam], ttl: nil),
-            [Line(sender: sam, text: "see you saturday 🦭", minutesAgo: 2_700)])
+            [Line(sender: sam, text: "see you saturday 🦭", minutesAgo: 2_700),
+             Line(sender: owner, text: "also — what's your wallet for the gym half?", minutesAgo: 128),
+             Line(sender: sam, text: demoCard.fallbackText, minutesAgo: 120, card: demoCard),
+             Line(sender: owner, text: "sent 🫡", minutesAgo: 116, reactions: [sam: "👍"])])
 
         return (chats, messages, readMarks)
     }

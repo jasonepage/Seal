@@ -47,6 +47,11 @@ final class ChatEngine {
                                         // predates wireID — still rendered as a reply)
         var replyPreview: String?       // one-line snippet of the quoted message
         var replySenderHash: String?    // author of the quoted message
+        var card: SealedCard?           // kind == "card": the sealed payload
+        /// Re-checkable signature tuple. Populated for CARDS ONLY — a bubble is
+        /// verified on arrival and never looked at again, but a card can be
+        /// acted on days later (SealedCard.swift, MessageProof).
+        var proof: MessageProof?
     }
 
     /// What actually gets encrypted — TTL and the media content key travel
@@ -64,6 +69,7 @@ final class ChatEngine {
         var replyPreview: String?       // reply: quoted snippet
         var replySenderHash: String?    // reply: quoted author
         var readUpTo: Date?             // read receipt: sentAt of latest message seen
+        var card: SealedCard?           // "card": high-stakes payload (SealedCard.swift)
     }
 
     private struct ChainState: Codable {
@@ -133,6 +139,8 @@ final class ChatEngine {
     private var directoryCache: [String: (RootIdentity, [DeviceEndorsement])] = [:]
     // One self-heal republish per launch (see ensureSelfPublished).
     private var didEnsureSelfPublished = false
+    // Guards against concurrent refreshAll passes each starting a publish.
+    private var publishInFlight = false
     // Chats with a refresh in flight — coalesces overlapping refreshes (poll
     // loop + push + foreground) so the same messages aren't double-processed.
     private var refreshingChats: Set<UUID> = []
@@ -310,18 +318,47 @@ final class ChatEngine {
     /// per launch closes that gap; publishIdentity merges by device key, so it's
     /// a no-op once we're current. Best-effort and silent if offline.
     private func ensureSelfPublished(myRoot: RootIdentity) async {
-        guard !didEnsureSelfPublished, let endorsement = identity.deviceEndorsement else { return }
-        didEnsureSelfPublished = true
+        // publishInFlight is set with NO await between the guard and the
+        // assignment, so overlapping refreshAll passes (launch + foreground +
+        // push all call it, and refreshAll has no coalescing of its own) can't
+        // each start a publish. Without this, three tasks race to read-merge-
+        // write the SAME Identity record, burn each other's retries on
+        // .serverRecordChanged, and can exhaust all 3 attempts — manufacturing
+        // exactly the unpublished-endorsement failure this function exists to
+        // prevent.
+        guard !didEnsureSelfPublished, !publishInFlight,
+              let endorsement = identity.deviceEndorsement else { return }
+        publishInFlight = true
+        defer { publishInFlight = false }
         // Skip the CloudKit write only if our current device key is already in
         // the directory's VERIFIED set; republish when it's missing OR present
         // but stale/unverifiable.
         if let (root, endorsements) = try? await sync.fetchIdentity(credentialIDHash: myRoot.credentialIDHash),
            IdentityManager.verifiedDevices(root: root, endorsements: endorsements)
                .contains(where: { $0.devicePublicKey == endorsement.devicePublicKey }) {
+            didEnsureSelfPublished = true
             return
         }
         ChatEngine.msgLog.info("ensureSelfPublished: republishing this device's endorsement (device=\(ChatEngine.fp(endorsement.devicePublicKey), privacy: .public) kem=\(ChatEngine.fp(endorsement.kemBundlePublicKeys), privacy: .public)) — was missing/stale in directory")
-        await sync.publishIdentity(myRoot, endorsement: endorsement)
+        // Latch only when there's no point trying again. This used to set the
+        // flag BEFORE publishing, so a publish that failed (offline, or a lost
+        // race on the shared Identity record) was never retried for the rest of
+        // the app session — leaving this device unverifiable to every peer
+        // while it happily kept sending messages nobody could accept.
+        //
+        // `refused` latches too: a tombstoned identity can never publish, and
+        // refreshAll runs on launch, foreground AND every silent push, so
+        // retrying a permanent refusal would hammer CloudKit forever for a
+        // result that cannot change.
+        //
+        // Assign forward-only (never write `false` over a `true`) so a losing
+        // task can't clear a latch a concurrent winner just set.
+        switch await sync.publishIdentity(myRoot, endorsement: endorsement) {
+        case .published, .refused:
+            didEnsureSelfPublished = true
+        case .failed:
+            ChatEngine.msgLog.error("ensureSelfPublished: publish FAILED — this device's messages can't be verified by anyone until it lands; will retry next refresh")
+        }
     }
 
     /// Full sync pass: surface 1:1 chats for every friend, accept invites,
@@ -383,10 +420,22 @@ final class ChatEngine {
                           in: chat, from: myRoot)
     }
 
+    /// One-line summary of a message, for the chat list and reply quotes.
+    ///
+    /// A card summarises to its TITLE, never to `text`: `text` deliberately
+    /// carries the old-build fallback string ("…update Seal to view"), which is
+    /// exactly right on a build that can't render the card and nonsense on one
+    /// that can. The card's `value` is never summarised — a truncated address
+    /// in a list row is an invitation to misread it.
+    static func summary(_ m: ChatMessage) -> String {
+        if let card = m.card { return "🔏 \(card.title)" }
+        if m.mediaRef != nil { return "📷 Photo" }
+        return m.text
+    }
+
     /// One-line quote shown above a reply bubble.
     static func replyPreview(_ m: ChatMessage) -> String {
-        if m.mediaRef != nil { return "📷 Photo" }
-        let t = m.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let t = summary(m).trimmingCharacters(in: .whitespacesAndNewlines)
         return t.count > 80 ? String(t.prefix(80)) + "…" : t
     }
 
@@ -396,6 +445,33 @@ final class ChatEngine {
         guard chat.memberHashes.count > 1 else { return }
         let ttl = chats.first(where: { $0.id == chat.id })?.ttl
         await sendPayload(MessagePayload(text: "", ttl: ttl, kind: "screenshot"),
+                          in: chat, from: myRoot)
+    }
+
+    /// Sealed card (docs/CARDS.md): a high-stakes payload — an address, wire
+    /// instructions, a statement — through the SAME pipeline as everything
+    /// else, as `kind:"card"`. No new record type, no new signature scheme: the
+    /// message signature is the card's authenticity, and the AAD already binds
+    /// it to group|epoch|sender|index|prev-hash.
+    ///
+    /// `fallbackText` goes in `text` as well as in the card. A build with no
+    /// card support decodes this payload fine (unknown keys are ignored), hits
+    /// the receive switch's `default:` branch, and renders `payload.text` —
+    /// which is the ONLY field it reads. Put the fallback only inside `card`
+    /// and an older client shows an empty bubble instead of an explanation.
+    /// Setting `text` also gives the chat-list preview and reply quotes
+    /// something sensible for free.
+    ///
+    /// A card is a bubble kind (`isNonBubble` stays false), so it gets
+    /// `recipients` and fires a push like any real message.
+    func sendCard(_ card: SealedCard, in chat: Chat, from myRoot: RootIdentity) async {
+        // Cards inherit the chat's TTL like every other message. They are NOT
+        // exempted: the verification drawer promises disappearing messages
+        // disappear, and silently carving out a message class would break that
+        // promise quietly. CardComposeSheet warns before sending instead.
+        let ttl = chats.first(where: { $0.id == chat.id })?.ttl
+        await sendPayload(MessagePayload(text: card.fallbackText, ttl: ttl,
+                                         kind: "card", card: card),
                           in: chat, from: myRoot)
     }
 
@@ -548,7 +624,8 @@ final class ChatEngine {
                                      wireID: "demo.\(localID)",
                                      replyTo: payloadValue.replyTo,
                                      replyPreview: payloadValue.replyPreview,
-                                     replySenderHash: payloadValue.replySenderHash))
+                                     replySenderHash: payloadValue.replySenderHash,
+                                     card: payloadValue.card))
             messagesByChat[chat.id] = local
             persist()
             return
@@ -609,14 +686,30 @@ final class ChatEngine {
             let (messageKey, index) = Self.ratchet(&state)
 
             // 3. Encrypt. AAD binds group, epoch, sender, index, prev-hash.
+            //    prevHash is read out ONCE here: `state.lastMessageHash` is
+            //    advanced further down, and a card's proof has to record the
+            //    same value that actually went into this message's AAD.
+            let prevHash = state.lastMessageHash
             let payload = try JSONEncoder().encode(payloadValue)
             let aad = Self.messageAAD(groupID: groupID, epoch: epoch, sender: myHash,
-                                      index: index, prevHash: state.lastMessageHash)
+                                      index: index, prevHash: prevHash)
             let sealed = try AES.GCM.seal(payload, using: messageKey, authenticating: aad)
             let ciphertext = sealed.combined!
 
             // 4. Sign ciphertext‖aad with the Secure Enclave device key.
             let signature = try deviceKey.signature(for: ciphertext + aad)
+
+            // Cards keep everything needed to re-run this exact check later
+            // (SealedCard.swift). Ordinary bubbles don't — they're verified on
+            // arrival and never revisited.
+            let proof: MessageProof? = payloadValue.card.map { card in
+                MessageProof(ciphertext: ciphertext,
+                             signature: signature.derRepresentation,
+                             signerDevicePublicKey: devicePub,
+                             groupID: groupID, epoch: epoch, chainIndex: index,
+                             prevMessageHash: prevHash,
+                             cardDigest: card.digest)
+            }
 
             // 5. Ship it — or queue it. Chain state commits either way (the
             //    ciphertext exists; a retry must never reuse key or index).
@@ -695,7 +788,9 @@ final class ChatEngine {
                                          wireID: "\(myHash).e\(epoch).\(index)",
                                          replyTo: payloadValue.replyTo,
                                          replyPreview: payloadValue.replyPreview,
-                                         replySenderHash: payloadValue.replySenderHash))
+                                         replySenderHash: payloadValue.replySenderHash,
+                                         card: payloadValue.card,
+                                         proof: proof))
                 messagesByChat[chat.id] = local
                 persist()
             }
@@ -807,8 +902,12 @@ final class ChatEngine {
                     // Our own tracked prev-hash goes into the expected AAD —
                     // if the server swapped any earlier message, this (and the
                     // signature) stop matching and the transcript visibly breaks.
+                    // Read once: `chain.lastMessageHash` advances at the bottom
+                    // of this loop, and a card's proof must record the value
+                    // that actually went into this message's AAD.
+                    let prevHash = chain.lastMessageHash
                     let aad = Self.messageAAD(groupID: groupID, epoch: epoch, sender: sender,
-                                              index: chain.index, prevHash: chain.lastMessageHash)
+                                              index: chain.index, prevHash: prevHash)
 
                     // Full verification chain before decryption is even
                     // attempted. If it misses, our CACHED directory view of the
@@ -820,8 +919,20 @@ final class ChatEngine {
                     }
                     guard verifyInbound(wire, aad: aad, entry: entry) else {
                         ChatEngine.msgLog.error("recv: drop — signed by device \(ChatEngine.fp(wire.senderDevicePublicKey), privacy: .public) not among sender's endorsed devices [\((entry?.1 ?? []).map { ChatEngine.fp($0.devicePublicKey) }.joined(separator: ","), privacy: .public)]")
-                        lastError = "Couldn't verify a message from a member — their signing key isn't in the directory yet. Ask them to reopen the app (to republish) or re-friend."
+                        lastError = "Couldn't verify a message from a member. If it keeps happening, ask them to reopen the app (to republish their key) or re-friend."
                         Self.advance(&chain)    // skip the bad slot, don't stall the chain
+                        // CRITICAL: mirror the sender's transcript hash even
+                        // though we rejected this message. The sender advances
+                        // lastMessageHash for EVERY message it sends, so if we
+                        // skip a slot without doing the same, our prevHash and
+                        // theirs diverge and the AAD is wrong for every message
+                        // that follows — the signature then fails forever and
+                        // the conversation is dead from one transient hiccup.
+                        // Tamper evidence is unaffected: a swapped ciphertext
+                        // still produces an AAD the real sender never signed,
+                        // so the NEXT message fails on its signature, which an
+                        // attacker cannot forge without the device key.
+                        chain.lastMessageHash = Data(SHA256.hash(data: wire.ciphertext))
                         continue
                     }
 
@@ -840,6 +951,10 @@ final class ChatEngine {
                     else {
                         ChatEngine.msgLog.error("recv: slot \(idx, privacy: .public) from \(sender, privacy: .public) failed to decrypt — skipping it rather than stalling the chain")
                         lastError = "Skipped an unreadable message from a member — it was sent with keys that no longer match. Newer messages still arrive."
+                        // Same reason as the verify-miss path above: the sender
+                        // hashed this slot into its chain, so we must too, or
+                        // every later message fails its AAD check.
+                        chain.lastMessageHash = Data(SHA256.hash(data: wire.ciphertext))
                         continue
                     }
 
@@ -877,7 +992,22 @@ final class ChatEngine {
                             wireID: wireID,
                             replyTo: payload.replyTo,
                             replyPreview: payload.replyPreview,
-                            replySenderHash: payload.replySenderHash))
+                            replySenderHash: payload.replySenderHash,
+                            card: payload.card,
+                            // Cards only. This message just passed
+                            // verifyInbound above; keeping the tuple is what
+                            // lets the detail sheet run that check again later
+                            // against a fresh directory, instead of reporting
+                            // a check it merely remembers.
+                            proof: payload.card.map { card in
+                                MessageProof(
+                                    ciphertext: wire.ciphertext,
+                                    signature: wire.signature,
+                                    signerDevicePublicKey: wire.senderDevicePublicKey,
+                                    groupID: groupID, epoch: epoch, chainIndex: idx,
+                                    prevMessageHash: prevHash,
+                                    cardDigest: card.digest)
+                            }))
                         messagesByChat[chat.id] = local
                     }
                     chain.lastMessageHash = Data(SHA256.hash(data: wire.ciphertext))
@@ -948,6 +1078,78 @@ final class ChatEngine {
         return identity.verify(signature: wire.signature, over: wire.ciphertext + aad,
                                deviceKey: wire.senderDevicePublicKey,
                                claimedRoot: root, endorsements: endorsements)
+    }
+
+    // MARK: - Card re-verification (docs/CARDS.md)
+
+    /// Re-check a card's signature RIGHT NOW, rather than reporting that we
+    /// checked it once when it arrived.
+    ///
+    /// This runs the SAME check the receive path already ran — no new signature
+    /// scheme (SDS §2) — but against a force-refreshed directory entry, so a
+    /// signing device that was REVOKED after the card landed makes the card
+    /// fail rather than pass. That is the case an arrival-time check can never
+    /// catch, and on a card carrying a wallet address it's the one that matters.
+    ///
+    /// `.failed` and `.unavailable` are kept apart on purpose: "the signature
+    /// is bad" and "I couldn't reach the directory" have opposite consequences
+    /// for someone about to send money, and collapsing them into one grey state
+    /// would be a lie in whichever direction it resolved.
+    func verifyCard(_ message: ChatMessage) async -> CardVerification {
+        // Demo fixtures are trusted by construction and never signed (FR-22).
+        if DemoFixtures.isActive { return .demo }
+        guard let proof = message.proof else {
+            return .unavailable("This card arrived before this build kept re-checkable proofs. It was verified when it was received.")
+        }
+        let aad = Self.messageAAD(groupID: proof.groupID, epoch: proof.epoch,
+                                  sender: message.senderHash, index: proof.chainIndex,
+                                  prevHash: proof.prevMessageHash)
+        let entry: (RootIdentity, [DeviceEndorsement])?
+        do {
+            entry = try await directoryEntry(for: message.senderHash, forceRefresh: true)
+        } catch {
+            return .unavailable("Couldn't reach the directory to re-check this card. It was verified when it was received.")
+        }
+        guard let entry else {
+            return .failed("This sender is no longer in the public directory.")
+        }
+        let wire = SyncEngine.WireMessage(ciphertext: proof.ciphertext,
+                                          senderDevicePublicKey: proof.signerDevicePublicKey,
+                                          signature: proof.signature,
+                                          sentAt: message.sentAt)
+        guard verifyInbound(wire, aad: aad, entry: entry) else {
+            ChatEngine.msgLog.error("card: re-verify FAILED (sender=\(message.senderHash, privacy: .public) signer=\(proof.signerFingerprint, privacy: .public))")
+            return .failed("This card's signature no longer checks out against \(entry.0.displayName)'s published keys. Don't act on it.")
+        }
+        // The signature covers the CIPHERTEXT, and the message key that opened
+        // it is long gone (per-message forward secrecy), so a passing signature
+        // alone doesn't establish that the card on screen is what was inside.
+        // The digest recorded at decryption time closes that on our side. See
+        // MessageProof.cardDigest for precisely what it does and doesn't cover.
+        guard let recorded = proof.cardDigest else {
+            // Shouldn't happen — this build always records one. Report it
+            // rather than skipping the comparison and returning `.sealed`,
+            // which would claim a check that never ran.
+            return .unavailable("This card's signature checks out, but it was recorded before this build kept content digests, so the stored copy can't be compared against what was received.")
+        }
+        // A nil digest here (encode failure) compares unequal to a recorded
+        // one, so this fails closed.
+        guard let card = message.card, card.digest == recorded else {
+            ChatEngine.msgLog.error("card: stored card does not match the digest recorded at decryption (sender=\(message.senderHash, privacy: .public))")
+            return .failed("The stored copy of this card doesn't match what was received. Don't act on it — ask \(entry.0.displayName) to send it again.")
+        }
+        return .sealed(signerFingerprint: proof.signerFingerprint, sender: entry.0)
+    }
+
+    /// A directory entry already fetched this session, if there is one.
+    /// Synchronous and cache-only — it never reaches the network.
+    ///
+    /// Exists so a card bubble can show a group member's real name and tier
+    /// when they aren't in the FriendStore (you can share a colony with someone
+    /// you've never forged with) without doing a fetch per row. `refresh`
+    /// populates this for every sender it processes, so it's warm in practice.
+    func cachedIdentity(for hash: String) -> RootIdentity? {
+        directoryCache[hash]?.0
     }
 
     /// chainKey → (messageKey, index); chain advances, old key destroyed.

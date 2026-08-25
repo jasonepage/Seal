@@ -10,6 +10,7 @@ struct ChatView: View {
     @State private var draft = ""
     @State private var showVerification = false
     @State private var replyingTo: ChatEngine.ChatMessage?
+    @State private var showCardCompose = false
     /// Drives the post-report confirmation alert. Set to the reported sender's
     /// display name so feedback is visible even if no mail client opens.
     @State private var reportedSenderName: String?
@@ -81,6 +82,16 @@ struct ChatView: View {
                 }
 
                 HStack(spacing: 12) {
+                    // Seal a card (docs/CARDS.md). The camera lives in its own
+                    // tab, so this sits at the head of the composer rather than
+                    // beside a shutter button.
+                    Button { showCardCompose = true } label: {
+                        Image(systemName: "seal")
+                            .font(.system(size: 22))
+                            .foregroundStyle(SealTheme.brass)
+                    }
+                    .accessibilityLabel("Seal a card")
+
                     TextField("Sealed message…", text: $draft)
                         .textFieldStyle(.plain)
                         .padding(10)
@@ -141,6 +152,10 @@ struct ChatView: View {
             VerificationSheet(chat: engine.chats.first(where: { $0.id == chat.id }) ?? chat,
                               myRoot: myRoot, friendStore: friendStore, engine: engine)
                 .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showCardCompose) {
+            CardComposeSheet(chat: engine.chats.first(where: { $0.id == chat.id }) ?? chat,
+                             myRoot: myRoot, engine: engine)
         }
         .task {
             // Poll for inbound messages while the chat is open.
@@ -216,9 +231,75 @@ struct ChatView: View {
             .foregroundStyle(.orange.opacity(0.75))
             .frame(maxWidth: .infinity)
             .padding(.vertical, 2)
+        } else if let card = message.card {
+            // A card is a bubble kind, but not a bubble shape — it spans the
+            // content width so it can never be skimmed past as ordinary chat.
+            // Reactions and replies still work on it: it carries the same
+            // wireID as any other message.
+            VStack(alignment: .leading, spacing: 2) {
+                if message.replyPreview != nil { replyQuote(message) }
+                SealedCardBubble(message: message, card: card, mine: mine,
+                                 senderName: cardSenderName(message, mine: mine),
+                                 senderIdentity: identity(for: message.senderHash),
+                                 engine: engine)
+                    .contextMenu { cardMenu(message, mine: mine) }
+                reactionChips(message)
+            }
         } else {
             messageBubble(message, mine: mine)
         }
+    }
+
+    /// Long-press menu for a card. Same actions as a bubble minus the reaction
+    /// picker's visual noise — react, reply, and (for others' cards) the
+    /// Guideline 1.2 report/block pair.
+    @ViewBuilder
+    private func cardMenu(_ message: ChatEngine.ChatMessage, mine: Bool) -> some View {
+        ForEach(Self.reactionEmojis, id: \.self) { emoji in
+            Button {
+                Task { await engine.react(emoji, to: message, in: chat, from: myRoot) }
+            } label: {
+                Text("\(emoji)  React")
+            }
+        }
+        Divider()
+        Button { replyingTo = message } label: {
+            Label("Reply", systemImage: "arrowshape.turn.up.left")
+        }
+        if !mine {
+            Divider()
+            Button(role: .destructive) {
+                engine.block(message.senderHash)
+                if let url = reportMailURL(for: message) { openURL(url) }
+                reportedSenderName = senderName(message)
+            } label: {
+                Label("Report", systemImage: "exclamationmark.bubble")
+            }
+            Button(role: .destructive) {
+                engine.block(message.senderHash)
+            } label: {
+                Label("Block \(senderName(message))", systemImage: "hand.raised")
+            }
+        }
+    }
+
+    /// Full identity for a member hash — the card detail sheet needs the tier
+    /// and root public key to render the ring and the fingerprint phrase.
+    ///
+    /// Falls back to the engine's directory cache, because a colony can contain
+    /// someone you've never forged with: the FriendStore has nothing for them,
+    /// but `refresh` has already fetched their record to verify their messages.
+    private func identity(for hash: String) -> RootIdentity? {
+        if hash == myRoot.credentialIDHash { return myRoot }
+        return friendStore?.friends.first { $0.id == hash }?.identity
+            ?? engine.cachedIdentity(for: hash)
+    }
+
+    /// Name on a card's verification line. Same fallback chain as `identity`,
+    /// so a card from a non-friend colony member isn't attributed to "Someone".
+    private func cardSenderName(_ message: ChatEngine.ChatMessage, mine: Bool) -> String {
+        if mine { return myRoot.displayName }
+        return identity(for: message.senderHash)?.displayName ?? senderName(message)
     }
 
     private func senderName(_ message: ChatEngine.ChatMessage) -> String {
@@ -235,7 +316,7 @@ struct ChatView: View {
         let body = """
         A user reported a message in Seal.
 
-        Reported message: "\(m.mediaRef != nil ? "[photo]" : m.text)"
+        Reported message: "\(m.mediaRef != nil ? "[photo]" : ChatEngine.summary(m))"
         Reported user (root hash): \(m.senderHash)
         Message id: \(m.wireID ?? "—")
         Reporter (root hash): \(myRoot.credentialIDHash)

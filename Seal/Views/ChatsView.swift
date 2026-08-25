@@ -95,7 +95,13 @@ struct ChatsView: View {
                     }
                 }
                 Text(last.map { m in
-                    let body = m.mediaRef != nil ? "📷 Photo" : m.text
+                    // ChatEngine.summary, not `text`: a card's `text` carries
+                    // the old-build fallback ("…update Seal to view"), which
+                    // reads as nonsense in a list row on a build that renders
+                    // cards. It summarises to the card's title instead — never
+                    // to its value, since a truncated address in a list row is
+                    // an invitation to misread it.
+                    let body = ChatEngine.summary(m)
                     return m.senderHash == myRoot.credentialIDHash ? "You: \(body)" : body
                 } ?? "Sealed and ready")
                     .font(.caption)
