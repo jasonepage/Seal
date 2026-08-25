@@ -425,11 +425,22 @@ struct CardComposeSheet: View {
             // `reviewedCard` if a future edit path forgets to rebuild it.
             let card = try SealedCard.validated(cardType: cardType, title: title,
                                                 value: value, asset: asset, note: note)
-            // Dismiss immediately: the card is already appended optimistically
-            // by sendPayload, so the sender sees it land in the chat, and a
-            // queued offline send shouldn't hold the sheet open.
-            dismiss()
-            Task { await engine.sendCard(card, in: chat, from: myRoot) }
+            Task {
+                // Commit-moment check ("Face ID to seal a card", AppLock).
+                // Runs AFTER validation so a cancelled prompt costs nothing,
+                // and BEFORE dismiss so a refused prompt leaves the sender on
+                // the review step with a plain-language reason, not a silently
+                // unsent card.
+                guard await AppLock.confirmSeal(ownerHash: myRoot.credentialIDHash) else {
+                    validationMessage = "Couldn't confirm it's you — nothing was sent."
+                    return
+                }
+                // Dismiss immediately after confirmation: the card is appended
+                // optimistically by sendPayload, so the sender sees it land in
+                // the chat, and a queued offline send shouldn't hold the sheet.
+                dismiss()
+                await engine.sendCard(card, in: chat, from: myRoot)
+            }
         } catch {
             validationMessage = error.localizedDescription
             withAnimation(.snappy) { step = .compose }

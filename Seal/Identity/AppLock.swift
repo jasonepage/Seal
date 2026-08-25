@@ -27,6 +27,7 @@ final class AppLock {
 
     static func wipe(ownerHash: String) {
         KeychainStore.delete("seal.applock.\(ownerHash)")
+        KeychainStore.delete("seal.cardlock.\(ownerHash)")
     }
 
     var isAvailable: Bool {
@@ -36,7 +37,7 @@ final class AppLock {
     /// Toggling either way requires authenticating first — otherwise anyone
     /// holding an unlocked phone could quietly disable the lock.
     func setEnabled(_ enabled: Bool) async {
-        guard await authenticate(reason: enabled
+        guard await Self.authenticate(reason: enabled
             ? "Confirm to require Face ID for Seal"
             : "Confirm to remove the Face ID lock") else { return }
         if enabled {
@@ -56,12 +57,51 @@ final class AppLock {
 
     func unlock() async {
         guard isLocked else { return }
-        if await authenticate(reason: "Unlock Seal") {
+        if await Self.authenticate(reason: "Unlock Seal") {
             isLocked = false
         }
     }
 
-    private func authenticate(reason: String) async -> Bool {
+    // MARK: - Sealed-card confirmation
+
+    /// "Face ID to seal a card": a second, independent per-identity flag
+    /// (`seal.cardlock.<hash>`). Static API on purpose — CardComposeSheet is
+    /// constructed in ChatView without an AppLock instance, and the check is a
+    /// single keychain read plus one LAContext prompt at the commit moment,
+    /// not ongoing state. Protects against someone holding the UNLOCKED phone
+    /// sending a sealed money request as its owner; it is unrelated to SIM
+    /// swapping, which never touched Seal in the first place.
+    private static func cardLockKey(_ ownerHash: String) -> String { "seal.cardlock.\(ownerHash)" }
+
+    static func isCardLockEnabled(ownerHash: String) -> Bool {
+        KeychainStore.load(cardLockKey(ownerHash)) != nil
+    }
+
+    /// Toggling either way authenticates first — same rationale as
+    /// `setEnabled`. Returns the state actually in effect afterwards, so the
+    /// caller's toggle snaps back on a failed or cancelled prompt.
+    static func setCardLockEnabled(_ enabled: Bool, ownerHash: String) async -> Bool {
+        guard await authenticate(reason: enabled
+            ? "Confirm to require Face ID when sealing a card"
+            : "Confirm to remove the sealed-card Face ID check") else {
+            return isCardLockEnabled(ownerHash: ownerHash)
+        }
+        if enabled {
+            KeychainStore.save(Data([1]), for: cardLockKey(ownerHash))
+        } else {
+            KeychainStore.delete(cardLockKey(ownerHash))
+        }
+        return enabled
+    }
+
+    /// Called by CardComposeSheet at "Seal and send". True = proceed.
+    /// Fail-closed on a failed prompt; demo mode skips, matching the app lock.
+    static func confirmSeal(ownerHash: String) async -> Bool {
+        guard isCardLockEnabled(ownerHash: ownerHash), !DemoFixtures.isActive else { return true }
+        return await authenticate(reason: "Confirm it's you to seal and send")
+    }
+
+    private static func authenticate(reason: String) async -> Bool {
         let context = LAContext()
         guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: nil) else {
             return true     // no passcode on device: nothing meaningful to gate behind

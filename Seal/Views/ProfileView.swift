@@ -29,6 +29,8 @@ struct ProfileView: View {
     @State private var revoking: DeviceEndorsement?
     @State private var renaming = false
     @State private var draftName = ""
+    /// Mirrors the keychain flag; loaded in .task so the toggle renders true state.
+    @State private var cardLockOn = false
 
     /// Live name — reflects an in-session rename immediately (myRoot is a
     /// passed-in copy that only refreshes when the parent re-renders).
@@ -98,6 +100,22 @@ struct ProfileView: View {
                                        get: { appLock.isEnabled },
                                        set: { value in Task { await appLock.setEnabled(value) } }),
                                    switchTint: SealTheme.brass)
+                    }
+
+                    // Commit-moment lock: one biometric check right at "Seal
+                    // and send". Deliberately NOT a gate on ordinary messages —
+                    // friction belongs on the irreversible artifact, not chat.
+                    if appLock.isAvailable {
+                        settingRow(icon: "checkmark.seal", tint: SealTheme.brass,
+                                   title: "Face ID to seal a card",
+                                   subtitle: "Confirm it's you right before a sealed card is sent",
+                                   isOn: .init(
+                                       get: { cardLockOn },
+                                       set: { value in Task {
+                                           cardLockOn = await AppLock.setCardLockEnabled(value, ownerHash: myRoot.credentialIDHash)
+                                       } }),
+                                   switchTint: SealTheme.brass)
+                            .task { cardLockOn = AppLock.isCardLockEnabled(ownerHash: myRoot.credentialIDHash) }
                     }
 
                     // Simplified mode (Theme/ParentMode.swift). NEVER labelled
