@@ -232,6 +232,7 @@ struct ProfileView: View {
                     // presentation state, so it is cleared here — otherwise the
                     // next identity on this phone would inherit it.
                     ParentMode.wipe(ownerHash: myRoot.credentialIDHash)
+                    RecoveryNotice.wipe(ownerHash: myRoot.credentialIDHash)
                     onSignOut()
                 }
             }
@@ -345,6 +346,7 @@ struct ProfileView: View {
             }
         }
         ParentMode.wipe(ownerHash: myRoot.credentialIDHash)
+        RecoveryNotice.wipe(ownerHash: myRoot.credentialIDHash)
         onDelete()
     }
 

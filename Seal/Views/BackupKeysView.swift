@@ -27,6 +27,17 @@ enum BackupKeyCopy {
 
     static let needsMainKey = "Adding or removing a backup key needs your main key — the one you started with. A phone you recovered using a backup key can't do it."
 
+    /// Said after a recovery, where it cannot be mistaken for reassurance.
+    /// The state is survivable but not stable, and the honest instruction is
+    /// to leave it — so the copy gives the instruction, not just the fact.
+    static let recoveredBody = "You signed in with your backup key, so your identity and your friends are back. Your main key is gone, though, and this phone can't add another backup key or replace the one you used — both need the main key.\n\nThat means one more loss would take this identity for good. When you can, start a fresh identity with new keys and add your family again. Until then, keep this backup key somewhere safe."
+
+    static func recoveredAction(parentMode: Bool) -> String {
+        parentMode
+            ? "Ask whoever set up this phone to help you start fresh when they can."
+            : "Start fresh when you can — this identity can't be made safe again."
+    }
+
     /// Parent Mode aims the prompt at the person setting the phone up, not at
     /// the person holding it (UI.md §Parent Mode). Never names a category.
     static func promptTitle(parentMode: Bool) -> String {
@@ -54,6 +65,24 @@ struct BackupKeysSection: View {
             Text("Backup keys")
                 .font(.system(.subheadline, design: .rounded, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.6))
+
+            if RecoveryNotice.isRecovered(ownerHash: myRoot.credentialIDHash) {
+                // Standing, not dismissible: the one-time card lands the news,
+                // this keeps it true. Orange, matching every other "take your
+                // time and look at this" notice in the app.
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("Recovered with a backup key", systemImage: "exclamationmark.shield")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.orange)
+                    Text(BackupKeyCopy.recoveredAction(parentMode: parentMode))
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.7))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+            }
 
             if backups.isEmpty {
                 Text(BackupKeyCopy.stakes)
@@ -415,3 +444,67 @@ struct BackupKeyPrompt: View {
         }
     }
 }
+
+// MARK: - After a recovery (FR-3)
+
+/// Shown once, immediately after signing in with a backup key. Not a
+/// congratulation: the recovery worked, and the phone is now in a state that
+/// cannot be repaired from this phone. Saying that plainly at the only moment
+/// the person is definitely paying attention is the whole point — the standing
+/// notice in the keys panel keeps it true afterwards.
+struct RecoveredIdentityNotice: View {
+    let myRoot: RootIdentity
+    var onAcknowledge: () -> Void
+
+    @State private var parentMode = false
+
+    var body: some View {
+        ZStack {
+            SealTheme.ink.ignoresSafeArea()
+            ScrollView {
+                VStack(spacing: 20) {
+                    Image(systemName: "exclamationmark.shield")
+                        .font(.system(size: 44))
+                        .foregroundStyle(.orange)
+                        .padding(.top, 48)
+
+                    Text("Your main key is gone.")
+                        .font(.system(.title2, design: .rounded, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 28)
+
+                    Text(BackupKeyCopy.recoveredBody)
+                        .font(.callout)
+                        .foregroundStyle(.white.opacity(0.8))
+                        .multilineTextAlignment(.leading)
+                        .padding(.horizontal, 28)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text(BackupKeyCopy.recoveredAction(parentMode: parentMode))
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.orange)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 28)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Button(action: onAcknowledge) {
+                        Text("I understand")
+                            .frame(maxWidth: .infinity, minHeight: 52)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.orange)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 8)
+                    .padding(.bottom, 32)
+                }
+                .frame(maxWidth: 460)
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .preferredColorScheme(.dark)
+        .interactiveDismissDisabled()
+        .task { parentMode = ParentMode(ownerHash: myRoot.credentialIDHash).isOn }
+    }
+}
+

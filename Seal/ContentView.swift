@@ -15,6 +15,7 @@ struct ContentView: View {
     @State private var perkRedeemer: PerkRedeemer?
     @State private var showPostRegistrationRedeem = false
     @State private var showBackupPrompt = false
+    @State private var showRecoveryNotice = false
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -38,6 +39,16 @@ struct ContentView: View {
                             showBackupPrompt = false
                         }
                     }
+                    // After a backup-key recovery (FR-3): say plainly that the
+                    // main key is gone and what to do about it. Shown once —
+                    // the keys panel keeps a standing notice, so this doesn't
+                    // need to nag, only to land.
+                    .fullScreenCover(isPresented: $showRecoveryNotice) {
+                        RecoveredIdentityNotice(myRoot: root) {
+                            RecoveryNotice.acknowledge(ownerHash: root.credentialIDHash)
+                            showRecoveryNotice = false
+                        }
+                    }
             } else if let ceremony {
                 RegistrationView(ceremony: ceremony, sync: sync)
             }
@@ -56,7 +67,14 @@ struct ContentView: View {
             // prompts (it should — nothing has changed about the risk), and
             // signing in on an identity that already has one stays quiet.
             let hasBackup = !(identity.rootIdentity?.backupCredentials ?? []).isEmpty
-            if new != nil, ceremony?.phase == .sealed, !DemoFixtures.isActive, !hasBackup {
+            let recovered = new.map { RecoveryNotice.needsAcknowledgement(ownerHash: $0) } ?? false
+            // A phone that just came back from the dead has a more urgent
+            // truth to tell than "add a backup key" — and telling it to add
+            // one would be advice it cannot take, since that needs the root
+            // key it no longer has.
+            if new != nil, ceremony?.phase == .sealed, !DemoFixtures.isActive, recovered {
+                showRecoveryNotice = true
+            } else if new != nil, ceremony?.phase == .sealed, !DemoFixtures.isActive, !hasBackup {
                 showBackupPrompt = true
             }
             // Fresh ceremony THIS session (not an app relaunch) → offer the

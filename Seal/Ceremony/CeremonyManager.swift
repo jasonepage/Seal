@@ -326,6 +326,14 @@ final class CeremonyManager: NSObject {
                 revokedAt: nil)
 
             identity.completeRegistration(identity: root, endorsement: endorsement)
+            // Recovered with a backup key? Remember it (FR-3). Recorded HERE,
+            // after the assertion verified and the device endorsement exists,
+            // never at resolution time — a resolution that fails verification
+            // or a ceremony the user abandons must not leave this phone
+            // telling its owner their main key is gone when it isn't.
+            if resolved.backup != nil {
+                RecoveryNotice.record(ownerHash: root.credentialIDHash)
+            }
             // Publish the appended endorsement immediately (same reasoning as
             // registration step 6): don't rely on a deferred view task that can
             // be skipped or cancelled before the CloudKit save lands.
