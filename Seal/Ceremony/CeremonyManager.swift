@@ -119,7 +119,8 @@ final class CeremonyManager: NSObject {
             //    every sender-key envelope.
             phase = .endorsing
             let kemPub = identity.kemPublicKeyData ?? Data()
-            let commitment = Data(SHA256.hash(data: Data("seal.endorse.v2".utf8) + devicePub + kemPub))
+            let commitment = IdentityManager.endorsementCommitment(
+                devicePublicKey: devicePub, kemBundlePublicKeys: kemPub)
             let assertion = try await performRequest(
                 makeAssertionRequest(tier: tier, challenge: commitment, allowedCredentialID: registration.credentialID)
             ) as? ASAuthorizationPublicKeyCredentialAssertion
@@ -301,7 +302,8 @@ final class CeremonyManager: NSObject {
             let devicePub = deviceKey.publicKey.x963Representation
             phase = .endorsing
             let kemPub = identity.kemPublicKeyData ?? Data()
-            let commitment = Data(SHA256.hash(data: Data("seal.endorse.v2".utf8) + devicePub + kemPub))
+            let commitment = IdentityManager.endorsementCommitment(
+                devicePublicKey: devicePub, kemBundlePublicKeys: kemPub)
             // Endorse with the SAME provider used to identify — passing both
             // would re-trigger the NFC modal for passkey users — and with the
             // SAME credential that just asserted. That second part is what
@@ -419,7 +421,34 @@ final class CeremonyManager: NSObject {
     ///
     /// Throws rather than returning anything unverified — an unverified receipt
     /// is worse than no receipt, because it still looks like evidence.
-    func signReceipt(commitment: Data, counterparty: RootIdentity) async throws -> WebAuthnAssertion {
+    /// Takes the receipt's FIELDS, never raw bytes, and builds the commitment
+    /// itself. The previous signature accepted a `Data` and asked the
+    /// counterparty's ROOT credential to sign whatever arrived — a signing
+    /// oracle one careless caller away from a root signature over a
+    /// `seal.backup.v1` or `seal.endorse.v3` commitment, which is a permanent
+    /// takeover from a tap the victim believes is a handover receipt. The one
+    /// caller today is well-behaved, so nothing was exploitable; the point is
+    /// that the type system now guarantees it instead of a convention.
+    func signReceipt(receiptID: String,
+                     giverHash: String,
+                     receiverHash: String,
+                     itemDescription: String,
+                     photoSHA256: Data?,
+                     signedAtEpoch: Int64,
+                     nonce: Data,
+                     counterparty: RootIdentity) async throws -> WebAuthnAssertion {
+        let commitment = CustodyReceipt.commitment(
+            receiptID: receiptID,
+            giverHash: giverHash,
+            receiverHash: receiverHash,
+            itemDescription: itemDescription,
+            photoSHA256: photoSHA256,
+            signedAtEpoch: signedAtEpoch,
+            nonce: nonce)
+        return try await signReceipt(commitment: commitment, counterparty: counterparty)
+    }
+
+    private func signReceipt(commitment: Data, counterparty: RootIdentity) async throws -> WebAuthnAssertion {
         guard let credentialID = counterparty.rawCredentialID else {
             throw CeremonyError.missingCredentialID
         }

@@ -1,6 +1,6 @@
 # Verification hardening — plan, not yet started
 
-**Written:** 2026-08-25 · **Status:** APPROVED IN PRINCIPLE, NOT STARTED — do not begin until Nathan confirms, and until the in-flight custody-receipts work has landed.
+**Written:** 2026-08-25 · **Status:** 1–4 DONE 2026-08-25 (uncompiled). Item 5 deliberately NOT done — see why below. One follow-up action remains: flip `WebAuthnAssertion.enforceContextChecks` after reading the logs (item 2).
 **Origin:** adversarial review of the FR-3 backup-key work (HANDOFF, 8/25). None of these four were introduced by FR-3; all four sit in or beside the paths it widened.
 
 **Sequencing:** items 1 → 4 in order. All four before any TestFlight build carrying backup keys. Item 3 has a deadline of its own: it must land **before** custody receipts ship any records, because retrofitting a domain prefix after records exist forks verification.
@@ -51,7 +51,9 @@
 
 **The attack.** If any caller-influenced input reaches those bytes, a tap the victim believes is "confirming I received the keys" becomes a root signature over a `seal.backup.v1` or `seal.endorse.v2` commitment — a permanent identity takeover from a single, socially-plausible tap at a handover.
 
-**Checked since writing this.** `Seal/Receipts/CustodyReceipt.swift` builds `SHA256("seal.receipt.v1" ‖ giver ‖ receiver ‖ photoHash ‖ desc ‖ at ‖ nonce)` — it **is** domain-prefixed, so the oracle is not currently being fed un-prefixed bytes and the takeover path is not open today. The risk is structural rather than live: safety rests on every present and future caller behaving, when the type system could enforce it instead. **Note also that `desc` is a variable-length value in the middle of that concatenation with no length framing — item 4's ambiguity applies to receipts too, and should be fixed in the same pass** (a receipt whose description and timestamp can be re-split is a receipt that attests to something other than what was signed).
+**Checked, then re-checked — and the second reading corrected the first.** The file's header comment writes the commitment in shorthand as `SHA256("seal.receipt.v1" | giver | receiver | ...)`, which reads as an unframed concatenation, and this plan initially said so. **The implementation does not do that.** `CustodyReceipt.commitment` length-frames every field with a `UInt32` big-endian prefix and adds a presence byte so "no photo" and "empty photo" cannot collide. It is the most careful commitment construction in the codebase, and item 4 below now follows its lead rather than the other way round. Lesson recorded rather than quietly fixed: a shorthand comment is not the code.
+
+So the domain prefix is present and the framing is right; the takeover path was never open. What remained was structural — `signReceipt` accepted raw `Data`, so safety rested on every present and future caller behaving rather than on the type system.
 
 **The fix.** Change the signature so `signReceipt` takes the structured receipt fields and builds `SHA256("seal.receipt.v1" ‖ …)` itself. No API that hands a root key arbitrary bytes should exist. Same rule as every other commitment in the app: the function that gets the signature owns the domain string.
 
@@ -83,6 +85,10 @@
 
 ---
 
-## 5. Follow-on, cheap: cap the security-key allow-list
+## 5. NOT DONE, and here is why: capping the security-key allow-list
 
-`fetchDirectoryCredentials` feeds every published credential ID into `allowedCredentials` at sign-in. CTAP2 authenticators enforce `maxCredentialCountInList` (commonly 8–32), so a flooded directory breaks security-key sign-in for **everyone**, including identities with no backup keys. FR-3 raised the amplification from one ID per record to many. Cap the list and order it so the tapping user's likeliest candidates come first. Pairs naturally with the ~1k directory ceiling already documented in SDS §7.
+The problem is real: `fetchDirectoryCredentials` feeds every published credential ID into `allowedCredentials` at sign-in, CTAP2 authenticators enforce `maxCredentialCountInList` (commonly 8–32), and a flooded directory therefore breaks security-key sign-in for **everyone**, including identities with no backup keys.
+
+**But the obvious fix makes it worse.** Capping the list means a legitimate user whose credential falls outside the cap simply cannot sign in — and under a flood, "outside the cap" is almost everyone. Trading a directory-flood DoS for a self-inflicted one is not a fix, and "order by likeliest candidate" is not implementable when the whole point is that we do not yet know who is tapping.
+
+The real fix is a design change, not a patch: narrow the candidate set *before* building the allow-list — let the person type their name, or remember the last identity that signed in on this phone, and query for that. Left undone deliberately, with the reasoning recorded, rather than shipped as a cap that breaks the thing it protects. Pairs with the ~1k directory ceiling in SDS §7; do both together.

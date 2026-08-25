@@ -194,6 +194,43 @@ final class IdentityManager {
 
     // MARK: - Verification
 
+    // MARK: - Endorsement commitments
+
+    /// Commitment a root (or backup) credential signs to endorse a device.
+    ///
+    /// v3 length-frames both values. v2 did not: `SHA256(domain ‖ D ‖ K)` with
+    /// two variable-length values means `(D, K)` and `(D‖K[0..<n], K[n...])`
+    /// hash identically, so ONE root signature authorises many splits. The
+    /// live consequence was revocation evasion — re-split a revoked
+    /// endorsement as `devicePublicKey = D‖K`, and it still verifies while no
+    /// longer byte-matching the revocation entry that killed it, so a dead
+    /// device walks again. It also shifts which bytes `HybridKEM.wrapToAll`
+    /// treats as a KEM key.
+    ///
+    /// `CustodyReceipt.commitment` already did this correctly — UInt32BE per
+    /// field — and is the model this follows.
+    static func endorsementCommitment(devicePublicKey: Data, kemBundlePublicKeys: Data) -> Data {
+        var input = Data("seal.endorse.v3".utf8)
+        func field(_ data: Data) {
+            var length = UInt32(data.count).bigEndian
+            withUnsafeBytes(of: &length) { input.append(contentsOf: $0) }
+            input.append(data)
+        }
+        field(devicePublicKey)
+        field(kemBundlePublicKeys)
+        return Data(SHA256.hash(data: input))
+    }
+
+    /// The unframed v2 commitment. Still ACCEPTED during the migration window
+    /// so that every endorsement published before v3 keeps verifying — an
+    /// endorsement that stops verifying is a phone that can talk to nobody.
+    /// Nothing creates v2 any more. Drop this once the family is known to be
+    /// on a v3 build and every directory record has been re-endorsed (a
+    /// sign-in on each phone rewrites it).
+    static func legacyEndorsementCommitmentV2(devicePublicKey: Data, kemBundlePublicKeys: Data) -> Data {
+        Data(SHA256.hash(data: Data("seal.endorse.v2".utf8) + devicePublicKey + kemBundlePublicKeys))
+    }
+
     /// Every credential allowed to endorse a device for this identity: the
     /// root credential, plus each backup credential the root has endorsed and
     /// not revoked (FR-3, `seal.backup.v1`).
@@ -260,14 +297,30 @@ final class IdentityManager {
         let authorities = authorityKeys(for: root)
         guard !authorities.isEmpty else { return [] }
         return endorsements.filter { e in
-            guard e.revokedAt == nil,
-                  let assertion = try? JSONDecoder().decode(WebAuthnAssertion.self, from: e.assertion)
+            // NOTE: `e.revokedAt` is deliberately NOT consulted. It is a plain
+            // field inside the directory-supplied blob, covered by no
+            // signature, and it used to be the FIRST condition here — so
+            // anyone able to write an Identity record could set it on every
+            // endorsement and un-verify every device of that identity, with no
+            // key, no revocation record and no signature. Worse, the symptom
+            // is indistinguishable from the 6/26 desync, so it would have been
+            // triaged as a regression. The only trustworthy revocation channel
+            // is `revokedDevicePublicKeys` — root-signed, domain-separated,
+            // already applied by `fetchIdentity` before anything reaches here.
+            // (The app never writes a non-nil value: both construction sites
+            // pass nil. The field only ever served an attacker.)
+            guard let assertion = try? JSONDecoder().decode(WebAuthnAssertion.self, from: e.assertion)
             else { return false }
-            // v2 commitment binds signing AND KEM keys — a directory that
-            // swaps either one fails verification.
-            let commitment = Data(SHA256.hash(data:
-                Data("seal.endorse.v2".utf8) + e.devicePublicKey + e.kemBundlePublicKeys))
-            guard CeremonyManager.clientDataChallengeMatches(assertion.clientDataJSON, expected: commitment)
+            // The commitment binds signing AND KEM keys — a directory that
+            // swaps either one fails verification. v3 (length-framed) is what
+            // this build creates; v2 is accepted for endorsements published
+            // before the framing fix. See endorsementCommitment.
+            let v3 = endorsementCommitment(devicePublicKey: e.devicePublicKey,
+                                           kemBundlePublicKeys: e.kemBundlePublicKeys)
+            let v2 = legacyEndorsementCommitmentV2(devicePublicKey: e.devicePublicKey,
+                                                   kemBundlePublicKeys: e.kemBundlePublicKeys)
+            guard CeremonyManager.clientDataChallengeMatches(assertion.clientDataJSON, expected: v3)
+                    || CeremonyManager.clientDataChallengeMatches(assertion.clientDataJSON, expected: v2)
             else { return false }
             // Prefer the authority the assertion actually names. Trying every
             // authority in turn would also work, but each failed attempt logs

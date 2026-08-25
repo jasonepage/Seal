@@ -257,9 +257,12 @@ extension SyncEngine {
         return endorsements.contains { e in
             guard let assertion = try? JSONDecoder().decode(WebAuthnAssertion.self, from: e.assertion),
                   assertion.verify(with: rootPub) else { return false }
-            let commitment = Data(SHA256.hash(data:
-                Data("seal.endorse.v2".utf8) + e.devicePublicKey + e.kemBundlePublicKeys))
-            return CeremonyManager.clientDataChallengeMatches(assertion.clientDataJSON, expected: commitment)
+            let v3 = IdentityManager.endorsementCommitment(
+                devicePublicKey: e.devicePublicKey, kemBundlePublicKeys: e.kemBundlePublicKeys)
+            let v2 = IdentityManager.legacyEndorsementCommitmentV2(
+                devicePublicKey: e.devicePublicKey, kemBundlePublicKeys: e.kemBundlePublicKeys)
+            return CeremonyManager.clientDataChallengeMatches(assertion.clientDataJSON, expected: v3)
+                || CeremonyManager.clientDataChallengeMatches(assertion.clientDataJSON, expected: v2)
         }
     }
 

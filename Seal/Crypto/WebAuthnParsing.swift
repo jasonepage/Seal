@@ -260,6 +260,55 @@ struct WebAuthnAssertion: Codable, Hashable {
     let authenticatorData: Data
     let signature: Data
 
+    /// Enforce the WebAuthn context checks below instead of only logging them.
+    ///
+    /// **Ships `false` on purpose.** These checks have never run in this app,
+    /// so nobody knows what the family's real authenticators actually emit —
+    /// and turning them on blind would un-verify existing friendships and
+    /// endorsements with no way to tell an attack from a bad guess. Run a
+    /// build with this false, read the `webauthn` os-log for CONTEXT VIOLATION
+    /// lines over a few days, then flip it. One line, deliberately greppable.
+    static let enforceContextChecks = false
+
+    /// What a signature check alone does NOT establish.
+    ///
+    /// `verify` proves a P-256 signature matches a message. That is not the
+    /// same as proving the assertion was made FOR SEAL, in an ASSERTION
+    /// ceremony, with a HUMAN PRESENT. Without these three, "a Seal assertion"
+    /// is just a raw signature over chosen bytes: a signature the same key
+    /// produced for another relying party — or in a registration rather than
+    /// an assertion context — is accepted here if the bytes line up.
+    ///
+    /// - rpIdHash: first 32 bytes of authenticatorData == SHA256(RP ID).
+    /// - User Present (bit 0): somebody physically touched the authenticator.
+    /// - clientData.type == webauthn.get: this was an assertion.
+    ///
+    /// User Verified is deliberately NOT required: the UV policy is
+    /// `.preferred` so PIN-less keys stay tap-only (the 6/26 fix), which means
+    /// a perfectly legitimate assertion can carry UV unset.
+    func contextViolations() -> [String] {
+        var problems: [String] = []
+        guard authenticatorData.count >= 37 else {
+            return ["authenticatorData too short (\(authenticatorData.count) bytes)"]
+        }
+        let expected = Data(SHA256.hash(data: Data(CeremonyManager.relyingPartyID.utf8)))
+        if Data(authenticatorData.prefix(32)) != expected {
+            problems.append("rpIdHash is not SHA256 of \(CeremonyManager.relyingPartyID)")
+        }
+        let flags = authenticatorData[authenticatorData.startIndex + 32]
+        if flags & 0x01 == 0 { problems.append("User Present flag unset") }
+        if let obj = try? JSONSerialization.jsonObject(with: clientDataJSON) as? [String: Any] {
+            switch obj["type"] as? String {
+            case "webauthn.get": break
+            case .some(let other): problems.append("clientData.type is \(other), not webauthn.get")
+            case .none: problems.append("clientData.type missing")
+            }
+        } else {
+            problems.append("clientDataJSON did not parse as JSON")
+        }
+        return problems
+    }
+
     /// WebAuthn signature is over authenticatorData ‖ SHA256(clientDataJSON).
     /// Security keys return ECDSA signatures DER-encoded; CryptoKit's
     /// `derRepresentation` parser handles them. We log which step fails
@@ -278,6 +327,15 @@ struct WebAuthnAssertion: Codable, Hashable {
         let signed = authenticatorData + Data(SHA256.hash(data: clientDataJSON))
         let ok = publicKey.isValidSignature(sig, for: signed)
         if ok {
+            // A matching signature is necessary, not sufficient — see
+            // contextViolations. Logged now, enforced once we know what real
+            // devices actually emit.
+            let violations = contextViolations()
+            if !violations.isEmpty {
+                let detail = violations.joined(separator: "; ")
+                WebAuthnDiag.log.error("verify: signature OK but CONTEXT VIOLATION [\(detail, privacy: .public)] enforcing=\(Self.enforceContextChecks, privacy: .public)")
+                if Self.enforceContextChecks { return false }
+            }
             WebAuthnDiag.log.info("verify: OK (flags=\(WebAuthnDiag.flagsSummary(flags), privacy: .public))")
         } else {
             WebAuthnDiag.log.error("""

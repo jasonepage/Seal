@@ -282,8 +282,17 @@ enum ReceiptService {
             nonce: nonce)
 
         // Strong half: their hardware key, on this phone, over this commitment.
-        let assertion = try await ceremony.signReceipt(commitment: commitment,
-                                                       counterparty: receiver)
+        // The ceremony rebuilds the commitment from these fields rather than
+        // trusting bytes we hand it — see signReceipt.
+        let assertion = try await ceremony.signReceipt(
+            receiptID: receiptID,
+            giverHash: myRoot.credentialIDHash,
+            receiverHash: receiver.credentialIDHash,
+            itemDescription: item,
+            photoSHA256: photoHash,
+            signedAtEpoch: signedAtEpoch,
+            nonce: nonce,
+            counterparty: receiver)
         // Our half: device key, already endorsed by our root credential.
         let signature = try deviceKey.signature(for: commitment)
 
