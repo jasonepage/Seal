@@ -51,7 +51,7 @@
 
 **The attack.** If any caller-influenced input reaches those bytes, a tap the victim believes is "confirming I received the keys" becomes a root signature over a `seal.backup.v1` or `seal.endorse.v2` commitment — a permanent identity takeover from a single, socially-plausible tap at a handover.
 
-**Honest limit on this finding.** `Seal/Receipts/CustodyReceipt.swift` was uncommitted and outside the review's reach, so whether today's receipt commitment is domain-prefixed is **unconfirmed**. The fix makes the question moot either way.
+**Checked since writing this.** `Seal/Receipts/CustodyReceipt.swift` builds `SHA256("seal.receipt.v1" ‖ giver ‖ receiver ‖ photoHash ‖ desc ‖ at ‖ nonce)` — it **is** domain-prefixed, so the oracle is not currently being fed un-prefixed bytes and the takeover path is not open today. The risk is structural rather than live: safety rests on every present and future caller behaving, when the type system could enforce it instead. **Note also that `desc` is a variable-length value in the middle of that concatenation with no length framing — item 4's ambiguity applies to receipts too, and should be fixed in the same pass** (a receipt whose description and timestamp can be re-split is a receipt that attests to something other than what was signed).
 
 **The fix.** Change the signature so `signReceipt` takes the structured receipt fields and builds `SHA256("seal.receipt.v1" ‖ …)` itself. No API that hands a root key arbitrary bytes should exist. Same rule as every other commitment in the app: the function that gets the signature owns the domain string.
 
