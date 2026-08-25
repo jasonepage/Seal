@@ -55,6 +55,17 @@ bytes are never rewritten for the same reason: silently "fixing" the middle of a
 string someone is about to wire money against is the exact bug this feature
 exists to prevent.
 
+### 2.1 Compose flow
+
+Two steps in one sheet — compose, then commit. Step 1 is the value field first
+(title/asset/note appear once a value exists) with no warning banner, because
+there is nothing to check yet. Step 2 renders the value through the same
+`CardValueText` the recipient's bubble uses, puts the "sealed exactly as
+written" warning immediately above those characters, and keeps the TTL warning
+and the honesty paragraph on screen at the commit moment. The primary button is
+never inert: an invalid value gets a readable reason inline. Back from review
+preserves every field; the card is re-validated from the raw fields at send.
+
 ## 3. Old-build compatibility
 
 A pre-card build decodes a card payload without error — Swift's synthesized

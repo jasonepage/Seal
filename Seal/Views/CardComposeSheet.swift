@@ -2,28 +2,39 @@ import SwiftUI
 
 /// Compose a Sealed Card (docs/CARDS.md).
 ///
-/// The whole screen exists to slow the sender down for about four seconds. The
-/// value field is monospaced with autocorrect and autocapitalisation off — an
-/// autocorrected wallet address is a silent, total loss — and a live preview
-/// shows the chunked value exactly as the recipient will see it, so "check
-/// every character" is something the sender can actually do here rather than
-/// advice they're given after the fact.
+/// Two steps inside one sheet, because the flow is two different mental modes:
+/// **compose** (transcribe one string correctly) and **commit** (irreversibly
+/// seal it). Step 1 puts the value field first and carries no warning — there
+/// is nothing to check yet. Step 2 shows the value exactly as the recipient's
+/// bubble will render it, with the check-every-character warning immediately
+/// above the characters it is talking about, and the honesty paragraph on
+/// screen at the commit moment rather than below a fold.
+///
+/// The value field is monospaced with autocorrect and autocapitalisation off —
+/// an autocorrected wallet address is a silent, total loss.
 ///
 /// Vault Warmth (UI.md §1): SF Pro rather than Rounded, because this is a
-/// security surface; brass on the seal glyph only, which is the trust moment;
-/// orange on the warnings, matching the TTL and screenshot notices elsewhere.
-/// No mascot (UI.md §1.1).
+/// security surface; brass on the seal glyph and the final commit only, which
+/// are the trust moments; orange on the warnings, matching the TTL and
+/// screenshot notices elsewhere. No mascot (UI.md §1.1).
 struct CardComposeSheet: View {
     let chat: ChatEngine.Chat
     let myRoot: RootIdentity
     @Bindable var engine: ChatEngine
 
+    private enum Step { case compose, review }
+
+    @State private var step: Step = .compose
     @State private var cardType: SealedCardType = .cryptoAddress
     @State private var title = ""
     @State private var value = ""
     @State private var asset = ""
     @State private var note = ""
     @State private var validationMessage: String?
+    /// Built by `SealedCard.validated` when Review is tapped; what step 2 shows
+    /// and what `send()` sends, so the preview and the wire bytes can't drift.
+    /// The raw fields above are never cleared, so Back preserves everything.
+    @State private var reviewedCard: SealedCard?
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -31,53 +42,170 @@ struct CardComposeSheet: View {
             ZStack {
                 SealTheme.ink.ignoresSafeArea()
                 ScrollView {
-                    // Grouped in threes: ViewBuilder tops out at 10 direct
-                    // children, and a flat list here was already at exactly 10.
+                    // Grouped: ViewBuilder tops out at 10 direct children.
                     VStack(alignment: .leading, spacing: 20) {
-                        Group {
-                            warningBanner
-                            typePicker
-                            titleField
-                            if cardType.usesAsset { assetField }
-                        }
-                        Group {
-                            valueField
-                            preview
-                            noteField
-                        }
-                        Group {
-                            ttlWarning
-                            if let validationMessage {
-                                Label(validationMessage, systemImage: "exclamationmark.triangle.fill")
-                                    .font(.caption)
-                                    .foregroundStyle(.orange)
-                            }
-                            honestyNote
+                        if step == .compose {
+                            composeStep
+                        } else if let reviewedCard {
+                            reviewStep(reviewedCard)
                         }
                     }
                     .padding(20)
                 }
                 .scrollDismissesKeyboard(.interactively)
             }
-            .navigationTitle("Seal a card")
+            // Short titles: the old "Seal a card" truncated to "Seal a…" next
+            // to two toolbar buttons. The primary action now lives at the
+            // bottom, so the bar holds one word and one button.
+            .navigationTitle(step == .compose ? "New card" : "Review")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    if step == .compose {
+                        Button("Cancel") { dismiss() }
+                            .foregroundStyle(.white.opacity(0.7))
+                    } else {
+                        // Back to compose, every field intact.
+                        Button {
+                            withAnimation(.snappy) { step = .compose }
+                        } label: {
+                            Label("Back", systemImage: "chevron.backward")
+                                .labelStyle(.titleAndIcon)
+                        }
                         .foregroundStyle(.white.opacity(0.7))
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    // Deliberately never disabled: tapping with an empty or
-                    // malformed value should SAY what's wrong, not sit inert
-                    // and leave the sender guessing.
-                    Button("Seal and send") { send() }
-                        .fontWeight(.semibold)
-                        .foregroundStyle(SealTheme.brass)
+                    }
                 }
             }
+            .safeAreaInset(edge: .bottom) { primaryButton }
         }
         .preferredColorScheme(.dark)
+    }
+
+    // MARK: - Step 1 · Compose
+
+    /// Value first. Title/asset/note are metadata and fade in only once there
+    /// is a value to label — before that they are noise between the sender and
+    /// the one field that matters. (Chosen over a disclosure group after seeing
+    /// both: the fade needs no extra tap and can't hide a half-filled field.)
+    @ViewBuilder
+    private var composeStep: some View {
+        Group {
+            typePicker
+            valueField
+            if let validationMessage {
+                inlineError(validationMessage)
+            }
+        }
+        if !trimmedValue.isEmpty {
+            Group {
+                titleField
+                if cardType.usesAsset { assetField }
+                noteField
+            }
+            .transition(.opacity.combined(with: .move(edge: .bottom)))
+        }
+    }
+
+    // MARK: - Step 2 · Review and seal
+
+    /// The warning sits immediately above the characters it is telling the
+    /// sender to check, and the honesty paragraph is on screen at the commit
+    /// moment — that ordering is the point of the whole restructure.
+    @ViewBuilder
+    private func reviewStep(_ card: SealedCard) -> some View {
+        Group {
+            warningBanner
+            reviewValue(card)
+            reviewSummary(card)
+        }
+        Group {
+            destinationLine
+            ttlWarning
+            if let validationMessage {
+                inlineError(validationMessage)
+            }
+            honestyNote
+        }
+    }
+
+    /// Rendered through the same `CardValueText` the recipient's bubble uses,
+    /// so this preview IS what they'll see — chunking included.
+    private func reviewValue(_ card: SealedCard) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            fieldLabel("How they'll see it")
+            CardValueText(card: card)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(SealTheme.brass.opacity(0.25), lineWidth: 1))
+            if cardType.chunksForDisplay {
+                Text("Spaces are added for readability. They aren't part of the address and aren't copied.")
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.4))
+            }
+        }
+    }
+
+    private func reviewSummary(_ card: SealedCard) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            summaryRow("Title", card.title,
+                       footnote: "A label for the chat list. Not part of what's sealed for verification.")
+            summaryRow("Type", card.typeLine, footnote: nil)
+            if let note = card.note, !note.isEmpty {
+                summaryRow("Note", note, footnote: "Context — shown separately from the sealed value.")
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func summaryRow(_ label: String, _ text: String, footnote: String?) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            fieldLabel(label)
+            Text(text)
+                .font(.subheadline)
+                .foregroundStyle(.white)
+            if let footnote {
+                Text(footnote)
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.4))
+            }
+        }
+    }
+
+    private var destinationLine: some View {
+        Label("Sending to \(chat.name)", systemImage: "paperplane")
+            .font(.caption)
+            .foregroundStyle(.white.opacity(0.6))
+    }
+
+    // MARK: - Primary button
+
+    /// One primary action per step, pinned above the keyboard/home indicator.
+    /// Deliberately never disabled: tapping with an empty or malformed value
+    /// must SAY what's wrong, not sit inert and leave the sender guessing.
+    /// Brass is reserved for the commit — Review is navigation, not a trust
+    /// moment (UI.md §1).
+    private var primaryButton: some View {
+        Button {
+            step == .compose ? review() : send()
+        } label: {
+            Text(step == .compose ? "Review" : "Seal and send")
+                .font(.headline)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(step == .compose ? Color.white.opacity(0.12) : SealTheme.brass,
+                            in: RoundedRectangle(cornerRadius: 14))
+                .foregroundStyle(step == .compose ? .white : SealTheme.ink)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 10)
+        .background(SealTheme.ink.opacity(0.94))
     }
 
     // MARK: - Sections
@@ -210,32 +338,6 @@ struct CardComposeSheet: View {
         }
     }
 
-    /// Shows the value exactly as the recipient's card will render it, chunking
-    /// included. This is where "check every character" actually happens.
-    @ViewBuilder
-    private var preview: some View {
-        if !trimmedValue.isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
-                fieldLabel("How they'll see it")
-                Text(cardType.chunksForDisplay ? SealedCard.chunked(trimmedValue) : trimmedValue)
-                    .font(.system(.footnote, design: .monospaced))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(12)
-                    .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .strokeBorder(SealTheme.brass.opacity(0.25), lineWidth: 1))
-                    .accessibilityLabel(trimmedValue)
-                if cardType.chunksForDisplay {
-                    Text("Spaces are added for readability. They aren't part of the address and aren't copied.")
-                        .font(.caption2)
-                        .foregroundStyle(.white.opacity(0.4))
-                }
-            }
-        }
-    }
-
     private var noteField: some View {
         VStack(alignment: .leading, spacing: 6) {
             fieldLabel("Note (optional)")
@@ -265,6 +367,12 @@ struct CardComposeSheet: View {
         Text("A sealed card proves these exact bytes came from your identity. It doesn't prove the address is correct — check it against the source you trust before you send it.")
             .font(.caption2)
             .foregroundStyle(.white.opacity(0.35))
+    }
+
+    private func inlineError(_ message: String) -> some View {
+        Label(message, systemImage: "exclamationmark.triangle.fill")
+            .font(.caption)
+            .foregroundStyle(.orange)
     }
 
     private func fieldLabel(_ text: String) -> some View {
@@ -297,8 +405,24 @@ struct CardComposeSheet: View {
         }
     }
 
+    /// Validate, and only move to review if the card builds. Same never-inert
+    /// contract as sending: a malformed value gets a readable reason inline.
+    private func review() {
+        do {
+            reviewedCard = try SealedCard.validated(cardType: cardType, title: title,
+                                                    value: value, asset: asset, note: note)
+            validationMessage = nil
+            withAnimation(.snappy) { step = .review }
+        } catch {
+            validationMessage = error.localizedDescription
+        }
+    }
+
     private func send() {
         do {
+            // Re-validated from the raw fields at the moment of commit — cheap,
+            // and it means the sent card can never differ from a stale
+            // `reviewedCard` if a future edit path forgets to rebuild it.
             let card = try SealedCard.validated(cardType: cardType, title: title,
                                                 value: value, asset: asset, note: note)
             // Dismiss immediately: the card is already appended optimistically
@@ -308,6 +432,7 @@ struct CardComposeSheet: View {
             Task { await engine.sendCard(card, in: chat, from: myRoot) }
         } catch {
             validationMessage = error.localizedDescription
+            withAnimation(.snappy) { step = .compose }
         }
     }
 }
