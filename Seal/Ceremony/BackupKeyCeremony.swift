@@ -58,7 +58,40 @@ extension CeremonyManager {
             let parsed = try WebAuthnParsing.parseRegistration(attestationObject: attestation)
             let backupPublicKey = parsed.publicKey.rawRepresentation
 
-            // 2. The ROOT key signs the authorisation. Both providers are
+            // 2. The NEW key signs its ACCEPTANCE: "I belong to this root."
+            //
+            // Why a second tap on the same key rather than trusting step 1:
+            // registration attestation is signed by a batch attestation key
+            // (or, with attestation "none", not at all), so it is not a
+            // dependable proof of possession of the credential's OWN key. And
+            // without proof of possession the endorsement is a one-sided
+            // claim — a credential ID and public key are public, so any
+            // identity could list somebody else's backup key in its own
+            // record, signed by its own root, and it would verify. The
+            // commitment names the root, so this signature cannot be lifted
+            // into another identity's record either.
+            let acceptCommitment = BackupCredential.acceptanceCommitment(
+                rootIDHash: myRoot.credentialIDHash,
+                credentialID: registration.credentialID,
+                publicKey: backupPublicKey)
+            let acceptCredential = try await performRequests(
+                makeFriendAssertionRequests(friendCredentialID: registration.credentialID,
+                                            challenge: acceptCommitment))
+            guard let acceptAssertion = acceptCredential as? ASAuthorizationPublicKeyCredentialAssertion else {
+                throw CeremonyError.unexpectedCredential
+            }
+            let acceptance = WebAuthnAssertion(
+                credentialID: acceptAssertion.credentialID,
+                clientDataJSON: acceptAssertion.rawClientDataJSON,
+                authenticatorData: acceptAssertion.rawAuthenticatorData,
+                signature: acceptAssertion.signature)
+            guard let backupPub = try? P256.Signing.PublicKey(rawRepresentation: backupPublicKey),
+                  acceptance.verify(with: backupPub),
+                  Self.clientDataChallengeMatches(acceptance.clientDataJSON, expected: acceptCommitment) else {
+                throw CeremonyError.verificationFailed
+            }
+
+            // 3. The ROOT key signs the authorisation. Both providers are
             //    offered because the root might be a hardware key (NFC/USB-C)
             //    or a passkey (Face ID) — same request builder the friend
             //    forge and device revocation use.
@@ -76,7 +109,7 @@ extension CeremonyManager {
                 authenticatorData: assertion.rawAuthenticatorData,
                 signature: assertion.signature)
 
-            // 3. Verify our OWN work before publishing it. Every other client
+            // 4. Verify our OWN work before publishing it. Every other client
             //    will run exactly this check (BackupCredential.verified), so a
             //    statement that fails it is a dud that would sit in the
             //    directory looking like a safety net while being none —
@@ -93,9 +126,10 @@ extension CeremonyManager {
                 tier: tier,
                 label: label.trimmingCharacters(in: .whitespacesAndNewlines),
                 assertion: try JSONEncoder().encode(stored),
+                acceptance: try JSONEncoder().encode(acceptance),
                 createdAt: .now)
 
-            // 4. Publish. A backup nobody can read about is not a backup: the
+            // 5. Publish. A backup nobody can read about is not a backup: the
             //    recovering phone finds this key through the directory, so the
             //    ceremony is not done until the write lands.
             try await directory.publishBackupCredential(backup, for: myRoot.credentialIDHash)
@@ -117,6 +151,17 @@ extension CeremonyManager {
         }
     }
 
+    /// **Both ceremonies in this file need the ROOT key**, which has a
+    /// consequence worth stating where it will be read: a phone recovered WITH
+    /// a backup key cannot add another backup key or revoke the one it used,
+    /// because the root credential is the thing that was lost. That identity
+    /// is frozen at one credential until the root turns up. It follows
+    /// directly from the v1 asymmetry (a backup carries the identity forward,
+    /// it never gains root authority), and the honest options are: keep the
+    /// root key safe, or start a fresh identity. The UI says so rather than
+    /// letting a recovered user discover it by tapping for a key that no
+    /// longer exists.
+    ///
     /// Revoke a backup credential. The ROOT key signs, exactly as it does for
     /// a device (FR-19) — and ONLY the root key can, which is the deliberate
     /// asymmetry documented in BackupCredential.swift: a backup carries the

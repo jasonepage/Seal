@@ -153,6 +153,37 @@ directory keep the ID and swap the key — total takeover; committing to the key
 alone would let it re-point the ID. Same reasoning that made `seal.endorse.v2`
 bind the signing and KEM keys together.
 
+**The statement is two-sided.** The root's endorsement alone is a one-sided
+claim, and a credential ID and public key are both PUBLIC once published — so
+any identity could list somebody else's backup credential in its own record,
+signed by its own root, and it would verify. The backup credential therefore
+also signs its own acceptance:
+
+```
+SHA256("seal.backup.accept.v1" ‖ rootIDHash ‖ credentialID ‖ publicKey)
+```
+
+verified under the BACKUP's key. It names the root, so it cannot be lifted into
+another identity's record. `BackupCredential.verified` requires BOTH halves;
+either missing or failing drops the entry. This costs a third tap when adding a
+key (new key creates → new key accepts → root endorses), because WebAuthn
+registration attestation is signed by a batch key, or not at all, and is not a
+dependable proof of possession of the credential's own key.
+
+**Sign-in resolution fails closed on a contested credential.** Before FR-3 the
+only tappable credential was a root, whose record name was already occupied by
+its owner (public-DB first-creator-wins). A backup credential's ID becomes
+public on publication and `SHA256(backupCredentialID)` is a record name **nobody
+ever creates** — an attacker can create an Identity record there holding the
+backup's own public key, and a recovering user's tap would verify perfectly
+(it is genuinely their key) while resolving to the attacker's record. Two locks:
+(1) if more than one identity claims the tapped credential, sign-in refuses
+rather than guessing; (2) a record is only accepted as an identity if it carries
+at least one device endorsement signed by the key it publishes — proof the
+builder held that private key, which a squatter cannot fake. The claims list is
+unverified and is a conflict DETECTOR only; authority still comes from
+signatures.
+
 **Storage.** A new `backupEndorsements` field (Bytes, JSON `[BackupCredential]`)
 on the existing `Identity` record. **No new record type.** Not folded into
 `deviceEndorsements`: that array is iterated by `HybridKEM.wrapToAll` and by the
@@ -203,7 +234,26 @@ ratcheted forward and destroyed after use (§2), and the sender chains that
 would re-derive them were wrapped to KEM keys that died with the lost phone. It
 recovers the identity and the friendships. The UI says exactly that.
 
+**A recovered phone is frozen at one credential.** Both backup ceremonies need
+a ROOT tap, so a phone recovered *with* a backup key can neither add another
+backup nor revoke the one it used — the root is the thing that was lost. This
+follows directly from the asymmetry above and is stated in the UI, not left to
+be discovered. Revoking a backup is also retroactive: every device endorsement
+that backup signed stops verifying, so revoking the key a phone was recovered
+with kills that phone. The confirmation dialog says so.
+
 **Residual, accepted:** a backup revoked seconds ago stays trusted in an
 in-memory directory cache until the next fetch — the same window a revoked
-device has today, self-healing through the same `forceRefresh` path.
+device has today, self-healing through the same `forceRefresh` path. The local
+keychain copy of one's own identity is persisted WITHOUT `backupCredentials`
+precisely so it can never become a never-refiltered authority set.
+
+**Known, NOT introduced by FR-3, and worth fixing separately:** `DeviceEndorsement.revokedAt`
+is an unsigned field that `verifiedDevices` treats as authoritative, so anyone
+able to write a record can un-verify every device on it (DoS, no key needed);
+`seal.endorse.v2` concatenates two variable-length values without length
+framing; `WebAuthnAssertion.verify` checks the ECDSA signature but not the RP ID
+hash, the UP/UV flags, or `clientData.type`; and nothing pins a friend's root
+public key at forge time, so the directory's `publicKey` field is trusted on
+every fetch.
 

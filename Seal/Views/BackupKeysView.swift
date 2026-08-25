@@ -25,6 +25,8 @@ enum BackupKeyCopy {
 
     static let mustBeDifferent = "Use a second security key, or a passkey on someone else's phone — a helper you'd trust with your identity. The key you already sign in with can't back itself up."
 
+    static let needsMainKey = "Adding or removing a backup key needs your main key — the one you started with. A phone you recovered using a backup key can't do it."
+
     /// Parent Mode aims the prompt at the person setting the phone up, not at
     /// the person holding it (UI.md §Parent Mode). Never names a category.
     static func promptTitle(parentMode: Bool) -> String {
@@ -94,6 +96,11 @@ struct BackupKeysSection: View {
                 .foregroundStyle(.white.opacity(0.4))
                 .fixedSize(horizontal: false, vertical: true)
 
+            Text(BackupKeyCopy.needsMainKey)
+                .font(.caption2)
+                .foregroundStyle(.white.opacity(0.4))
+                .fixedSize(horizontal: false, vertical: true)
+
             if !backups.isEmpty {
                 Text(BackupKeyCopy.stolenNotLost)
                     .font(.caption2)
@@ -118,7 +125,7 @@ struct BackupKeysSection: View {
             }
         }
         .confirmationDialog(
-            "Revoke this backup key? It can never sign in or endorse a phone again. Your main key signs the revocation — one more tap.",
+            "Revoke this backup key? It can never sign in again — and any phone that was set up using it stops working too, permanently. Your main key signs the revocation, so this needs one more tap of it.",
             isPresented: .init(get: { revoking != nil }, set: { if !$0 { revoking = nil } }),
             titleVisibility: .visible
         ) {
@@ -231,10 +238,10 @@ struct AddBackupKeySheet: View {
                             .padding(.horizontal, 28)
 
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("Two taps, in this order")
+                            Text("Three taps, in this order")
                                 .font(.footnote.weight(.semibold))
                                 .foregroundStyle(.white.opacity(0.8))
-                            Text("1. The new key or phone — to create the key.\n2. Your own key — to vouch for it.")
+                            Text("1. The new key or phone — to create the key.\n2. The same key again — so it can confirm it's really yours.\n3. Your own key — to vouch for it.")
                                 .font(.footnote)
                                 .foregroundStyle(.white.opacity(0.6))
                                 .fixedSize(horizontal: false, vertical: true)

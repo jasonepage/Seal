@@ -91,7 +91,16 @@ final class IdentityManager {
     func completeRegistration(identity: RootIdentity, endorsement: DeviceEndorsement) {
         rootIdentity = identity
         deviceEndorsement = endorsement
-        if let data = try? JSONEncoder().encode(identity) {
+        // Persist WITHOUT the backup credentials (FR-3). Everything else on a
+        // RootIdentity is stable, but the authority set is revocable, and a
+        // keychain copy is never re-filtered against the revocation list — it
+        // would still name a revoked backup as an authorised endorser on the
+        // next launch, and the next, forever. The in-memory value keeps them
+        // for this session; anything that verifies uses the freshly fetched
+        // identity, where `fetchIdentity` has just applied revocations.
+        var persisted = identity
+        persisted.backupCredentials = nil
+        if let data = try? JSONEncoder().encode(persisted) {
             KeychainStore.save(data, for: Self.identityKey)
         }
         if let data = try? JSONEncoder().encode(endorsement) {
@@ -268,8 +277,14 @@ final class IdentityManager {
             // os-log category exists to avoid. Fall back to trying them all
             // only when the ID matches nothing (pre-credential-publishing
             // identities, where rawCredentialID is nil).
-            if let named = authorities.first(where: { $0.credentialID == assertion.credentialID }) {
-                return assertion.verify(with: named.publicKey)
+            // FALL THROUGH on failure, never `return` on it: `credentialID`
+            // is a sibling field in the assertion blob and is NOT covered by
+            // the signature, so a directory that flips it could otherwise
+            // point verification at the wrong authority and have the endorsement
+            // dropped — silently killing exactly the phone recovery creates.
+            if let named = authorities.first(where: { $0.credentialID == assertion.credentialID }),
+               assertion.verify(with: named.publicKey) {
+                return true
             }
             return authorities.contains { assertion.verify(with: $0.publicKey) }
         }

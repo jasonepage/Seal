@@ -78,8 +78,21 @@ struct BackupCredential: Codable, Hashable, Identifiable {
     /// renaming a backup key can never affect verification.
     var label: String
     /// `WebAuthnAssertion` (JSON) from the ROOT credential over
-    /// `endorsementCommitment`. This is the whole authorisation.
+    /// `endorsementCommitment` — "I, this root, authorise that credential."
     let assertion: Data
+    /// `WebAuthnAssertion` (JSON) from the BACKUP credential itself over
+    /// `acceptanceCommitment` — "I, that credential, belong to this root."
+    ///
+    /// Without this half the statement is one-sided, and a one-sided
+    /// statement is forgeable in a public directory: a credential ID and a
+    /// public key are both PUBLIC the moment a backup is published, so any
+    /// identity could put another person's backup credential in its own
+    /// record, signed by its own root, and it would verify. A tap of that key
+    /// would then resolve to the attacker's identity. Requiring a signature
+    /// from the credential itself, over a commitment naming the root that
+    /// claims it, makes the binding mutual and unforgeable without the
+    /// backup key's private half.
+    let acceptance: Data
     let createdAt: Date
 
     var id: String { credentialIDHash }
@@ -94,6 +107,22 @@ struct BackupCredential: Codable, Hashable, Identifiable {
     /// Challenge the ROOT credential signs to authorise a backup credential.
     static func endorsementCommitment(credentialID: Data, publicKey: Data) -> Data {
         Data(SHA256.hash(data: Data("seal.backup.v1".utf8) + credentialID + publicKey))
+    }
+
+    /// Challenge the BACKUP credential signs to accept being a backup for a
+    /// specific identity. `rootIDHash` is in the commitment so the acceptance
+    /// cannot be lifted out of one identity's record and replayed in
+    /// another's — the credential agreed to back up THIS root, not any root.
+    ///
+    /// Unambiguous by construction: the hash is
+    /// domain ‖ 64-hex-char root ID ‖ credentialID ‖ 64-byte public key, and
+    /// the only variable-length part sits between two fixed-length ones, so
+    /// no two different (rootIDHash, credentialID, publicKey) triples share an
+    /// input. `verified` additionally asserts the 64-byte key length rather
+    /// than leaning on the parse that happens to precede it.
+    static func acceptanceCommitment(rootIDHash: String, credentialID: Data, publicKey: Data) -> Data {
+        Data(SHA256.hash(data: Data("seal.backup.accept.v1".utf8)
+                         + Data(rootIDHash.utf8) + credentialID + publicKey))
     }
 
     /// Challenge the ROOT credential signs to kill a backup credential.
@@ -127,15 +156,34 @@ struct BackupCredential: Codable, Hashable, Identifiable {
         guard let rootPub = try? P256.Signing.PublicKey(rawRepresentation: root.publicKey) else { return [] }
         return backups.filter { backup in
             guard !revokedPublicKeys.contains(backup.publicKey),
-                  // A backup entry that doesn't parse as a P-256 key can never
-                  // verify anything later, so refuse it here rather than
-                  // carrying a dud around in the authority set.
-                  (try? P256.Signing.PublicKey(rawRepresentation: backup.publicKey)) != nil,
-                  let assertion = try? JSONDecoder().decode(WebAuthnAssertion.self, from: backup.assertion),
-                  assertion.verify(with: rootPub) else { return false }
-            let commitment = endorsementCommitment(credentialID: backup.credentialID,
-                                                   publicKey: backup.publicKey)
-            return CeremonyManager.clientDataChallengeMatches(assertion.clientDataJSON, expected: commitment)
+                  // Fixed 64-byte raw P-256 key, asserted rather than assumed:
+                  // it is what makes both commitments unambiguous, and a key
+                  // that doesn't parse could never verify anything later
+                  // anyway.
+                  backup.publicKey.count == 64,
+                  let backupPub = try? P256.Signing.PublicKey(rawRepresentation: backup.publicKey),
+                  let endorsement = try? JSONDecoder().decode(WebAuthnAssertion.self, from: backup.assertion),
+                  let acceptance = try? JSONDecoder().decode(WebAuthnAssertion.self, from: backup.acceptance)
+            else { return false }
+
+            // Half one: the ROOT authorised this credential.
+            guard endorsement.verify(with: rootPub),
+                  CeremonyManager.clientDataChallengeMatches(
+                    endorsement.clientDataJSON,
+                    expected: endorsementCommitment(credentialID: backup.credentialID,
+                                                    publicKey: backup.publicKey))
+            else { return false }
+
+            // Half two: the CREDENTIAL accepted this root. Both halves are
+            // required — see the note on `acceptance`. Verified with the
+            // backup's own key, and the commitment names the root, so neither
+            // half can be transplanted into another identity's record.
+            return acceptance.verify(with: backupPub)
+                && CeremonyManager.clientDataChallengeMatches(
+                    acceptance.clientDataJSON,
+                    expected: acceptanceCommitment(rootIDHash: root.credentialIDHash,
+                                                   credentialID: backup.credentialID,
+                                                   publicKey: backup.publicKey))
         }
     }
 }
