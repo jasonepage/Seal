@@ -15,27 +15,28 @@ struct HomeView: View {
     let onDelete: () -> Void
     @Environment(\.scenePhase) private var scenePhase
 
+    /// Parent Mode lives here rather than in ContentView because it is
+    /// presentation state, not an engine — see Theme/ParentMode.swift. It is
+    /// per identity, so it is rebuilt whenever the signed-in identity changes.
+    @State private var parentMode: ParentMode?
+    @State private var showParentProfile = false
+
     var body: some View {
-        TabView {
-            Tab("Chats", systemImage: "bubble.left.and.bubble.right.fill") {
-                ChatsView(myRoot: myRoot, chatEngine: chatEngine, friendStore: friendStore)
-            }
-            Tab("Camera", systemImage: "camera.fill") {
-                CameraTab(myRoot: myRoot, chatEngine: chatEngine, friendStore: friendStore)
-            }
-            Tab("Circle", systemImage: "person.2.fill") {
-                FriendsView(myRoot: myRoot, ceremony: ceremony, sync: sync,
-                            friendStore: friendStore, chatEngine: chatEngine)
-            }
-            Tab("You", systemImage: "checkmark.seal.fill") {
-                ProfileView(myRoot: myRoot, identity: identity, sync: sync,
-                            ceremony: ceremony, appLock: appLock,
-                            perkRedeemer: perkRedeemer,
-                            onSignOut: onSignOut, onDelete: onDelete)
+        Group {
+            if parentMode?.isOn == true {
+                parentShell
+            } else {
+                fullShell
             }
         }
         .tint(SealTheme.brass)
         .preferredColorScheme(.dark)
+        // Injected ONCE, above both shells. Everything below reads
+        // \.parentMode from the environment instead of threading a flag
+        // through five initialisers.
+        .environment(\.parentMode, parentMode?.isOn == true)
+        .onAppear { ensureParentMode() }
+        .onChange(of: myRoot.credentialIDHash) { _, _ in ensureParentMode() }
         .task(id: myRoot.credentialIDHash) {
             // Demo mode is fully local: no publishing, no push prompt, no sync
             // (FR-22/23 — demo identities never touch CloudKit or real users).
@@ -81,6 +82,62 @@ struct HomeView: View {
                     await chatEngine.refreshAll(myRoot: myRoot, friendStore: friendStore)
                 }
             }
+        }
+    }
+
+    // MARK: - Shells
+
+    /// The normal four-tab shell (docs/UI.md §2).
+    private var fullShell: some View {
+        TabView {
+            Tab("Chats", systemImage: "bubble.left.and.bubble.right.fill") {
+                ChatsView(myRoot: myRoot, chatEngine: chatEngine, friendStore: friendStore)
+            }
+            Tab("Camera", systemImage: "camera.fill") {
+                CameraTab(myRoot: myRoot, chatEngine: chatEngine, friendStore: friendStore)
+            }
+            Tab("Circle", systemImage: "person.2.fill") {
+                FriendsView(myRoot: myRoot, ceremony: ceremony, sync: sync,
+                            friendStore: friendStore, chatEngine: chatEngine)
+            }
+            Tab("You", systemImage: "checkmark.seal.fill") {
+                ProfileView(myRoot: myRoot, identity: identity, sync: sync,
+                            ceremony: ceremony, appLock: appLock,
+                            perkRedeemer: perkRedeemer, parentMode: parentMode,
+                            onSignOut: onSignOut, onDelete: onDelete)
+            }
+        }
+    }
+
+    /// Parent Mode: chats and nothing else. No tab bar at all — a tab bar with
+    /// one tab is just a stripe of wasted screen — so the chat list IS the app,
+    /// and Profile is one avatar tap away in its toolbar.
+    ///
+    /// The Camera tab is gone but photos are not: the composer inside a chat
+    /// opens the same CameraTab in a cover, pre-aimed at that chat.
+    /// The Circle tab is gone, which means the friend ceremony is not reachable
+    /// in this mode — by design, since the helper who set the phone up is the
+    /// one who forges friendships. Profile says so in plain words and the way
+    /// back is the same toggle that got here.
+    private var parentShell: some View {
+        ChatsView(myRoot: myRoot, chatEngine: chatEngine, friendStore: friendStore,
+                  onOpenProfile: { showParentProfile = true })
+            .sheet(isPresented: $showParentProfile) {
+                ProfileView(myRoot: myRoot, identity: identity, sync: sync,
+                            ceremony: ceremony, appLock: appLock,
+                            perkRedeemer: perkRedeemer, parentMode: parentMode,
+                            onSignOut: onSignOut, onDelete: onDelete,
+                            onClose: { showParentProfile = false })
+                    // A sheet is a separate branch of the tree, so it needs the
+                    // flag and the type bump applied again here.
+                    .environment(\.parentMode, parentMode?.isOn == true)
+                    .parentTypeScale()
+            }
+    }
+
+    private func ensureParentMode() {
+        if parentMode?.ownerHash != myRoot.credentialIDHash {
+            parentMode = ParentMode(ownerHash: myRoot.credentialIDHash)
         }
     }
 }

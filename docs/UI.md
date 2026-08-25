@@ -21,11 +21,14 @@ The app has a mascot: a seal 🦭. The pun carries the brand's dual nature — t
 ## 2. Information Architecture
 
 ```
-TabView (3 tabs, camera center)
+TabView (4 tabs as shipped)
 ├─ Chats      — conversation list, pinned groups
-├─ Camera     — default launch tab, capture-first (Snapchat pattern)
-└─ Circle     — friends, profile, key management
+├─ Camera     — capture-first (Snapchat pattern)
+├─ Circle     — friends, forge ceremony, forge log
+└─ You        — profile, devices, key management
 Modal layer: Ceremony flows (full-screen covers, can't be swiped away mid-tap)
+
+Parent Mode collapses this to Chats alone — see §6.
 ```
 
 ## 3. Screen Specs
@@ -62,4 +65,75 @@ Persistent brass "DEMO" watermark badge in the safe-area corner of every screen;
 `IdentityRing` (animatable, tier-aware) · `CeremonySheet` (NFC coaching, state machine: idle → searching → reading → sealed/failed) · `FingerprintPhrase` · `EpochBadge` · `BurnBubble` (TTL dissolve) · `KeyCard` · `SealAnimation` (shared brass-stamp Lottie/Metal shader).
 
 ## 5. Accessibility
-Every haptic/sound cue has a visual twin; ceremony flows fully VoiceOver-scripted ("Hold the key flat against the top of your phone"); fingerprint phrases are speakable by design; Dynamic Type through XL on all chat surfaces; reduced-motion swaps springs for crossfades except trust events, which become instant-with-haptic rather than animated.
+Every haptic/sound cue has a visual twin; ceremony flows fully VoiceOver-scripted ("Hold the key flat against the top of your phone"); fingerprint phrases are speakable by design; Dynamic Type through XL on all chat surfaces (and through **accessibility XL** on every surface Parent Mode touches, §6); reduced-motion swaps springs for crossfades except trust events, which become instant-with-haptic rather than animated.
+
+## 6. Parent Mode
+
+A per-**device** presentation mode for the family anti-scam case: an adult
+child sets Seal up on an aging parent's phone and hands it over simplified.
+Implementation: `Seal/Theme/ParentMode.swift`.
+
+**It is presentation and nothing else.** Wire format, identity, friends,
+signatures and directory behaviour are identical in both modes; a chat between
+a Parent Mode phone and a normal phone works unchanged in both directions, and
+no peer can tell which mode the other is in. The flag is per identity in the
+keychain (`seal.parentmode.<hash>`, presence = on — the AppLock pattern) and is
+wiped by sign-out and by delete.
+
+**Called "Simplified mode" in every user-visible string.** Never "elderly
+mode", never "parent mode": the person reading those strings is the one holding
+the phone, and the point is that the phone doesn't treat them as a category.
+The toggle lives in Profile beside the Face ID lock, in **silver** — it changes
+how Seal looks and makes no claim about trust, so brass would be wrong (§1.1).
+
+### 6.1 What changes when it's on
+
+1. **Chats only.** No tab bar at all — a one-tab TabView is a stripe of wasted
+   screen. The chat list *is* the app; Profile is an identity-ring button in its
+   toolbar. Camera and Circle tabs are gone.
+2. **Photos survive the missing Camera tab.** The composer inside a chat opens
+   the *same* `CameraTab` as a full-screen cover with that chat pre-selected in
+   the send tray. No second photo UI exists.
+3. **The friend ceremony is not reachable in this mode** — by design: the helper
+   who set the phone up forges friendships. Profile says so in plain words, and
+   the way back is the same toggle.
+4. **One Dynamic Type class larger,** applied ONCE at the top of the chat list's
+   split view so it covers the list, the open chat and every sheet those
+   present. The user's own setting is a **floor, not a ceiling**: someone
+   already at accessibility XL gets one step beyond it, never a reset down.
+   Minimum tap target 52pt (above the 44pt HIG floor).
+5. **Plain words, moved not deleted.** The verification drawer leads with "This
+   is really \<name\>." and the card detail sheet with "This really came from
+   \<name\>'s phone." Keys, epochs and fingerprint phrases move behind a
+   **Details** disclosure on both screens — they must stay reachable, because
+   "prove it" is the question those screens exist to answer.
+6. **Sealed Card prominence.** Larger title, and under the verification line a
+   one-line explainer: "Sealed means this really came from \<name\>'s phone."
+   The value never truncates — it wraps, however tall, at any text size.
+7. **Scam-pause on money requests.** An inbound `paymentInstructions` or
+   `cryptoAddress` card carries one calm orange line, styled like the TTL
+   notice: "Take your time. If anything feels off, call \<name\> before
+   acting." On the bubble *and* in the detail sheet — a caution that only
+   appears after you tap the seal is one most people never see. It blocks
+   nothing and adds no tap; the card stays fully readable.
+8. **Compose stays.** Nothing is read-only. Text, photos, cards, reactions,
+   replies, TTL, block and report all work exactly as they do in normal mode.
+
+### 6.2 What must never change
+
+Specification copy from [CARDS.md](CARDS.md) is not softened for Parent Mode. A
+card is **sealed**, never "verified" or "safe"; the honesty paragraph stays
+where it is; and the §5 sentence about what the re-check proves stays on screen
+verbatim, with the plain-words line *above* it rather than in place of it. The
+TTL disclosure in the verification drawer stays visible in both modes —
+a limitation tucked behind a disclosure is how honest copy quietly becomes
+dishonest.
+
+### 6.3 Demo
+
+`-SealParentDemo` implies `-SealDemoMode` and forces the mode on **without**
+writing the keychain flag, so a screenshot run leaves nothing behind.
+`-SealDemoHideWatermark` still applies. Fixtures seed two inbound cards: the BTC
+address in the Sam chat and a multi-line payment-instructions card in the family
+chat, which is the one that renders the scam-pause and the wrap-don't-truncate
+behaviour.

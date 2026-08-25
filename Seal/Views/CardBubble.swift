@@ -1,5 +1,17 @@
 import SwiftUI
 
+/// Card types that ask someone to move money. The scam-pause in Parent Mode
+/// hangs off this and nothing else: a `statement` card is a claim, not a
+/// request, and pausing on every card would train people to ignore the pause.
+///
+/// Declared here rather than on the model — Seal/Cards/SealedCard.swift is the
+/// wire contract and this is a presentation question.
+fileprivate extension SealedCard {
+    var asksForMoney: Bool {
+        cardType == .paymentInstructions || cardType == .cryptoAddress
+    }
+}
+
 /// The Sealed Card bubble (docs/CARDS.md) — deliberately unmistakable from
 /// every other bubble in the chat: a bordered brass-edged card at full content
 /// width, not a rounded glass capsule hugging one side. Alignment doesn't
@@ -18,6 +30,7 @@ struct SealedCardBubble: View {
     @Bindable var engine: ChatEngine
 
     @State private var showDetail = false
+    @Environment(\.parentMode) private var parentMode
 
     /// Measured on the RENDERED string, not the raw one — chunking makes a
     /// crypto address about a quarter longer, and the line limit applies to
@@ -32,6 +45,12 @@ struct SealedCardBubble: View {
             CardCopyButton(card: card)
             Divider().overlay(SealTheme.brass.opacity(0.2))
             verificationLine
+            // Inbound only. "This came from your own phone" is not a fact
+            // anybody needs, and a pause on your own card is noise.
+            if parentMode, !mine {
+                parentExplainer
+                if card.asksForMoney { scamPause }
+            }
         }
         .padding(14)
         .background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 16))
@@ -44,6 +63,10 @@ struct SealedCardBubble: View {
                                   senderName: senderName, senderIdentity: senderIdentity,
                                   engine: engine)
                 .presentationDetents([.large])
+                // A sheet is a separate branch of the view tree; the type scale
+                // is inherited from the presenter, but re-assert the flag so the
+                // sheet can never render the normal-mode copy in Parent Mode.
+                .environment(\.parentMode, parentMode)
         }
     }
 
@@ -56,8 +79,10 @@ struct SealedCardBubble: View {
             // the seal character off security surfaces.
             Button { showDetail = true } label: {
                 Image(systemName: "seal.fill")
-                    .font(.system(size: 20))
+                    .font(.system(size: parentMode ? 26 : 20))
                     .foregroundStyle(SealTheme.brass)
+                    .frame(minWidth: parentMode ? 52 : 0, minHeight: parentMode ? 52 : 0)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Sealed card details")
@@ -68,7 +93,7 @@ struct SealedCardBubble: View {
                     .tracking(0.8)
                     .foregroundStyle(SealTheme.brass.opacity(0.85))
                 Text(card.title)
-                    .font(.callout.weight(.semibold))
+                    .font(parentMode ? .title3.weight(.semibold) : .callout.weight(.semibold))
                     .foregroundStyle(.white)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -78,8 +103,12 @@ struct SealedCardBubble: View {
 
     private var valueBlock: some View {
         VStack(alignment: .leading, spacing: 6) {
-            CardValueText(card: card, lineLimit: isLongValue ? 8 : nil)
-            if isLongValue {
+            // Parent Mode never truncates a sealed value. The exact string is
+            // the entire point of the card, and an ellipsis through the middle
+            // of a wallet address at accessibility XL is precisely the misread
+            // this feature exists to prevent. It wraps instead, however tall.
+            CardValueText(card: card, lineLimit: (isLongValue && !parentMode) ? 8 : nil)
+            if isLongValue, !parentMode {
                 Button { showDetail = true } label: {
                     Text("Show the full value")
                         .font(.caption2.weight(.semibold))
@@ -100,7 +129,7 @@ struct SealedCardBubble: View {
                 .foregroundStyle(.white.opacity(0.4))
             VStack(alignment: .leading, spacing: 1) {
                 Text("Note — not part of the value")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.caption2.weight(.semibold))
                     .tracking(0.4)
                     .foregroundStyle(.white.opacity(0.35))
                 Text(note)
@@ -109,6 +138,30 @@ struct SealedCardBubble: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+
+    /// One line under the verification line, in the words a card actually
+    /// justifies. Provenance, not truth: "came from their phone", never
+    /// "safe", never "verified" (docs/CARDS.md §5).
+    private var parentExplainer: some View {
+        Text("Sealed means this really came from \(senderName)'s phone.")
+            .font(.caption)
+            .foregroundStyle(.white.opacity(0.6))
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// The scam-pause. Orange like the TTL notice, calm, and it blocks
+    /// nothing — no gate, no extra tap, the card is fully readable behind it.
+    ///
+    /// It appears on the BUBBLE as well as in the detail sheet because a card
+    /// asking for money is the exact thing this product exists to slow down,
+    /// and a caution that only appears after you tap the seal is one most
+    /// people will never see.
+    private var scamPause: some View {
+        Text("Take your time. If anything feels off, call \(senderName) before acting.")
+            .font(.caption)
+            .foregroundStyle(.orange.opacity(0.85))
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private var verificationLine: some View {
@@ -225,6 +278,14 @@ struct CardCopyButton: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 9)
                     .background(SealTheme.brass, in: Capsule())
+                    // Parent Mode's 52pt minimum. This is the ONLY change in
+                    // this type and it is pure layout on the label — the copy
+                    // path (byte-for-byte write, pasteboard read-back,
+                    // first/last-6 confirmation, the two alerts) is untouched.
+                    // It has to live here rather than at the call site: this
+                    // view is a VStack containing the button, so a frame on the
+                    // outside never reaches the button's hit area.
+                    .parentTapTarget()
             }
             .buttonStyle(.plain)
 
@@ -309,6 +370,7 @@ struct SealedCardDetailSheet: View {
 
     @State private var verification: CardVerification = .checking
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.parentMode) private var parentMode
 
     var body: some View {
         NavigationStack {
@@ -317,8 +379,11 @@ struct SealedCardDetailSheet: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 22) {
                         verificationBanner
+                        // Directly under the banner: before the value, before
+                        // the Copy button, before anything actionable.
+                        if parentMode, !mine, card.asksForMoney { scamPauseNotice }
                         senderBlock
-                        keyBlock
+                        if parentMode { parentDetailsBlock } else { keyBlock }
                         valueSection
                         honestyBlock
                     }
@@ -348,8 +413,14 @@ struct SealedCardDetailSheet: View {
                 .foregroundStyle(bannerTint)
             VStack(alignment: .leading, spacing: 3) {
                 Text(bannerTitle)
-                    .font(.subheadline.weight(.semibold))
+                    .font(parentMode ? .headline : .subheadline.weight(.semibold))
                     .foregroundStyle(.white)
+                if parentMode, let parentLead {
+                    Text(parentLead)
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.85))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 Text(bannerDetail)
                     .font(.caption)
                     .foregroundStyle(bannerTint.opacity(0.9))
@@ -397,7 +468,9 @@ struct SealedCardDetailSheet: View {
                     Text(mine ? "\(resolvedName) (you)" : resolvedName)
                         .font(.callout.weight(.medium))
                         .foregroundStyle(.white)
-                    if let publicKey = resolvedIdentity?.publicKey {
+                    // In Parent Mode the phrase moves into Details below —
+                    // moved, not dropped.
+                    if !parentMode, let publicKey = resolvedIdentity?.publicKey {
                         Text(FingerprintPhrase.phrase(for: publicKey))
                             .font(.callout)
                             .foregroundStyle(SealTheme.brass)
@@ -426,6 +499,70 @@ struct SealedCardDetailSheet: View {
         }
     }
 
+    /// The scam-pause, detail-sheet copy. Same sentence as the bubble, styled
+    /// like the TTL notice: plain orange text, no icon, no border, nothing to
+    /// dismiss. It is a pause, not an obstacle.
+    private var scamPauseNotice: some View {
+        Text("Take your time. If anything feels off, call \(resolvedName) before acting.")
+            .font(.callout)
+            .foregroundStyle(.orange.opacity(0.85))
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The plain-words lead, shown ABOVE the sentence docs/CARDS.md §5 pins
+    /// word for word — never instead of it. That sentence is what keeps this
+    /// screen honest about what the re-check does and does not prove, so it
+    /// stays on screen, unedited, immediately underneath this line.
+    ///
+    /// Note what is NOT said: not "safe", not "verified", not "trusted". The
+    /// claim is provenance and nothing beyond it.
+    private var parentLead: String? {
+        switch verification {
+        case .checking:
+            return nil
+        case .sealed:
+            return mine
+                ? "This really came from your phone."
+                : "This really came from \(resolvedName)'s phone."
+        case .failed:
+            return "Something about this card doesn't add up. Don't act on it — check with \(resolvedName) in person, or on a number you already had."
+        case .unavailable:
+            return "Seal couldn't check this one just now. Try again when you're back online."
+        case .demo:
+            return nil
+        }
+    }
+
+    /// Parent Mode: the signing key, the epoch and the fingerprint phrase move
+    /// behind one disclosure.
+    ///
+    /// They MOVE. This sheet is the only place those facts exist, and it is the
+    /// screen someone opens when they are about to act on a payment — hiding
+    /// them outright would take away the answer to "prove it" at the one moment
+    /// it is worth asking.
+    private var parentDetailsBlock: some View {
+        DisclosureGroup("Details") {
+            VStack(alignment: .leading, spacing: 16) {
+                if let publicKey = resolvedIdentity?.publicKey {
+                    VStack(alignment: .leading, spacing: 4) {
+                        sectionLabel("Fingerprint phrase")
+                        Text(FingerprintPhrase.phrase(for: publicKey))
+                            .font(.callout)
+                            .foregroundStyle(SealTheme.brass)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                keyBlock
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 12)
+        }
+        .tint(.white.opacity(0.6))
+        .font(.system(.callout, design: .rounded, weight: .semibold))
+        .foregroundStyle(.white.opacity(0.85))
+    }
+
     private var valueSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             sectionLabel("Sealed value")
@@ -434,7 +571,7 @@ struct SealedCardDetailSheet: View {
             if let note = card.note, !note.isEmpty {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("NOTE — NOT PART OF THE VALUE")
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(.caption2.weight(.semibold))
                         .tracking(0.5)
                         .foregroundStyle(.white.opacity(0.35))
                     Text(note)

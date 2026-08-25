@@ -3,10 +3,22 @@ import AVFoundation
 import PhotosUI
 
 /// Capture-first camera (UI.md §3.4): shutter, flip, then a sealed-send tray.
+///
+/// Also presented as a cover from inside a chat, which is how photos survive
+/// Parent Mode collapsing the tab bar (docs/UI.md §Parent Mode). Rather than
+/// building a second, smaller photo UI for that case, the chat opens THIS one
+/// with the destination chat pre-selected and a way back out. Both hooks
+/// default to nil, so the tab behaves exactly as before.
 struct CameraTab: View {
     let myRoot: RootIdentity
     @Bindable var chatEngine: ChatEngine
     @Bindable var friendStore: FriendStore
+    /// Pre-ticked in the send tray when opened from a chat — you are already
+    /// in the conversation you meant to send to.
+    var preselectedChat: ChatEngine.Chat? = nil
+    /// Non-nil when presented as a cover: draws a close button and dismisses
+    /// after a successful send.
+    var onClose: (() -> Void)? = nil
 
     @State private var camera = CameraController()
     @State private var captured: UIImage?
@@ -16,7 +28,9 @@ struct CameraTab: View {
         ZStack {
             SealTheme.ink.ignoresSafeArea()
             if let captured {
-                SendTray(image: captured, myRoot: myRoot, chatEngine: chatEngine) {
+                SendTray(image: captured, myRoot: myRoot, chatEngine: chatEngine,
+                         preselected: preselectedChat?.id,
+                         onSent: onClose) {
                     self.captured = nil
                 }
             } else {
@@ -91,6 +105,27 @@ struct CameraTab: View {
                 .padding(.horizontal, 32)
                 .padding(.bottom, 24)
             }
+
+            // Only when this is a cover over a chat. As a tab there is nothing
+            // to close and the tab bar is the way out.
+            if let onClose {
+                VStack {
+                    HStack {
+                        Button(action: onClose) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: 52, height: 52)
+                                .background(.black.opacity(0.4), in: Circle())
+                        }
+                        .accessibilityLabel("Close the camera")
+                        Spacer()
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+            }
         }
     }
 }
@@ -100,6 +135,10 @@ private struct SendTray: View {
     let image: UIImage
     let myRoot: RootIdentity
     @Bindable var chatEngine: ChatEngine
+    var preselected: UUID? = nil
+    /// Called after a successful send, in addition to `onDone` — the cover
+    /// presentation uses it to dismiss itself.
+    var onSent: (() -> Void)? = nil
     let onDone: () -> Void
 
     @State private var selected: Set<UUID> = []
@@ -177,6 +216,11 @@ private struct SendTray: View {
             .padding(.horizontal, 24)
             .padding(.bottom, 16)
         }
+        // Opened from a chat: that chat starts ticked, so the common case is
+        // capture → Send with nothing else to understand.
+        .onAppear {
+            if let preselected { selected.insert(preselected) }
+        }
     }
 
     private func send() async {
@@ -188,6 +232,7 @@ private struct SendTray: View {
             await chatEngine.sendPhoto(jpeg, in: chat, from: myRoot)
         }
         onDone()
+        onSent?()
     }
 }
 

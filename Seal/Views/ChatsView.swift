@@ -1,10 +1,18 @@
 import SwiftUI
 
 /// Chat list (UI.md §3.3): conversations with identity-ring avatars.
+///
+/// In Parent Mode this view IS the app (docs/UI.md §Parent Mode): there is no
+/// tab bar, so it carries the one route out — an avatar button in the toolbar
+/// that opens Profile.
 struct ChatsView: View {
     let myRoot: RootIdentity
     @Bindable var chatEngine: ChatEngine
     @Bindable var friendStore: FriendStore
+    /// Set only by the Parent Mode shell. nil in the normal four-tab shell,
+    /// where Profile is its own tab and this button would be a duplicate.
+    var onOpenProfile: (() -> Void)? = nil
+    @Environment(\.parentMode) private var parentMode
     @State private var showNewGroup = false
     @State private var selectedChatID: UUID?
 
@@ -16,13 +24,24 @@ struct ChatsView: View {
             ZStack {
                 SealTheme.ink.ignoresSafeArea()
                 if chatEngine.chats.isEmpty {
-                    SealMascot(size: 64,
-                               line: "No colonies yet.",
-                               sub: "Forge a friend in Circle,\nthen haul out here together.")
+                    // Social surface, so the mascot is allowed (UI.md §1.1).
+                    // The Parent Mode copy can't say "Circle" — that tab isn't
+                    // there — and shouldn't say "forge", which means nothing to
+                    // someone who wasn't handed the vocabulary.
+                    if parentMode {
+                        SealMascot(size: 64,
+                                   line: "No chats yet.",
+                                   sub: "Whoever set up this phone\nadds people for you.")
+                    } else {
+                        SealMascot(size: 64,
+                                   line: "No colonies yet.",
+                                   sub: "Forge a friend in Circle,\nthen haul out here together.")
+                    }
                 } else {
                     List(selection: $selectedChatID) {
                         ForEach(chatEngine.chats) { chat in
                             row(chat)
+                                .parentTapTarget(60)
                                 .tag(chat.id)
                                 .listRowBackground(Color.white.opacity(0.05))
                         }
@@ -33,6 +52,20 @@ struct ChatsView: View {
             .navigationTitle("Chats")
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
+                // Parent Mode's only route to Profile. The identity ring is a
+                // trust artifact, so brass here is the tier's brass, not
+                // decoration (UI.md §1.1).
+                if parentMode, let onOpenProfile {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button(action: onOpenProfile) {
+                            IdentityRing(displayName: myRoot.displayName,
+                                         tier: myRoot.tier, size: 34)
+                                .frame(width: 52, height: 52)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Your profile and settings")
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Button {
@@ -69,13 +102,17 @@ struct ChatsView: View {
             }
         }
         .preferredColorScheme(.dark)
+        // Applied ONCE here, at the top of the split view: it covers the list,
+        // the open chat in the detail pane, and every sheet those present.
+        // Adding a second .parentTypeScale() further down would bump twice.
+        .parentTypeScale()
     }
 
     private func row(_ chat: ChatEngine.Chat) -> some View {
         let tier = tierFor(chat)
         let last = chatEngine.messages(for: chat).last { $0.kind != "screenshot" }
         return HStack(spacing: 12) {
-            IdentityRing(displayName: chat.name, tier: tier, size: 44)
+            IdentityRing(displayName: chat.name, tier: tier, size: parentMode ? 56 : 44)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(chat.name)
@@ -106,7 +143,7 @@ struct ChatsView: View {
                 } ?? "Sealed and ready")
                     .font(.caption)
                     .foregroundStyle(.white.opacity(0.45))
-                    .lineLimit(1)
+                    .lineLimit(parentMode ? 2 : 1)
             }
             Spacer()
             if let last {

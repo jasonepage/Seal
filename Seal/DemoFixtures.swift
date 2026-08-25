@@ -15,6 +15,11 @@ import CryptoKit
 enum DemoFixtures {
     static let demoArgument = "-SealDemoMode"
     static let hideWatermarkArgument = "-SealDemoHideWatermark"
+    /// Parent Mode screenshots (docs/UI.md §Parent Mode). Implies demo mode —
+    /// one argument produces the whole screenshot state rather than requiring
+    /// a pair that can be half-set. Combine with -SealDemoHideWatermark for
+    /// marketing shots exactly as before.
+    static let parentDemoArgument = "-SealParentDemo"
 
     /// Reviewer access code. Typed as the name on the registration screen, it
     /// drops into the fully-local demo account — no key, no Face ID, no
@@ -29,7 +34,14 @@ enum DemoFixtures {
     private static var runtimeActive = false
 
     static var isActive: Bool {
-        ProcessInfo.processInfo.arguments.contains(demoArgument) || runtimeActive
+        ProcessInfo.processInfo.arguments.contains(demoArgument)
+            || parentDemoRequested || runtimeActive
+    }
+
+    /// Read by `ParentMode.init` to force the mode on WITHOUT writing the
+    /// keychain flag, so a screenshot run can never leave the setting behind.
+    static var parentDemoRequested: Bool {
+        ProcessInfo.processInfo.arguments.contains(parentDemoArgument)
     }
 
     static var showWatermark: Bool {
@@ -119,6 +131,9 @@ enum DemoFixtures {
         let owner = me.credentialIDHash
         FriendStore.wipe(ownerHash: owner)
         ChatEngine.wipe(ownerHash: owner)
+        // Presentation flags too: a demo launch must render identically every
+        // time, whatever a previous session toggled.
+        ParentMode.wipe(ownerHash: owner)
 
         // Friends + forge log (FR-5/FR-6 shapes, synthetic attestations).
         let stored = friends.map { f in
@@ -152,6 +167,7 @@ enum DemoFixtures {
         else { return }
         FriendStore.wipe(ownerHash: me.credentialIDHash)
         ChatEngine.wipe(ownerHash: me.credentialIDHash)
+        ParentMode.wipe(ownerHash: me.credentialIDHash)
         KeychainStore.delete(IdentityManager.identityKey)
         if let real = KeychainStore.load(backupIdentityKey) {
             KeychainStore.save(real, for: IdentityManager.identityKey)
@@ -194,6 +210,24 @@ enum DemoFixtures {
         asset: "BTC",
         note: "Cold wallet — not the exchange one.",
         fallbackText: SealedCard.fallbackText(for: .cryptoAddress, asset: "BTC"))
+
+    /// The second seeded card: an inbound PAYMENT INSTRUCTIONS card, which is
+    /// what Parent Mode's scam-pause hangs off (docs/UI.md §Parent Mode). The
+    /// crypto card above exercises the other money-request type; between them
+    /// both branches are on screen without a hardware key or a second phone.
+    ///
+    /// Every number here is synthetic and deliberately shaped so nobody could
+    /// mistake it for a live account: zero-padded, no real routing number.
+    /// Multi-line on purpose — payment instructions are prose, they are never
+    /// chunked, and this is the fixture that shows a value wrapping rather
+    /// than truncating at accessibility sizes.
+    private static let demoPaymentCard = SealedCard(
+        cardType: .paymentInstructions,
+        title: "Roof deposit — Northgate Roofing",
+        value: "Northgate Roofing LLC\nNorthgate Credit Union\nAccount 0000 1234 5678\nRouting 000000000\nReference: PAGE-ROOF-DEPOSIT",
+        asset: nil,
+        note: "They gave me these at the house — half now, half when it's finished.",
+        fallbackText: SealedCard.fallbackText(for: .paymentInstructions, asset: nil))
 
     private static func seedConversations(owner: String)
         -> ([ChatEngine.Chat], [UUID: [ChatEngine.ChatMessage]], [UUID: [String: Date]]) {
@@ -263,7 +297,10 @@ enum DemoFixtures {
             [Line(sender: mom, text: "Dinner sunday? Grandma's coming", minutesAgo: 130),
              Line(sender: dad, text: "I'll grill", minutesAgo: 122, reactions: [owner: "👍", mom: "❤️"]),
              Line(sender: owner, text: "I'll be there at 5", minutesAgo: 118),
-             Line(sender: mom, text: "Bring that photo from the lake!", minutesAgo: 112)])
+             Line(sender: mom, text: "Bring that photo from the lake!", minutesAgo: 112),
+             Line(sender: owner, text: "dad what's the account for the roof deposit?", minutesAgo: 34),
+             Line(sender: dad, text: demoPaymentCard.fallbackText, minutesAgo: 26,
+                  card: demoPaymentCard)])
 
         add(ChatEngine.Chat(id: ChatEngine.pairChatID(owner, alex),
                             name: "Alex",

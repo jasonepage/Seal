@@ -9,9 +9,16 @@ struct ProfileView: View {
     @Bindable var ceremony: CeremonyManager
     @Bindable var appLock: AppLock
     @Bindable var perkRedeemer: PerkRedeemer
+    /// nil only in previews. Optional rather than @Bindable because the toggle
+    /// uses a manual binding anyway, and @Observable tracks the reads in body.
+    var parentMode: ParentMode? = nil
     let onSignOut: () -> Void
     let onDelete: () -> Void
+    /// Set when this is presented as a sheet (the Parent Mode route, where
+    /// Profile is not a tab and there is nothing else to dismiss it).
+    var onClose: (() -> Void)? = nil
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var confirmReset = false
     @State private var confirmDelete = false
     @State private var deleting = false
@@ -84,28 +91,34 @@ struct ProfileView: View {
                     .padding(.horizontal, 24)
 
                     if appLock.isAvailable {
-                        HStack {
-                            Image(systemName: "faceid")
-                                .foregroundStyle(SealTheme.brass)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text("Require Face ID")
-                                    .font(.callout)
-                                    .foregroundStyle(.white.opacity(0.9))
-                                Text("Lock Seal when you leave the app")
-                                    .font(.caption2)
-                                    .foregroundStyle(.white.opacity(0.4))
-                            }
-                            Spacer()
-                            Toggle("", isOn: .init(
-                                get: { appLock.isEnabled },
-                                set: { value in Task { await appLock.setEnabled(value) } }
-                            ))
-                            .labelsHidden()
-                            .tint(SealTheme.brass)
+                        settingRow(icon: "faceid", tint: SealTheme.brass,
+                                   title: "Require Face ID",
+                                   subtitle: "Lock Seal when you leave the app",
+                                   isOn: .init(
+                                       get: { appLock.isEnabled },
+                                       set: { value in Task { await appLock.setEnabled(value) } }),
+                                   switchTint: SealTheme.brass)
+                    }
+
+                    // Simplified mode (Theme/ParentMode.swift). NEVER labelled
+                    // by who it is for — the person reading this is holding the
+                    // phone. Silver, not brass: this changes how Seal looks, it
+                    // makes no claim about trust (UI.md §1.1).
+                    if let parentMode {
+                        settingRow(icon: "textformat.size", tint: SealTheme.silver,
+                                   title: "Simplified mode",
+                                   subtitle: "Bigger text, and just your chats. Everything still works — you can send and open anything you could before.",
+                                   isOn: .init(
+                                       get: { parentMode.isOn },
+                                       set: { parentMode.setEnabled($0) }),
+                                   switchTint: SealTheme.silver)
+                        if parentMode.isOn {
+                            Text("Adding someone new needs the full app: turn this off, add them, then turn it back on.")
+                                .font(.caption2)
+                                .foregroundStyle(.white.opacity(0.4))
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 40)
                         }
-                        .padding(16)
-                        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
-                        .padding(.horizontal, 24)
                     }
 
                     if devices.count > 1 || devices.contains(where: { revokedKeys.contains($0.devicePublicKey) }) {
@@ -192,11 +205,23 @@ struct ProfileView: View {
             }
             .navigationTitle("You")
             .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbar {
+                if let onClose {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done", action: onClose)
+                            .foregroundStyle(SealTheme.brass)
+                    }
+                }
+            }
             .confirmationDialog(
                 "This deletes this device's keys, chats, and friends — they don't come back. Your identity survives; sign in again with your key or Face ID.",
                 isPresented: $confirmReset, titleVisibility: .visible
             ) {
                 Button("Sign out and delete local data", role: .destructive) {
+                    // ContentView wipes the engines; Parent Mode is view-layer
+                    // presentation state, so it is cleared here — otherwise the
+                    // next identity on this phone would inherit it.
+                    ParentMode.wipe(ownerHash: myRoot.credentialIDHash)
                     onSignOut()
                 }
             }
@@ -309,6 +334,7 @@ struct ProfileView: View {
                 return
             }
         }
+        ParentMode.wipe(ownerHash: myRoot.credentialIDHash)
         onDelete()
     }
 
@@ -325,6 +351,57 @@ struct ProfileView: View {
         case .publishing: "Publishing…"
         case .idle: "—"
         case .error: "Error — see home"
+        }
+    }
+
+    /// A settings row that stays operable at accessibility sizes.
+    ///
+    /// The original shape — icon, label, Spacer, switch — squeezes the switch
+    /// toward the edge once the label wraps to three or four lines, and the
+    /// one control Parent Mode absolutely must leave reachable is the toggle
+    /// that turns Parent Mode off. Above accessibility sizes the switch moves
+    /// below the label instead, where it has the full width.
+    @ViewBuilder
+    private func settingRow(icon: String, tint: Color, title: String, subtitle: String,
+                            isOn: Binding<Bool>, switchTint: Color) -> some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 14) {
+                    settingLabel(icon: icon, tint: tint, title: title, subtitle: subtitle)
+                    Toggle(title, isOn: isOn)
+                        .labelsHidden()
+                        .tint(switchTint)
+                }
+            } else {
+                HStack(spacing: 12) {
+                    settingLabel(icon: icon, tint: tint, title: title, subtitle: subtitle)
+                    Toggle(title, isOn: isOn)
+                        .labelsHidden()
+                        .tint(switchTint)
+                }
+            }
+        }
+        .frame(minHeight: 52)
+        .padding(16)
+        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
+        .padding(.horizontal, 24)
+    }
+
+    private func settingLabel(icon: String, tint: Color,
+                              title: String, subtitle: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .foregroundStyle(tint)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.callout)
+                    .foregroundStyle(.white.opacity(0.9))
+                Text(subtitle)
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.4))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
         }
     }
 

@@ -11,6 +11,11 @@ struct ChatView: View {
     @State private var showVerification = false
     @State private var replyingTo: ChatEngine.ChatMessage?
     @State private var showCardCompose = false
+    /// Photos in Parent Mode. The Camera TAB is gone there, so the composer
+    /// opens the same CameraTab as a cover, aimed at this chat — no second
+    /// photo UI, just a second door to the existing one.
+    @State private var showCamera = false
+    @Environment(\.parentMode) private var parentMode
     /// Drives the post-report confirmation alert. Set to the reported sender's
     /// display name so feedback is visible even if no mail client opens.
     @State private var reportedSenderName: String?
@@ -64,10 +69,10 @@ struct ChatView: View {
                             .foregroundStyle(SealTheme.brass.opacity(0.8))
                         VStack(alignment: .leading, spacing: 1) {
                             Text("Replying to \(authorName(replyingTo.senderHash))")
-                                .font(.system(size: 11, weight: .semibold))
+                                .font(.caption2.weight(.semibold))
                                 .foregroundStyle(.white.opacity(0.7))
                             Text(ChatEngine.replyPreview(replyingTo))
-                                .font(.system(size: 11))
+                                .font(.caption2)
                                 .foregroundStyle(.white.opacity(0.45))
                                 .lineLimit(1)
                         }
@@ -82,15 +87,27 @@ struct ChatView: View {
                 }
 
                 HStack(spacing: 12) {
-                    // Seal a card (docs/CARDS.md). The camera lives in its own
-                    // tab, so this sits at the head of the composer rather than
-                    // beside a shutter button.
+                    // Seal a card (docs/CARDS.md). Brass because sealing is a
+                    // trust moment (UI.md §1.1).
                     Button { showCardCompose = true } label: {
                         Image(systemName: "seal")
                             .font(.system(size: 22))
                             .foregroundStyle(SealTheme.brass)
+                            .frame(minWidth: composerTarget, minHeight: composerTarget)
+                            .contentShape(Rectangle())
                     }
                     .accessibilityLabel("Seal a card")
+
+                    // Photos. Deliberately NOT brass — a photo is not a trust
+                    // moment. Opens the existing camera + send tray.
+                    Button { showCamera = true } label: {
+                        Image(systemName: "camera.fill")
+                            .font(.system(size: 20))
+                            .foregroundStyle(.white.opacity(0.7))
+                            .frame(minWidth: composerTarget, minHeight: composerTarget)
+                            .contentShape(Rectangle())
+                    }
+                    .accessibilityLabel("Send a photo")
 
                     TextField("Sealed message…", text: $draft)
                         .textFieldStyle(.plain)
@@ -108,7 +125,10 @@ struct ChatView: View {
                         Image(systemName: "arrow.up.circle.fill")
                             .font(.system(size: 30))
                             .foregroundStyle(SealTheme.brass)
+                            .frame(minWidth: composerTarget, minHeight: composerTarget)
+                            .contentShape(Rectangle())
                     }
+                    .accessibilityLabel("Send")
                 }
                 .padding(12)
             }
@@ -157,6 +177,16 @@ struct ChatView: View {
             CardComposeSheet(chat: engine.chats.first(where: { $0.id == chat.id }) ?? chat,
                              myRoot: myRoot, engine: engine)
         }
+        // The whole camera, unchanged, with this chat pre-selected in the send
+        // tray. Requires a FriendStore because CameraTab takes one; every real
+        // presentation of ChatView passes it.
+        .fullScreenCover(isPresented: $showCamera) {
+            if let friendStore {
+                CameraTab(myRoot: myRoot, chatEngine: engine, friendStore: friendStore,
+                          preselectedChat: chat,
+                          onClose: { showCamera = false })
+            }
+        }
         .task {
             // Poll for inbound messages while the chat is open.
             // TODO: CKSubscription push instead of polling.
@@ -188,6 +218,10 @@ struct ChatView: View {
             Text("Thanks — \(reportedSenderName ?? "this person") is now blocked and won't appear in your chats. We review reports and remove violators within 24 hours.")
         }
     }
+
+    /// 52pt in Parent Mode (Theme/ParentMode.swift), otherwise the glyphs keep
+    /// their natural size and the row stays compact.
+    private var composerTarget: CGFloat { parentMode ? 52 : 0 }
 
     private var currentTTL: TimeInterval? {
         engine.chats.first(where: { $0.id == chat.id })?.ttl
@@ -422,12 +456,12 @@ struct ChatView: View {
                 .frame(width: 2)
             VStack(alignment: .leading, spacing: 1) {
                 Text(authorName(message.replySenderHash))
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.caption2.weight(.semibold))
                     .foregroundStyle(SealTheme.brass.opacity(0.8))
                 Text(message.replyPreview ?? "")
-                    .font(.system(size: 11))
+                    .font(.caption2)
                     .foregroundStyle(.white.opacity(0.5))
-                    .lineLimit(1)
+                    .lineLimit(parentMode ? 2 : 1)
             }
         }
         .padding(.horizontal, 8)
@@ -451,10 +485,10 @@ struct ChatView: View {
             HStack(spacing: 4) {
                 ForEach(counts.sorted { $0.key < $1.key }, id: \.key) { emoji, count in
                     HStack(spacing: 2) {
-                        Text(emoji).font(.system(size: 11))
+                        Text(emoji).font(.caption)
                         if count > 1 {
                             Text("\(count)")
-                                .font(.system(size: 10))
+                                .font(.caption2)
                                 .foregroundStyle(.white.opacity(0.6))
                         }
                     }
@@ -530,6 +564,7 @@ struct VerificationSheet: View {
     /// refreshed from the directory while the drawer is open.
     @State private var perksByMember: [String: [PerkAttestation]] = [:]
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.parentMode) private var parentMode
 
     private var iAmAdmin: Bool {
         chat.creatorHash == myRoot.credentialIDHash && chat.memberHashes.count > 2
@@ -538,72 +573,97 @@ struct VerificationSheet: View {
     var body: some View {
         ZStack {
             SealTheme.ink.ignoresSafeArea()
-            VStack(spacing: 20) {
-                Label("End-to-end sealed", systemImage: "checkmark.shield.fill")
-                    .font(.system(.headline, design: .rounded))
-                    .foregroundStyle(SealTheme.brass)
-                    .padding(.top, 28)
+            // Scrollable. At accessibility sizes — and with Parent Mode's
+            // Details expanded — this is taller than the sheet, and a bare
+            // VStack does not clip or scroll: it overflows in both directions
+            // and the bottom becomes unreachable (the same bug the ceremony
+            // screens hit).
+            ScrollView {
+                VStack(spacing: 20) {
+                    Label("End-to-end sealed", systemImage: "checkmark.shield.fill")
+                        .font(.system(.headline, design: .rounded))
+                        .foregroundStyle(SealTheme.brass)
+                        .padding(.top, 28)
 
-                Text("Every message is encrypted on-device and its signature chain is verified before display. Unverifiable messages are dropped.")
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.6))
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
+                    // Parent Mode says the same thing without the vocabulary. The
+                    // original sentence is not deleted — it moves into Details
+                    // below, verbatim.
+                    Text(parentMode
+                         ? "Messages here are locked to your phone and theirs. Anything that doesn't check out is never shown to you."
+                         : "Every message is encrypted on-device and its signature chain is verified before display. Unverifiable messages are dropped.")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.6))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
 
-                VStack(spacing: 14) {
-                    memberRow(name: "\(myRoot.displayName) (you)", tier: myRoot.tier, publicKey: myRoot.publicKey,
-                              perks: perksByMember[myRoot.credentialIDHash] ?? [])
-                    ForEach(otherMembers, id: \.credentialIDHash) { member in
-                        HStack {
-                            memberRow(name: member.displayName, tier: member.tier, publicKey: member.publicKey,
-                                      perks: perksByMember[member.credentialIDHash] ?? [])
-                            if iAmAdmin {
-                                Button { removing = member } label: {
-                                    Image(systemName: "minus.circle")
-                                        .foregroundStyle(.orange.opacity(0.8))
+                    VStack(spacing: 14) {
+                        memberRow(name: "\(myRoot.displayName) (you)", tier: myRoot.tier, publicKey: myRoot.publicKey,
+                                  perks: perksByMember[myRoot.credentialIDHash] ?? [],
+                                  plainLine: parentMode ? "This is you." : nil)
+                        ForEach(otherMembers, id: \.credentialIDHash) { member in
+                            HStack {
+                                memberRow(name: member.displayName, tier: member.tier, publicKey: member.publicKey,
+                                          perks: perksByMember[member.credentialIDHash] ?? [],
+                                          plainLine: parentMode ? "This is really \(member.displayName)." : nil)
+                                if iAmAdmin {
+                                    Button { removing = member } label: {
+                                        Image(systemName: "minus.circle")
+                                            .foregroundStyle(.orange.opacity(0.8))
+                                    }
                                 }
-                            }
-                            // Block / unblock this member (reversible; App Store 1.2).
-                            if let engine {
-                                Button {
-                                    let h = member.credentialIDHash
-                                    if engine.isBlocked(h) { engine.unblock(h) } else { engine.block(h) }
-                                } label: {
-                                    Image(systemName: engine.isBlocked(member.credentialIDHash)
-                                          ? "hand.raised.slash.fill" : "hand.raised")
-                                        .foregroundStyle(engine.isBlocked(member.credentialIDHash)
-                                                         ? SealTheme.brass : .white.opacity(0.5))
+                                // Block / unblock this member (reversible; App Store 1.2).
+                                if let engine {
+                                    Button {
+                                        let h = member.credentialIDHash
+                                        if engine.isBlocked(h) { engine.unblock(h) } else { engine.block(h) }
+                                    } label: {
+                                        Image(systemName: engine.isBlocked(member.credentialIDHash)
+                                              ? "hand.raised.slash.fill" : "hand.raised")
+                                            .foregroundStyle(engine.isBlocked(member.credentialIDHash)
+                                                             ? SealTheme.brass : .white.opacity(0.5))
+                                    }
                                 }
                             }
                         }
                     }
-                }
-                .padding(16)
-                .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
-                .padding(.horizontal, 24)
+                    .padding(16)
+                    .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
+                    .padding(.horizontal, 24)
 
-                Text("Say these phrases out loud together — matching phrases mean matching keys.")
-                    .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.4))
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 40)
+                    if parentMode {
+                        parentDetails
+                            .padding(.horizontal, 24)
+                    } else {
+                        Text("Say these phrases out loud together — matching phrases mean matching keys.")
+                            .font(.caption2)
+                            .foregroundStyle(.white.opacity(0.4))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 40)
+                    }
 
-                if chat.ttl != nil {
-                    Text("Disappearing messages are deleted from devices on schedule, but screenshots are always possible.")
-                        .font(.caption2)
-                        .foregroundStyle(.orange.opacity(0.8))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 40)
+                    // The TTL disclosure stays visible in BOTH modes. It is a
+                    // limitation of the promise this drawer makes, not vocabulary,
+                    // and tucking a limitation behind a disclosure is how honest
+                    // copy quietly becomes dishonest.
+                    if chat.ttl != nil {
+                        Text("Disappearing messages are deleted from devices on schedule, but screenshots are always possible.")
+                            .font(.caption2)
+                            .foregroundStyle(.orange.opacity(0.8))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 40)
+                    }
+                    if !parentMode, chat.currentEpoch > 0 {
+                        Text("Keys rotated \(chat.currentEpoch) time\(chat.currentEpoch == 1 ? "" : "s") — removed members can't read anything sent after their removal.")
+                            .font(.caption2)
+                            .foregroundStyle(.white.opacity(0.4))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 40)
+                    }
+                    Spacer(minLength: 12)
                 }
-                if chat.currentEpoch > 0 {
-                    Text("Keys rotated \(chat.currentEpoch) time\(chat.currentEpoch == 1 ? "" : "s") — removed members can't read anything sent after their removal.")
-                        .font(.caption2)
-                        .foregroundStyle(.white.opacity(0.4))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 40)
-                }
-                Spacer()
+                .frame(maxWidth: .infinity)
             }
+            .scrollBounceBehavior(.basedOnSize)
         }
         .preferredColorScheme(.dark)
         .task { await refreshPerks() }
@@ -631,16 +691,27 @@ struct VerificationSheet: View {
     }
 
     private func memberRow(name: String, tier: IdentityTier, publicKey: Data,
-                           perks: [PerkAttestation] = []) -> some View {
+                           perks: [PerkAttestation] = [],
+                           plainLine: String? = nil) -> some View {
         HStack(spacing: 12) {
-            IdentityRing(displayName: name, tier: tier, size: 38)
+            IdentityRing(displayName: name, tier: tier, size: parentMode ? 46 : 38)
             VStack(alignment: .leading, spacing: 2) {
                 Text(name)
                     .font(.system(.callout, design: .rounded, weight: .medium))
                     .foregroundStyle(.white)
-                Text(FingerprintPhrase.phrase(for: publicKey))
-                    .font(.callout)
-                    .foregroundStyle(SealTheme.brass)
+                if let plainLine {
+                    // The same claim in words instead of key material. Not
+                    // brass: brass stays attached to the actual key facts, and
+                    // the fingerprint phrase itself is one disclosure away.
+                    Text(plainLine)
+                        .font(.callout)
+                        .foregroundStyle(.white.opacity(0.75))
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Text(FingerprintPhrase.phrase(for: publicKey))
+                        .font(.callout)
+                        .foregroundStyle(SealTheme.brass)
+                }
                 // Founder EDITION line (never a tier change): only rendered
                 // after the full grant+claim chain verified (PerkAuthority).
                 ForEach(perks, id: \.grant.codeHashHex) { perk in
@@ -651,6 +722,56 @@ struct VerificationSheet: View {
             }
             Spacer()
         }
+        .parentTapTarget()
+    }
+
+    /// Parent Mode moves the vocabulary — the technical sentence, the
+    /// fingerprint phrases, the epoch count — behind one disclosure.
+    ///
+    /// It MOVES it. Nothing here is deleted, because the helper who set the
+    /// phone up has to be able to reach exactly what the normal drawer shows,
+    /// and "is this really them?" is the question this screen exists to answer.
+    private var parentDetails: some View {
+        DisclosureGroup("Details") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Every message is encrypted on-device and its signature chain is verified before display. Unverifiable messages are dropped.")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.6))
+                    .fixedSize(horizontal: false, vertical: true)
+                phraseRow("\(myRoot.displayName) (you)", myRoot.publicKey)
+                ForEach(otherMembers, id: \.credentialIDHash) { member in
+                    phraseRow(member.displayName, member.publicKey)
+                }
+                Text("Say these phrases out loud together — matching phrases mean matching keys.")
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.4))
+                    .fixedSize(horizontal: false, vertical: true)
+                if chat.currentEpoch > 0 {
+                    Text("Keys rotated \(chat.currentEpoch) time\(chat.currentEpoch == 1 ? "" : "s") — removed members can't read anything sent after their removal.")
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.4))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 10)
+        }
+        .tint(.white.opacity(0.6))
+        .font(.system(.callout, design: .rounded, weight: .semibold))
+        .foregroundStyle(.white.opacity(0.85))
+    }
+
+    private func phraseRow(_ name: String, _ publicKey: Data) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(name)
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.55))
+            Text(FingerprintPhrase.phrase(for: publicKey))
+                .font(.callout)
+                .foregroundStyle(SealTheme.brass)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// Seed from cache, then refresh each member's perks from the directory
