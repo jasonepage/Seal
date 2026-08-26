@@ -42,6 +42,10 @@ struct FriendsView: View {
     /// menu item isn't drawn for a linked one, because introduction doesn't
     /// chain.
     @State private var introducing: FriendStore.StoredFriend?
+    /// The Circle-level entry point: no subject chosen yet, so the sheet asks
+    /// for both people. The long-press menu remains as a shortcut that
+    /// pre-fills the first one.
+    @State private var introducingPair = false
     @Environment(\.openURL) private var openURL
     /// Circle isn't reachable in Parent Mode (HomeView renders the chat list
     /// alone), so this is belt and braces — but the rule "accepting an
@@ -74,6 +78,10 @@ struct FriendsView: View {
             .sheet(item: $introducing) { friend in
                 IntroduceSheet(subject: friend, myRoot: myRoot,
                                engine: chatEngine, friendStore: friendStore)
+            }
+            .sheet(isPresented: $introducingPair) {
+                IntroduceSheet(myRoot: myRoot, engine: chatEngine,
+                               friendStore: friendStore)
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -129,6 +137,31 @@ struct FriendsView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(SealTheme.brass)
+
+                // The SECOND way people get connected, beside the first
+                // (docs/INTRODUCTIONS.md). It lived only behind a long-press,
+                // which is a gesture nobody discovers — an invisible primary
+                // entry point for a headline feature.
+                //
+                // SILVER, deliberately, right under a brass button: scanning a
+                // seal means somebody's key is about to be tapped in front of
+                // you, and introducing means precisely that nobody's is. The
+                // colours carry that difference before a word is read (UI.md §1).
+                //
+                // Shown only once there are two people to introduce. Below
+                // that the action cannot do anything, and a button that opens
+                // a sheet to explain why it can't help is a broken promise —
+                // Circle's job at that point is the brass button above it.
+                if introducibleCount >= 2 {
+                    Button { introducingPair = true } label: {
+                        Label("Introduce two friends", systemImage: "link")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                            .foregroundStyle(SealTheme.ink)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(SealTheme.silver)
+                }
 
                 Button { stage = .guide } label: {
                     Text("How forging works")
@@ -413,6 +446,12 @@ struct FriendsView: View {
     }
 
     // MARK: - Moderation (person-level block / report from Circle)
+
+    /// People this device may introduce — in-person friendships only, since
+    /// introduction does not chain (docs/INTRODUCTIONS.md §3.1).
+    private var introducibleCount: Int {
+        friendStore.friends.filter { $0.friendship.isInPerson }.count
+    }
 
     private func friendRow(_ friend: FriendStore.StoredFriend) -> some View {
         let blocked = chatEngine.isBlocked(friend.identity.credentialIDHash)

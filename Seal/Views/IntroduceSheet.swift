@@ -3,35 +3,48 @@ import SwiftUI
 //  IntroduceSheet.swift
 //  Seal
 //
-//  The introducer's side: pick a second person, see exactly what will be
-//  shared, sign it.
+//  The introducer's side: pick two people you've met in person, see exactly
+//  what will be shared, sign it.
 //
-//  The picker only ever lists IN-PERSON friends. That is a rule, not a
+//  TWO WAYS IN, ONE SHEET. From Circle's "Introduce two friends" button
+//  nothing is pre-chosen, so this asks for both — which is what the operation
+//  actually is: one statement naming two people, symmetric, with no first and
+//  second. From a friend's long-press menu or the verification drawer, that
+//  person arrives as `subject` and the sheet skips straight to picking who
+//  they meet.
+//
+//  Every list here is IN-PERSON friends only. That is a rule, not a
 //  convenience — `ChatEngine.sendIntroduction` re-checks it, and so does every
-//  recipient before accepting (docs/INTRODUCTIONS.md). A linked friend never
-//  appears here, and reaching this screen from a linked friend's row is
-//  impossible by construction: the row that opens it isn't drawn for them.
+//  recipient before accepting (docs/INTRODUCTIONS.md §3.1). A linked friend
+//  never appears.
 //
 //  Not brass. An introduction is a claim about people you met, made from a
 //  couch, with no key in your hand — silver, like everything else this feature
 //  touches (UI.md §1).
 
 struct IntroduceSheet: View {
-    /// The friend whose row/drawer this was opened from — one half of the pair.
-    let subject: FriendStore.StoredFriend
+    /// Pre-chosen half of the pair, when the sheet was opened from a specific
+    /// friend. nil when opened from Circle, where the first person is picked
+    /// here instead.
+    var subject: FriendStore.StoredFriend? = nil
     let myRoot: RootIdentity
     @Bindable var engine: ChatEngine
     @Bindable var friendStore: FriendStore
     @Environment(\.dismiss) private var dismiss
 
+    /// First person, when this sheet asked for them. `subject` wins if set.
+    @State private var first: FriendStore.StoredFriend?
     @State private var picked: FriendStore.StoredFriend?
     @State private var sending = false
     @State private var failure: String?
     @State private var sent = false
 
-    private var candidates: [FriendStore.StoredFriend] {
+    private var firstPerson: FriendStore.StoredFriend? { subject ?? first }
+
+    /// Everyone this device may introduce, minus whoever is already chosen.
+    private func candidates(excluding hash: String? = nil) -> [FriendStore.StoredFriend] {
         friendStore.friends
-            .filter { $0.id != subject.id }
+            .filter { $0.id != hash }
             .filter { $0.id != myRoot.credentialIDHash }
             .filter { $0.friendship.isInPerson }
             .sorted { $0.identity.displayName.localizedCaseInsensitiveCompare($1.identity.displayName) == .orderedAscending }
@@ -45,10 +58,12 @@ struct IntroduceSheet: View {
                     VStack(alignment: .leading, spacing: 18) {
                         if sent {
                             sentView
-                        } else if let picked {
-                            confirmView(picked)
+                        } else if let a = firstPerson, let b = picked {
+                            confirmView(a, b)
+                        } else if let a = firstPerson {
+                            secondPicker(a)
                         } else {
-                            pickerView
+                            firstPicker
                         }
                     }
                     .padding(.horizontal, 20)
@@ -66,9 +81,9 @@ struct IntroduceSheet: View {
                     Button(sent ? "Done" : "Cancel") { dismiss() }
                         .foregroundStyle(.white.opacity(0.7))
                 }
-                if picked != nil, !sent {
+                if canGoBack {
                     ToolbarItem(placement: .topBarLeading) {
-                        Button("Back") { picked = nil }
+                        Button("Back") { goBack() }
                             .foregroundStyle(.white.opacity(0.7))
                     }
                 }
@@ -77,11 +92,46 @@ struct IntroduceSheet: View {
         .preferredColorScheme(.dark)
     }
 
-    // MARK: - Pick
+    /// Only offer Back where there is a step to go back TO. With a `subject`
+    /// the first person was chosen before this sheet opened, so backing out of
+    /// it means cancelling, which Cancel already does.
+    private var canGoBack: Bool {
+        guard !sent else { return false }
+        return picked != nil || (subject == nil && first != nil)
+    }
 
-    private var pickerView: some View {
+    private func goBack() {
+        if picked != nil { picked = nil } else { first = nil }
+        failure = nil
+    }
+
+    // MARK: - Step 1: who?
+
+    private var firstPicker: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Introduce \(subject.identity.displayName) to…")
+            Text("Introduce two friends")
+                .font(.system(.title3, design: .rounded, weight: .semibold))
+                .foregroundStyle(.white)
+
+            Text("Pick the first person. Both of them have to be someone you've met in person through Seal — that's what makes your introduction worth anything to them.")
+                .font(.callout)
+                .foregroundStyle(.white.opacity(0.65))
+                .fixedSize(horizontal: false, vertical: true)
+
+            let people = candidates()
+            if people.count < 2 {
+                notice("You need two people you've met in person to make an introduction. Forge one more friendship in Circle and this opens up.")
+            } else {
+                friendList(people) { first = $0 }
+            }
+        }
+    }
+
+    // MARK: - Step 2: to whom?
+
+    private func secondPicker(_ a: FriendStore.StoredFriend) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Introduce \(a.identity.displayName) to…")
                 .font(.system(.title3, design: .rounded, weight: .semibold))
                 .foregroundStyle(.white)
 
@@ -90,55 +140,64 @@ struct IntroduceSheet: View {
                 .foregroundStyle(.white.opacity(0.65))
                 .fixedSize(horizontal: false, vertical: true)
 
-            if !subject.friendship.isInPerson {
-                notice("You haven't met \(subject.identity.displayName) in person through Seal — they're a linked friend. An introduction has to come from someone who has met BOTH people, so this one can't start here.")
-            } else if candidates.isEmpty {
-                notice("You need two people you've met in person to make an introduction. Forge one more friendship in Circle and this opens up.")
+            if !a.friendship.isInPerson {
+                notice("You haven't met \(a.identity.displayName) in person through Seal — they're a linked friend. An introduction has to come from someone who has met BOTH people, so this one can't start here.")
             } else {
-                VStack(spacing: 0) {
-                    ForEach(candidates) { friend in
-                        Button { picked = friend } label: {
-                            HStack(spacing: 12) {
-                                IdentityRing(displayName: friend.identity.displayName,
-                                             tier: friend.identity.tier, size: 38)
-                                Text(friend.identity.displayName)
-                                    .font(.system(.body, design: .rounded, weight: .medium))
-                                    .foregroundStyle(.white)
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .font(.caption)
-                                    .foregroundStyle(.white.opacity(0.3))
-                            }
-                            .padding(.vertical, 10)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .parentTapTarget(60)
-                        Divider().overlay(Color.white.opacity(0.08))
-                    }
+                let people = candidates(excluding: a.id)
+                if people.isEmpty {
+                    notice("You need two people you've met in person to make an introduction. Forge one more friendship in Circle and this opens up.")
+                } else {
+                    friendList(people) { picked = $0 }
                 }
-                .padding(.horizontal, 14)
-                .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
             }
         }
     }
 
+    private func friendList(_ people: [FriendStore.StoredFriend],
+                            onPick: @escaping (FriendStore.StoredFriend) -> Void) -> some View {
+        VStack(spacing: 0) {
+            ForEach(people) { friend in
+                Button { onPick(friend) } label: {
+                    HStack(spacing: 12) {
+                        IdentityRing(displayName: friend.identity.displayName,
+                                     tier: friend.identity.tier, size: 38)
+                        Text(friend.identity.displayName)
+                            .font(.system(.body, design: .rounded, weight: .medium))
+                            .foregroundStyle(.white)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.3))
+                    }
+                    .padding(.vertical, 10)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .parentTapTarget(60)
+                Divider().overlay(Color.white.opacity(0.08))
+            }
+        }
+        .padding(.horizontal, 14)
+        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
+    }
+
     // MARK: - Confirm
 
-    private func confirmView(_ other: FriendStore.StoredFriend) -> some View {
+    private func confirmView(_ a: FriendStore.StoredFriend,
+                             _ b: FriendStore.StoredFriend) -> some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 10) {
-                IdentityRing(displayName: subject.identity.displayName,
-                             tier: subject.identity.tier, size: 44)
+                IdentityRing(displayName: a.identity.displayName,
+                             tier: a.identity.tier, size: 44)
                 Image(systemName: "link")
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(SealTheme.silver)
-                IdentityRing(displayName: other.identity.displayName,
-                             tier: other.identity.tier, size: 44)
+                IdentityRing(displayName: b.identity.displayName,
+                             tier: b.identity.tier, size: 44)
                 Spacer()
             }
 
-            Text("Introduce \(subject.identity.displayName) and \(other.identity.displayName)")
+            Text("Introduce \(a.identity.displayName) and \(b.identity.displayName)")
                 .font(.system(.title3, design: .rounded, weight: .semibold))
                 .foregroundStyle(.white)
                 .fixedSize(horizontal: false, vertical: true)
@@ -147,7 +206,7 @@ struct IntroduceSheet: View {
             // paragraph about what you're sharing is a paragraph people skip.
             VStack(alignment: .leading, spacing: 10) {
                 shareRow("person.text.rectangle",
-                         "\(subject.identity.displayName)'s name and identity key go to \(other.identity.displayName) — and \(other.identity.displayName)'s go to \(subject.identity.displayName).")
+                         "\(a.identity.displayName)'s name and identity key go to \(b.identity.displayName) — and \(b.identity.displayName)'s go to \(a.identity.displayName).")
                 shareRow("signature",
                          "Both of them see that YOU made the introduction, signed by this phone.")
                 shareRow("eye.slash",
@@ -174,7 +233,7 @@ struct IntroduceSheet: View {
             }
 
             Button {
-                send(to: other)
+                send(a, b)
             } label: {
                 HStack(spacing: 8) {
                     if sending { ProgressView().tint(SealTheme.ink) }
@@ -215,7 +274,7 @@ struct IntroduceSheet: View {
             Text("Introduction sent")
                 .font(.system(.title3, design: .rounded, weight: .bold))
                 .foregroundStyle(.white)
-            Text("Both of them have it now. They become linked once each of them accepts — you'll see it in your chat with them.")
+            Text("Both of them have it now. They become linked once each of them accepts — you'll see it in your chat with them. Keep Seal open for a moment afterwards: this phone is the one that passes each answer to the other person.")
                 .font(.callout)
                 .foregroundStyle(.white.opacity(0.7))
                 .fixedSize(horizontal: false, vertical: true)
@@ -233,11 +292,11 @@ struct IntroduceSheet: View {
             .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
     }
 
-    private func send(to other: FriendStore.StoredFriend) {
+    private func send(_ a: FriendStore.StoredFriend, _ b: FriendStore.StoredFriend) {
         sending = true
         failure = nil
         Task {
-            let result = await engine.sendIntroduction(subject, and: other,
+            let result = await engine.sendIntroduction(a, and: b,
                                                        from: myRoot, friendStore: friendStore)
             sending = false
             if let result {

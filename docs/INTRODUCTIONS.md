@@ -346,6 +346,32 @@ in its own commit with its own testing.
 
 ---
 
+## 6.5 Entry points
+
+Circle carries the two ways a person joins your graph, one under the other:
+
+| | | |
+|---|---|---|
+| **Scan a friend's seal** | brass | somebody's key is about to be tapped in front of you |
+| **Introduce two friends** | silver | precisely nobody's is |
+
+The colour difference does the explaining before a word is read (UI.md §1),
+and the pairing is the mental model: these are the only two ways an edge gets
+made. The Circle button asks for BOTH people, because that is what the
+statement is — one commitment naming two parties, symmetric, with no first and
+second. It appears once there are two in-person friends to introduce; below
+that the action cannot do anything, and a button that opens a sheet to explain
+why it can't help is a broken promise.
+
+The long-press menu on a friend's row, and the "Introduce \<name\> to…" row in
+a 1:1 verification drawer, both remain — they pre-fill one half and skip a
+step. They are shortcuts, not the entry point. **This was a real finding from
+the 8/25 family test:** the long-press was originally the ONLY way in, which
+made the primary entry point for the whole feature an invisible gesture.
+
+Initiating is still unavailable in Simplified mode (UI.md §6): accepting an
+introduction is simplified-mode work, making one is not.
+
 ## 7. Ops checklist
 
 **None.** No new CloudKit record type, no new field on an existing type, no
@@ -377,7 +403,7 @@ the same harmless behaviour reactions had before 6/13. Family updates together.
 | `Seal/Views/IntroduceSheet.swift` | Picker + "exactly what will be shared" confirmation |
 | `Seal/Views/IdentityRing.swift` | Silver dashed ring + `link` glyph |
 | `Seal/Views/ChatView.swift` | Card rendering, drawer provenance, "Introduce … to" row |
-| `Seal/Views/FriendsView.swift` | Linked row styling, "Introduce … to" menu item |
+| `Seal/Views/FriendsView.swift` | Linked row styling, the Circle "Introduce two friends" button, "Introduce … to" shortcut |
 | `Seal/Views/ChatsView.swift`, `Seal/Views/SealMascot.swift` | Linked ring in the chat list and colony bar |
 | `Seal/DemoFixtures.swift` | Aunt Linda (linked), Uncle Ray (pending offer), Mom (introducer) |
 | `tools/introduction_vectors.py` | Independent implementation + test vector for the commitment |
