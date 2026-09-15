@@ -24,6 +24,25 @@ timestamps, custody receipts and sealed cards were kept and extended.
 - CloudKit container `iCloud.io.github.jasonepage.Seal`
 - WebAuthn relying party `sealmessenger.com`
 
+## STATUS 2026-09-15 1:42 PM: it builds, it launches, it shows a blank white screen
+
+The build succeeded after three rounds of fixes (see git log). Run on a
+phone from Xcode, the app shows a plain white screen and stays there. Not
+diagnosed yet. The two most likely causes, in order:
+
+1. `SelfTest.runAtLaunchIfDebug()` in `SealApp.init` runs every self-test on
+   the main thread before the first frame. A test that hangs, or an `assert`
+   that fires with the debugger attached, would look exactly like this.
+   Comment that one line out first. If the app then shows the dark screen,
+   the problem is in a test (run them from the Time Travel screen instead,
+   or read the `selftest` os-log line in the Xcode console).
+2. `ContentView` renders nothing until `setupEngines()` has run in
+   `.onAppear`; a blank Group may not fire `onAppear`. If step 1 does not
+   fix it, move `setupEngines()` into `ContentView`'s `init` or wrap the
+   Group's else-branch in a `Color(SealTheme.ink)` so something is on screen.
+
+Also check the Xcode console for a purple runtime warning or a crash log.
+
 ## THE FIRST THING TO DO: BUILD IT
 
 **Nothing written on 2026-09-15 has been compiled.** The conversion was done
