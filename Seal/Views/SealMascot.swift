@@ -53,7 +53,7 @@ struct SealFigure: View {
                         .frame(width: s.width * 0.38, height: s.height * 0.22)
                         .position(x: s.width * 0.5, y: s.height * 0.68)
                         .mask(SealBodyShape())
-                    // Front flipper — resting on the body, not hanging off it
+                    // Front flipper, resting on the body, not hanging off it
                     Ellipse()
                         .fill(Color(white: 0.45))
                         .frame(width: s.width * 0.15, height: s.height * 0.09)
@@ -65,7 +65,7 @@ struct SealFigure: View {
                         .frame(width: s.width * 0.045, height: s.width * 0.045)
                         .scaleEffect(y: eyeOpen ? 1 : 0.08)
                         .position(x: s.width * 0.78, y: s.height * 0.25)
-                    // Eye glint — the one brass touch
+                    // Eye glint, the one brass touch
                     Circle()
                         .fill(SealTheme.brass)
                         .frame(width: s.width * 0.014, height: s.width * 0.014)
@@ -85,7 +85,7 @@ struct SealFigure: View {
         .aspectRatio(220.0 / 140.0, contentMode: .fit)
         .task {
             guard animated else { return }
-            // Breathing: slow, anchored at the ground — like a resting animal.
+            // Breathing: slow, anchored at the ground, like a resting animal.
             withAnimation(.easeInOut(duration: 2.6).repeatForever(autoreverses: true)) {
                 breathing = true
             }

@@ -10,7 +10,7 @@ import os
 ///
 /// Read it in Console.app (or Xcode console) filtered on subsystem
 /// `io.github.jasonepage.Seal` / category `webauthn`. No secrets are logged:
-/// public coordinates lengths, algorithm IDs, flags, and lengths only — never
+/// public coordinates lengths, algorithm IDs, flags, and lengths only, never
 /// private keys or full clientData.
 enum WebAuthnDiag {
     static let log = Logger(subsystem: "io.github.jasonepage.Seal", category: "webauthn")
@@ -49,7 +49,7 @@ enum WebAuthnDiag {
     }
 }
 
-/// Minimal CBOR decoder — just the subset WebAuthn attestation objects need
+/// Minimal CBOR decoder, just the subset WebAuthn attestation objects need
 /// (unsigned/negative ints, byte strings, text strings, arrays, maps).
 enum CBOR {
     indirect enum Value {
@@ -177,13 +177,13 @@ enum WebAuthnParsing {
     /// Normalize a COSE EC coordinate to exactly 32 bytes. Conformant
     /// authenticators emit fixed 32-byte big-endian coordinates, but some
     /// firmware strips a leading zero (→31 bytes) or prepends one (→33). A
-    /// hard `== 32` check rejected those keys outright — a model-dependent
+    /// hard `== 32` check rejected those keys outright, a model-dependent
     /// "this key never works" failure. We left-pad short values and trim a
     /// single leading zero from long ones; anything else is genuinely bad.
     private static func normalizeCoordinate(_ raw: Data) throws -> Data {
         var bytes = Data(raw)
         if bytes.count > 32 {
-            // Drop leading zero padding only — a non-zero high byte means the
+            // Drop leading zero padding only, a non-zero high byte means the
             // value really is too big to be a P-256 coordinate.
             while bytes.count > 32, bytes.first == 0 { bytes.removeFirst() }
             guard bytes.count == 32 else { throw ParseError.oversizedCoordinate }
@@ -231,7 +231,7 @@ enum WebAuthnParsing {
         """)
 
         // ES256 / P-256 only. We pin ES256 at registration, but a
-        // non-conformant key could still answer with something else — fail
+        // non-conformant key could still answer with something else, fail
         // loud and named instead of with a generic error.
         if let alg, alg != -7 {
             throw ParseError.unsupportedAlgorithm(alg)
@@ -253,7 +253,7 @@ enum WebAuthnParsing {
     }
 }
 
-/// A stored WebAuthn assertion — everything needed to re-verify it later.
+/// A stored WebAuthn assertion, everything needed to re-verify it later.
 struct WebAuthnAssertion: Codable, Hashable {
     let credentialID: Data
     let clientDataJSON: Data
@@ -282,8 +282,8 @@ struct WebAuthnAssertion: Codable, Hashable {
     /// same as proving the assertion was made FOR SEAL, in an ASSERTION
     /// ceremony, with a HUMAN PRESENT. Without these three, "a Seal assertion"
     /// is just a raw signature over chosen bytes: a signature the same key
-    /// produced for another relying party — or in a registration rather than
-    /// an assertion context — is accepted here if the bytes line up.
+    /// produced for another relying party, or in a registration rather than
+    /// an assertion context, is accepted here if the bytes line up.
     ///
     /// - rpIdHash: first 32 bytes of authenticatorData == SHA256(RP ID).
     /// - User Present (bit 0): somebody physically touched the authenticator.

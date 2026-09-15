@@ -14,13 +14,13 @@ final class CeremonyManager: NSObject {
         case searching      // NFC coaching sheet up / Face ID prompt
         case reading        // key detected, assertion in flight
         case endorsing      // second tap: hardware key vouches for this device
-        case sealed         // success — play brass seal animation
+        case sealed         // success, play brass seal animation
         case failed(String) // plain-language reason, one-tap retry
     }
 
     private(set) var phase: Phase = .idle
 
-    /// WebAuthn RP ID — must match the AASA file served at this domain (SDS §6).
+    /// WebAuthn RP ID, must match the AASA file served at this domain (SDS §6).
     static let relyingPartyID = "sealmessenger.com"
 
     let identity: IdentityManager
@@ -48,12 +48,12 @@ final class CeremonyManager: NSObject {
             case .unexpectedCredential: "That wasn't the response we expected. Tap to try again."
             case .keyUnreadable: "Couldn't read the key's response. Try holding it still against the top of your phone."
             case .verificationFailed: "That key doesn't match this person's identity. You were NOT connected."
-            case .missingCredentialID: "This person registered before credential publishing — they need to update their identity."
+            case .missingCredentialID: "This person registered before credential publishing, they need to update their identity."
             case .identityNotFound: "No identity in the directory matches that key. Register instead?"
             case .identityDeleted: "This identity was permanently deleted and can't be restored. Register a new one instead."
-            case .alreadyRegistered: "This key already holds a Seal identity — one key, one identity. Use \"Sign in\" instead."
+            case .alreadyRegistered: "This key already holds a Seal identity, one key, one identity. Use \"Sign in\" instead."
             case .directoryUnavailable: "Couldn't reach the identity directory to look up your key. Check your connection and iCloud sign-in, then tap to try again."
-            case .directoryEmpty: "No identities are published in the directory yet, so there's nothing for your security key to match. (If you just registered, give iCloud a moment to sync — or the Identity record type may not be Queryable in this CloudKit environment.)"
+            case .directoryEmpty: "No identities are published in the directory yet, so there's nothing for your security key to match. (If you just registered, give iCloud a moment to sync, or the Identity record type may not be Queryable in this CloudKit environment.)"
             }
         }
     }
@@ -75,7 +75,7 @@ final class CeremonyManager: NSObject {
             // Best-effort by design (deterrence, not an invariant), but log
             // the outcome: if this query fails or returns 0 here, security-key
             // SIGN-IN will also come up empty (same query), which is the usual
-            // root cause of a "No Credentials" sign-in — Identity not Queryable
+            // root cause of a "No Credentials" sign-in, Identity not Queryable
             // in this CloudKit environment, or iCloud unreachable.
             var excluded: [Data] = []
             do {
@@ -113,7 +113,7 @@ final class CeremonyManager: NSObject {
             let devicePub = deviceKey.publicKey.x963Representation
 
             // 4. Endorsement: root credential signs a challenge committing to
-            //    BOTH the signing key and the KEM key — binding authentication
+            //    BOTH the signing key and the KEM key, binding authentication
             //    and encryption together. Committing to only the signing key
             //    would let a tampered directory swap the KEM key and MITM
             //    every sender-key envelope.
@@ -142,7 +142,7 @@ final class CeremonyManager: NSObject {
             // 5. Persist locally.
             identity.completeRegistration(identity: root, endorsement: endorsement)
 
-            // 6. Publish to the directory NOW, as part of registration — not
+            // 6. Publish to the directory NOW, as part of registration, not
             //    deferred to HomeView's .task. A security-key account that
             //    isn't in the directory cannot be signed back into (sign-in
             //    builds its allow-list from the directory), so a lazy publish
@@ -155,7 +155,7 @@ final class CeremonyManager: NSObject {
                 await directory.publishIdentity(root, endorsement: endorsement)
                 WebAuthnDiag.log.info("register: published identity to directory (hash=\(root.credentialIDHash, privacy: .public))")
             } else {
-                WebAuthnDiag.log.error("register: no directory handle — identity NOT published (key sign-in will fail until it syncs)")
+                WebAuthnDiag.log.error("register: no directory handle, identity NOT published (key sign-in will fail until it syncs)")
             }
             phase = .sealed
             SealTheme.sealHaptic()
@@ -175,7 +175,7 @@ final class CeremonyManager: NSObject {
     func resetPhase() { phase = .idle }
 
     /// Drive the ceremony state machine from a ceremony defined in an
-    /// extension in another file (FR-3 backup keys — BackupKeyCeremony.swift).
+    /// extension in another file (FR-3 backup keys, BackupKeyCeremony.swift).
     /// `phase` stays `private(set)` so the only way to move it from outside
     /// this file is this deliberate, greppable call rather than an assignment
     /// anywhere in the module.
@@ -190,7 +190,7 @@ final class CeremonyManager: NSObject {
     /// Assert with an existing credential for our RP, look the identity up in
     /// the directory, verify the assertion against its public key, then endorse
     /// THIS device with a second tap. Chats/friends are device-local and do
-    /// not follow the identity — the UI says so.
+    /// not follow the identity, the UI says so.
     ///
     /// `tier` selects the method explicitly. We do NOT bundle the passkey and
     /// security-key providers into one request: with both present iOS jumps
@@ -224,7 +224,7 @@ final class CeremonyManager: NSObject {
                 let security = ASAuthorizationSecurityKeyPublicKeyCredentialProvider(
                     relyingPartyIdentifier: Self.relyingPartyID)
                 let securityRequest = security.createCredentialAssertionRequest(challenge: challenge)
-                // .preferred, not .discouraged — see makeRegistrationRequest.
+                // .preferred, not .discouraged, see makeRegistrationRequest.
                 // A PIN'd key forces UV via always_uv; .discouraged would put
                 // iOS and the key in the "wrong PIN" conflict. Pinless keys are
                 // unaffected (.preferred prompts only when a PIN is set).
@@ -261,7 +261,7 @@ final class CeremonyManager: NSObject {
 
             // 2. Directory lookup by credential hash. The tapped credential
             //    may be the identity's ROOT credential or one of its BACKUP
-            //    credentials (FR-3) — `resolveSignInCredential` handles both,
+            //    credentials (FR-3), `resolveSignInCredential` handles both,
             //    checks the tombstone on whichever identity would be
             //    recovered, and hands back the public key this particular tap
             //    must verify against. Permanently-deleted identities refuse
@@ -273,7 +273,7 @@ final class CeremonyManager: NSObject {
             let root = resolved.root
 
             // 3. Verify the assertion against the directory's published key
-            //    for THAT credential — proves the tapper controls the
+            //    for THAT credential, proves the tapper controls the
             //    credential they're claiming. For a backup key this is the
             //    backup's own public key; checking it against the root's would
             //    fail every time, since a backup credential signs with its own
@@ -293,7 +293,7 @@ final class CeremonyManager: NSObject {
             }
 
             // 4. Endorse this device. REUSE this phone's existing key for this
-            //    identity if it survived a prior sign-out — that keeps the
+            //    identity if it survived a prior sign-out, that keeps the
             //    device public key stable so the directory recognizes the same
             //    device instead of logging a duplicate. Only a genuinely new
             //    phone mints a fresh key here.
@@ -303,8 +303,8 @@ final class CeremonyManager: NSObject {
             let kemPub = identity.kemPublicKeyData ?? Data()
             let commitment = IdentityManager.endorsementCommitment(
                 devicePublicKey: devicePub, kemBundlePublicKeys: kemPub)
-            // Endorse with the SAME provider used to identify — passing both
-            // would re-trigger the NFC modal for passkey users — and with the
+            // Endorse with the SAME provider used to identify, passing both
+            // would re-trigger the NFC modal for passkey users, and with the
             // SAME credential that just asserted. That second part is what
             // makes FR-3 recovery actually work: sign in on a new phone with a
             // BACKUP key and the endorsement this device gets is signed by the
@@ -328,7 +328,7 @@ final class CeremonyManager: NSObject {
             identity.completeRegistration(identity: root, endorsement: endorsement)
             // Recovered with a backup key? Remember it (FR-3). Recorded HERE,
             // after the assertion verified and the device endorsement exists,
-            // never at resolution time — a resolution that fails verification
+            // never at resolution time, a resolution that fails verification
             // or a ceremony the user abandons must not leave this phone
             // telling its owner their main key is gone when it isn't.
             if resolved.backup != nil {
@@ -356,7 +356,7 @@ final class CeremonyManager: NSObject {
     /// Friend forge (U2): the friend taps THEIR key on THIS phone, signing a
     /// challenge that commits to both identities + a fresh nonce (SDS §5).
     /// We verify the signature against the friend's public key as fetched
-    /// from the directory — proof they control the identity they claim.
+    /// from the directory, proof they control the identity they claim.
     func forgeFriendship(myRoot: RootIdentity, friend: RootIdentity) async throws -> Friendship {
         guard let friendCredentialID = friend.rawCredentialID else {
             throw CeremonyError.missingCredentialID
@@ -414,17 +414,17 @@ final class CeremonyManager: NSObject {
     }
 
     /// Handover ceremony (CustodyReceipt.swift). Identical machinery to the
-    /// friend forge — the counterparty taps THEIR key on THIS phone — but the
+    /// friend forge, the counterparty taps THEIR key on THIS phone, but the
     /// challenge is a receipt commitment binding both identities to a specific
     /// item, photo hash and moment. It inherits the same guarantee: it cannot
     /// be produced remotely, and the signature is the receiver saying "I took
     /// this," not the giver claiming they handed it over.
     ///
-    /// Throws rather than returning anything unverified — an unverified receipt
+    /// Throws rather than returning anything unverified, an unverified receipt
     /// is worse than no receipt, because it still looks like evidence.
     /// Takes the receipt's FIELDS, never raw bytes, and builds the commitment
     /// itself. The previous signature accepted a `Data` and asked the
-    /// counterparty's ROOT credential to sign whatever arrived — a signing
+    /// counterparty's ROOT credential to sign whatever arrived, a signing
     /// oracle one careless caller away from a root signature over a
     /// `seal.backup.v1` or `seal.endorse.v3` commitment, which is a permanent
     /// takeover from a tap the victim believes is a handover receipt. The one
@@ -489,7 +489,7 @@ final class CeremonyManager: NSObject {
     /// Commitment for the RECIPROCAL half of a forge (see ForgeHandshake.swift).
     /// Deliberately a different domain string from `friendChallenge` so a
     /// device-key reciprocal signature can never be replayed as, or mistaken
-    /// for, a root-key ceremony assertion — the two prove different things and
+    /// for, a root-key ceremony assertion, the two prove different things and
     /// must stay cryptographically distinguishable. Argument order is
     /// (whoever ran the ceremony, whoever tapped), and both sides recompute it
     /// the same way, so the commitment is unambiguous about direction.
@@ -520,7 +520,7 @@ final class CeremonyManager: NSObject {
                 credentialID: friendCredentialID,
                 transports: ASAuthorizationSecurityKeyPublicKeyCredentialDescriptor.Transport.allSupported)
         ]
-        // Match registration's UV policy: .preferred — see
+        // Match registration's UV policy: .preferred, see
         // makeRegistrationRequest for the full rationale. A PIN-protected key
         // forces the clientPIN ceremony regardless (always_uv); .preferred
         // makes iOS and the key agree so it completes, instead of the
@@ -602,14 +602,14 @@ final class CeremonyManager: NSObject {
                     transports: ASAuthorizationSecurityKeyPublicKeyCredentialDescriptor.Transport.allSupported)
             }
             // Non-discoverable credentials: keeps sign-in working off an
-            // allow-list — signIn() hands the request every directory
+            // allow-list, signIn() hands the request every directory
             // credentialID, so a non-resident key still recognizes its own
             // credential. Scale ceiling = directory size in the allow-list;
             // fine at current scale (SDS §7). NOTE: residentKey is orthogonal
-            // to the PIN — making creds non-discoverable does NOT avoid the
+            // to the PIN, making creds non-discoverable does NOT avoid the
             // clientPIN ceremony (that's the userVerification axis, below).
             request.residentKeyPreference = .discouraged
-            // UV policy — CANONICAL comment, referenced by the other three
+            // UV policy, CANONICAL comment, referenced by the other three
             // security-key requests. Use .preferred, NOT .discouraged.
             //
             // Modern FIDO2.1 keys ship with `always_uv` enabled once a PIN is
@@ -621,7 +621,7 @@ final class CeremonyManager: NSObject {
             // .preferred aligns iOS with the key so the ceremony completes.
             // Pinless keys are unaffected: .preferred prompts only "if a PIN is
             // set" (FIDO spec), so they stay tap-only with no prompt. (.required
-            // would also fix PIN'd keys but forces PIN SETUP on pinless keys —
+            // would also fix PIN'd keys but forces PIN SETUP on pinless keys, 
             // rejected to preserve the tap-only flow.)
             request.userVerificationPreference = .preferred
             request.attestationPreference = .direct   // SDS §6: request, don't enforce
@@ -648,7 +648,7 @@ final class CeremonyManager: NSObject {
                     credentialID: allowedCredentialID,
                     transports: ASAuthorizationSecurityKeyPublicKeyCredentialDescriptor.Transport.allSupported)
             ]
-            // Same UV policy as registration (.preferred) — see makeRegistrationRequest.
+            // Same UV policy as registration (.preferred), see makeRegistrationRequest.
             request.userVerificationPreference = .preferred
             return request
         }

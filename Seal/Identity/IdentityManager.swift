@@ -17,7 +17,7 @@ final class IdentityManager {
     /// ML-KEM-768 seed (Crypto/KEMBundle.swift). Absent on phones that
     /// predate the hybrid bundle; minted on the next sign-in.
     private static func mlkemKeyTag(_ hash: String) -> String { "seal.mlkemKey.\(hash)" }
-    // Legacy un-scoped tags (pre-scoping builds) — migrated once on load.
+    // Legacy un-scoped tags (pre-scoping builds), migrated once on load.
     private static let legacyDeviceKeyTag = "seal.deviceKey"
     private static let legacyKemKeyTag = "seal.kemKey"
     static let identityKey = "seal.rootIdentity"        // internal: DemoFixtures swaps/restores it
@@ -30,7 +30,7 @@ final class IdentityManager {
     // MARK: - Device key
 
     /// The non-exportable Secure Enclave P-256 signing key for this device.
-    /// Access: this-device-only. NOT biometry-gated — it signs every outgoing
+    /// Access: this-device-only. NOT biometry-gated, it signs every outgoing
     /// message, so gating is done at app level (Face ID app lock), not per-sign.
     private(set) var deviceKey: SecureEnclave.P256.Signing.PrivateKey?
 
@@ -124,7 +124,7 @@ final class IdentityManager {
         KeyPinStore.pin(hash: identity.credentialIDHash, publicKey: identity.publicKey)
         // Persist WITHOUT the backup credentials (FR-3). Everything else on a
         // RootIdentity is stable, but the authority set is revocable, and a
-        // keychain copy is never re-filtered against the revocation list — it
+        // keychain copy is never re-filtered against the revocation list, it
         // would still name a revoked backup as an authorised endorser on the
         // next launch, and the next, forever. The in-memory value keeps them
         // for this session; anything that verifies uses the freshly fetched
@@ -141,8 +141,8 @@ final class IdentityManager {
     }
 
     /// Change the display name after registration and persist it. The name is
-    /// metadata only — it's NOT part of any signature, the endorsement
-    /// commitment, or the credential hash — so renaming never affects
+    /// metadata only, it's NOT part of any signature, the endorsement
+    /// commitment, or the credential hash, so renaming never affects
     /// verification or identity. The caller republishes the Identity record so
     /// friends pick up the new name on their next directory fetch.
     func updateDisplayName(_ newName: String) {
@@ -156,7 +156,7 @@ final class IdentityManager {
 
     /// Reviewer/demo access (FR-22): install the fully-local demo account and
     /// load it, so the app drops straight into demo without a key or Face ID.
-    /// Gated behind the access code in RegistrationView — never the default.
+    /// Gated behind the access code in RegistrationView, never the default.
     func activateDemo() {
         DemoFixtures.activate()   // seeds the demo identity + friends + chats
         load()                    // pull the just-installed demo identity into rootIdentity
@@ -236,14 +236,14 @@ final class IdentityManager {
     /// v3 length-frames both values. v2 did not: `SHA256(domain ‖ D ‖ K)` with
     /// two variable-length values means `(D, K)` and `(D‖K[0..<n], K[n...])`
     /// hash identically, so ONE root signature authorises many splits. The
-    /// live consequence was revocation evasion — re-split a revoked
+    /// live consequence was revocation evasion, re-split a revoked
     /// endorsement as `devicePublicKey = D‖K`, and it still verifies while no
     /// longer byte-matching the revocation entry that killed it, so a dead
     /// device walks again. It also shifts which bytes `HybridKEM.wrapToAll`
     /// treats as a KEM key.
     ///
-    /// `CustodyReceipt.commitment` already did this correctly — UInt32BE per
-    /// field — and is the model this follows.
+    /// `CustodyReceipt.commitment` already did this correctly, UInt32BE per
+    /// field, and is the model this follows.
     static func endorsementCommitment(devicePublicKey: Data, kemBundlePublicKeys: Data) -> Data {
         var input = Data("seal.endorse.v3".utf8)
         func field(_ data: Data) {
@@ -257,7 +257,7 @@ final class IdentityManager {
     }
 
     /// The unframed v2 commitment. Still ACCEPTED during the migration window
-    /// so that every endorsement published before v3 keeps verifying — an
+    /// so that every endorsement published before v3 keeps verifying, an
     /// endorsement that stops verifying is a phone that can talk to nobody.
     /// Nothing creates v2 any more. Drop this once the family is known to be
     /// on a v3 build and every directory record has been re-endorsed (a
@@ -297,7 +297,7 @@ final class IdentityManager {
         // whoever assembled this RootIdentity: a hand-constructed or
         // tampered-with entry must not be able to widen the set of keys that
         // may speak for an identity. What this canNOT re-check is REVOCATION,
-        // which lives in the record's revocation list, not on the identity —
+        // which lives in the record's revocation list, not on the identity, 
         // so a backup revoked a moment ago stays trusted until the next
         // directory fetch. That is the same staleness window a revoked DEVICE
         // has today, and it self-heals through the same path: ChatEngine
@@ -321,7 +321,7 @@ final class IdentityManager {
 
     /// Returns the device public keys + KEM keys from `endorsements` whose
     /// signature chain back to `root` actually verifies. Everything else is
-    /// dropped — the server is untrusted for integrity (SDS §7).
+    /// dropped, the server is untrusted for integrity (SDS §7).
     ///
     /// **The endorsing credential may be the root OR a backup credential**
     /// (FR-3). That is the entire point of a backup key: sign-in endorses the
@@ -329,7 +329,7 @@ final class IdentityManager {
     /// backup key produces a device endorsement signed by the BACKUP. If this
     /// function still demanded the root's signature, that endorsement would be
     /// dropped by every peer and the recovered phone would be able to send
-    /// nothing anyone could verify — recovery that silently does not work.
+    /// nothing anyone could verify, recovery that silently does not work.
     ///
     /// **Compatibility, stated plainly:** a build older than backup keys
     /// verifies against the root credential only, so it will NOT accept a
@@ -348,7 +348,7 @@ final class IdentityManager {
             // is root-signed and already applied by `fetchIdentity`.
             guard let assertion = try? JSONDecoder().decode(WebAuthnAssertion.self, from: e.assertion)
             else { return false }
-            // The commitment binds signing AND KEM keys — a directory that
+            // The commitment binds signing AND KEM keys, a directory that
             // swaps either one fails verification. v3 (length-framed) is what
             // this build creates; v2 is accepted for endorsements published
             // before the framing fix. See endorsementCommitment.
@@ -370,7 +370,7 @@ final class IdentityManager {
             // authority in turn would also work, but each failed attempt logs
             // a "did NOT match the directory public key" error, and a healthy
             // backup-signed endorsement would print one of those on the root
-            // attempt every time — exactly the misleading noise the messaging
+            // attempt every time, exactly the misleading noise the messaging
             // os-log category exists to avoid. Fall back to trying them all
             // only when the ID matches nothing (pre-credential-publishing
             // identities, where rawCredentialID is nil).
@@ -378,7 +378,7 @@ final class IdentityManager {
             // is a sibling field in the assertion blob and is NOT covered by
             // the signature, so a directory that flips it could otherwise
             // point verification at the wrong authority and have the endorsement
-            // dropped — silently killing exactly the phone recovery creates.
+            // dropped, silently killing exactly the phone recovery creates.
             if let named = authorities.first(where: { $0.credentialID == assertion.credentialID }),
                assertion.verify(with: named.publicKey) {
                 return true
@@ -389,7 +389,7 @@ final class IdentityManager {
 
     /// Device public keys with a VALID revocation (assertion verifies under
     /// the root key and commits to that device key). Forged revocations are
-    /// ignored — only the root key can kill a device.
+    /// ignored, only the root key can kill a device.
     static func revokedDevicePublicKeys(root: RootIdentity, revocations: [DeviceRevocation]) -> Set<Data> {
         guard let rootPub = try? P256.Signing.PublicKey(rawRepresentation: root.publicKey) else { return [] }
         var revoked: Set<Data> = []
@@ -404,7 +404,7 @@ final class IdentityManager {
         return revoked
     }
 
-    /// Backup credential public keys with a VALID revocation — a root-signed
+    /// Backup credential public keys with a VALID revocation, a root-signed
     /// assertion committing to that credential under `seal.backup.revoke.v1`.
     /// Same shape and same discipline as `revokedDevicePublicKeys`, in the
     /// same `revocations` list on the record, with its own domain string so

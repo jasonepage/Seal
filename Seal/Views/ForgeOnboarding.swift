@@ -3,9 +3,9 @@ import SwiftUI
 // Onboarding + friend-ceremony coaching (UI.md §3.1–3.2).
 //
 // Three goals, one file:
-//   1. WelcomeCarousel  — set the mental model BEFORE the first ceremony.
-//   2. ForgeHowToCard   — explain the one rule before the first scan.
-//   3. Step rail / role banners / passkey-hybrid card — coach each step live.
+//   1. WelcomeCarousel, set the mental model BEFORE the first ceremony.
+//   2. ForgeHowToCard, explain the one rule before the first scan.
+//   3. Step rail / role banners / passkey-hybrid card, coach each step live.
 //
 // Brass follows the codebase convention (primary CTAs + trust beats), per
 // RegistrationView's existing tinting.

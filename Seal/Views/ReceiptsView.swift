@@ -67,14 +67,14 @@ struct ReceiptsView: View {
                            sync: sync, store: store)
         }
         .task {
-            // Read the keychain HERE, not in ReceiptStore.init — SwiftUI
+            // Read the keychain HERE, not in ReceiptStore.init, SwiftUI
             // evaluates a NavigationLink's destination on every parent body
             // pass, so an init that touched the keychain would do so on every
             // chat update.
             store.loadIfNeeded()
             // Receipts issued TO us arrive the same way forge handshakes do.
             // NOTE: this is the only place that runs, so a receipt lands when
-            // the recipient opens Handovers — not on push. Fine for v1.
+            // the recipient opens Handovers, not on push. Fine for v1.
             await ReceiptService.check(myRoot: myRoot, identity: identity,
                                        store: store, sync: sync)
         }
@@ -222,7 +222,7 @@ struct ReceiptDetailView: View {
         // Keep the ORIGINAL bytes. Rendering to UIImage and re-encoding with
         // jpegData() produces a different byte stream (JPEG re-encoding is
         // lossy and not idempotent), so hashing that would report "photo
-        // altered" on every honest receipt — including both phones in a demo.
+        // altered" on every honest receipt, including both phones in a demo.
         var originalPhotoBytes: Data?
         if let ref = receipt.mediaRef, let key = receipt.mediaKey,
            let blob = try? await sync.fetchMediaAsset(ref),
@@ -252,7 +252,7 @@ struct ReceiptDetailView: View {
     }
 }
 
-/// The shareable proof. Fixed-size and self-contained — ImageRenderer draws it
+/// The shareable proof. Fixed-size and self-contained, ImageRenderer draws it
 /// offscreen, so nothing here may depend on the surrounding layout.
 struct ReceiptCard: View {
     let receipt: CustodyReceipt
@@ -378,7 +378,7 @@ struct NewReceiptView: View {
                 .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
                 .foregroundStyle(.white)
                 .padding(.horizontal, 24)
-            Text("Be specific. This exact text is signed by both of you — one character different and the signatures no longer match.")
+            Text("Be specific. This exact text is signed by both of you, one character different and the signatures no longer match.")
                 .font(.caption2)
                 .foregroundStyle(.white.opacity(0.45))
                 .multilineTextAlignment(.center)
@@ -438,7 +438,7 @@ struct NewReceiptView: View {
             .clipShape(RoundedRectangle(cornerRadius: 20))
             .frame(minHeight: 200)
             .padding(.horizontal, 24)
-            Text("They don't have to be a friend — a receipt is its own ceremony.")
+            Text("They don't have to be a friend, a receipt is its own ceremony.")
                 .font(.caption2)
                 .foregroundStyle(.white.opacity(0.45))
                 .padding(.horizontal, 32)
@@ -459,7 +459,7 @@ struct NewReceiptView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 24)
             RoleBanner(icon: "key.radiowaves.forward.fill",
-                       text: "Hand this phone to \(who.displayName). When they tap their key, they're signing that they received this exact item — it can't be produced without them.")
+                       text: "Hand this phone to \(who.displayName). When they tap their key, they're signing that they received this exact item, it can't be produced without them.")
             Spacer()
         }
         .padding(.top, 16)
@@ -526,7 +526,7 @@ struct NewReceiptView: View {
     @MainActor
     private func lookup(_ hash: String) async {
         guard hash != myRoot.credentialIDHash else {
-            step = .failed("That's your own seal — a receipt needs two people."); return
+            step = .failed("That's your own seal, a receipt needs two people."); return
         }
         do {
             guard let (who, _) = try await sync.fetchIdentity(credentialIDHash: hash) else {
@@ -560,7 +560,7 @@ struct NewReceiptView: View {
                     receiverEndorsements: endorsements, sync: sync) {
                     receipt = delivered
                 } else {
-                    ReceiptService.log.error("sign: couldn't deliver their copy — ours is still valid")
+                    ReceiptService.log.error("sign: couldn't deliver their copy, ours is still valid")
                 }
             }
             store.add(receipt)

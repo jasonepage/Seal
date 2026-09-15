@@ -7,7 +7,7 @@ import LocalAuthentication
 /// state (`seal.applock.<hash>`); wiped on sign-out.
 ///
 /// Uses `.deviceOwnerAuthentication` (biometry with passcode fallback) so a
-/// Face ID lockout can't brick the app. Fail-open when no passcode is set —
+/// Face ID lockout can't brick the app. Fail-open when no passcode is set, 
 /// a passcode-less device has no keychain protection to add anyway.
 @Observable
 final class AppLock {
@@ -21,7 +21,7 @@ final class AppLock {
         self.ownerHash = ownerHash
         let enabled = KeychainStore.load("seal.applock.\(ownerHash)") != nil
         isEnabled = enabled
-        // Demo mode never locks — fixtures must screenshot cleanly.
+        // Demo mode never locks, fixtures must screenshot cleanly.
         isLocked = enabled && !DemoFixtures.isActive
     }
 
@@ -34,7 +34,7 @@ final class AppLock {
         LAContext().canEvaluatePolicy(.deviceOwnerAuthentication, error: nil)
     }
 
-    /// Toggling either way requires authenticating first — otherwise anyone
+    /// Toggling either way requires authenticating first, otherwise anyone
     /// holding an unlocked phone could quietly disable the lock.
     func setEnabled(_ enabled: Bool) async {
         guard await Self.authenticate(reason: enabled
@@ -77,7 +77,7 @@ final class AppLock {
         KeychainStore.load(cardLockKey(ownerHash)) != nil
     }
 
-    /// Toggling either way authenticates first — same rationale as
+    /// Toggling either way authenticates first, same rationale as
     /// `setEnabled`. Returns the state actually in effect afterwards, so the
     /// caller's toggle snaps back on a failed or cancelled prompt.
     static func setCardLockEnabled(_ enabled: Bool, ownerHash: String) async -> Bool {
@@ -111,7 +111,7 @@ final class AppLock {
     }
 }
 
-/// Full-screen cover while locked. Brass shield — a trust surface, no mascot.
+/// Full-screen cover while locked. Brass shield, a trust surface, no mascot.
 struct AppLockScreen: View {
     let lock: AppLock
 

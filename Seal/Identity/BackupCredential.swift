@@ -1,11 +1,11 @@
 import Foundation
 import CryptoKit
 
-/// Backup credentials (SRS FR-3, U5; docs/UI.md §3.1) — `seal.backup.v1`.
+/// Backup credentials (SRS FR-3, U5; docs/UI.md §3.1), `seal.backup.v1`.
 ///
 /// Today the identity IS the one WebAuthn credential created at registration.
 /// Lose it and the identity is gone forever: there is no server, no account
-/// recovery, and by design nobody — not us, not Apple — holds anything that
+/// recovery, and by design nobody, not us, not Apple, holds anything that
 /// could bring it back. FR-3 is the one legitimate escape hatch: a SECOND
 /// credential (another hardware key, or a passkey on a family helper's phone)
 /// that the root identity has explicitly endorsed, so a lost or dead key
@@ -19,7 +19,7 @@ import CryptoKit
 /// (`seal.revoke.v1`): a WebAuthn assertion from the root credential whose
 /// challenge is a domain-separated hash committing to exactly the thing being
 /// authorised. Verification is therefore the same discipline as everywhere
-/// else in Seal — the directory is untrusted, and every client recomputes the
+/// else in Seal, the directory is untrusted, and every client recomputes the
 /// commitment itself (SDS §7).
 ///
 ///     commitment = SHA256("seal.backup.v1" ‖ credentialID ‖ publicKey)
@@ -34,12 +34,12 @@ import CryptoKit
 ///
 /// # What a backup credential can do
 ///
-/// Sign in, and — because sign-in endorses the phone it is run on — endorse a
+/// Sign in, and, because sign-in endorses the phone it is run on, endorse a
 /// device key. That pair IS the recovery: tap the backup key on a new phone
 /// and the identity, the friendships, and the directory entry all come back.
 /// Peers accept the resulting device endorsement because
-/// `IdentityManager.verifiedDevices` verifies against the AUTHORITY SET —
-/// the root credential plus every non-revoked backup — rather than the root
+/// `IdentityManager.verifiedDevices` verifies against the AUTHORITY SET, 
+/// the root credential plus every non-revoked backup, rather than the root
 /// alone. That widening is the whole reason this type exists; see the long
 /// note there for the compatibility consequence.
 ///
@@ -48,7 +48,7 @@ import CryptoKit
 /// - **It cannot revoke anything.** Revocation authority stays with the root
 ///   credential in v1. The asymmetry is deliberate and load-bearing: if a
 ///   backup key could revoke the root, then STEALING a backup key would be a
-///   full account takeover *with eviction of the real owner* — strictly worse
+///   full account takeover *with eviction of the real owner*, strictly worse
 ///   than the situation FR-3 is fixing. A backup key carries the identity
 ///   forward; it never demotes the credential that created it. The honest
 ///   consequence, which the UI states in these words, is that a main key that
@@ -58,21 +58,21 @@ import CryptoKit
 /// - **It cannot recover message history, and it does not move friendships.**
 ///   Per-message keys are ratcheted forward and destroyed after use (SDS §2),
 ///   and the sender chains that would re-derive them were wrapped to device
-///   KEM keys that died with the lost phone — no key held anywhere brings
+///   KEM keys that died with the lost phone, no key held anywhere brings
 ///   those bytes back. Friendships are a separate and easily-missed point:
 ///   `FriendStore` is keychain-local per identity (`seal.friends.<hash>`) and
 ///   nothing republishes it, so a recovered phone starts with an EMPTY friend
 ///   list even though the peers still hold their side of the attestation.
-///   What a backup key restores is the IDENTITY — the same root, the same
+///   What a backup key restores is the IDENTITY, the same root, the same
 ///   seal, so friends can verify it really is you when they add you again.
 ///   The UI says exactly that rather than letting "backup" imply a backup of
 ///   messages or of the social graph.
 struct BackupCredential: Codable, Hashable, Identifiable {
     /// Raw WebAuthn credential ID of the backup authenticator. Public, not
-    /// secret — it is what goes in an assertion's allow-list and in
+    /// secret, it is what goes in an assertion's allow-list and in
     /// `excludedCredentials` at registration.
     let credentialID: Data
-    /// P-256 public key, raw representation — the key that signs assertions
+    /// P-256 public key, raw representation, the key that signs assertions
     /// made by this credential.
     let publicKey: Data
     /// Which authenticator this is, for the UI only. Brass = hardware key,
@@ -81,14 +81,14 @@ struct BackupCredential: Codable, Hashable, Identifiable {
     /// change nothing a signature depends on.
     let tier: IdentityTier
     /// Human label ("Mom's key", "Backup in the safe"). Metadata only, same
-    /// status as `RootIdentity.displayName` — never in any commitment, so
+    /// status as `RootIdentity.displayName`, never in any commitment, so
     /// renaming a backup key can never affect verification.
     var label: String
     /// `WebAuthnAssertion` (JSON) from the ROOT credential over
-    /// `endorsementCommitment` — "I, this root, authorise that credential."
+    /// `endorsementCommitment`, "I, this root, authorise that credential."
     let assertion: Data
     /// `WebAuthnAssertion` (JSON) from the BACKUP credential itself over
-    /// `acceptanceCommitment` — "I, that credential, belong to this root."
+    /// `acceptanceCommitment`, "I, that credential, belong to this root."
     ///
     /// Without this half the statement is one-sided, and a one-sided
     /// statement is forgeable in a public directory: a credential ID and a
@@ -104,7 +104,7 @@ struct BackupCredential: Codable, Hashable, Identifiable {
 
     var id: String { credentialIDHash }
 
-    /// SHA256 of the credential ID, hex — the same identifier shape sign-in
+    /// SHA256 of the credential ID, hex, the same identifier shape sign-in
     /// derives from a tapped credential, which is how a backup tap is
     /// resolved back to the identity that endorsed it.
     var credentialIDHash: String { Data(SHA256.hash(data: credentialID)).hexString }
@@ -119,7 +119,7 @@ struct BackupCredential: Codable, Hashable, Identifiable {
     /// Challenge the BACKUP credential signs to accept being a backup for a
     /// specific identity. `rootIDHash` is in the commitment so the acceptance
     /// cannot be lifted out of one identity's record and replayed in
-    /// another's — the credential agreed to back up THIS root, not any root.
+    /// another's, the credential agreed to back up THIS root, not any root.
     ///
     /// Unambiguous by construction: the hash is
     /// domain ‖ 64-hex-char root ID ‖ credentialID ‖ 64-byte public key, and
@@ -136,8 +136,8 @@ struct BackupCredential: Codable, Hashable, Identifiable {
     ///
     /// Domain-separated from `seal.revoke.v1` (devices) even though both are
     /// stored in the same `revocations` list and both commit to a public key.
-    /// Today the two could not be confused — device keys are 65-byte x963 and
-    /// credential keys are 64-byte raw — but that is a coincidence of
+    /// Today the two could not be confused, device keys are 65-byte x963 and
+    /// credential keys are 64-byte raw, but that is a coincidence of
     /// encoding, not an invariant anyone is maintaining. If a later change
     /// made the encodings agree, a single shared domain would silently allow
     /// a statement signed about one to be replayed as a statement about the
@@ -182,7 +182,7 @@ struct BackupCredential: Codable, Hashable, Identifiable {
             else { return false }
 
             // Half two: the CREDENTIAL accepted this root. Both halves are
-            // required — see the note on `acceptance`. Verified with the
+            // required, see the note on `acceptance`. Verified with the
             // backup's own key, and the commitment names the root, so neither
             // half can be transplanted into another identity's record.
             return acceptance.verify(with: backupPub)

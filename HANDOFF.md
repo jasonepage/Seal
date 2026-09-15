@@ -1,85 +1,114 @@
 # Where Seal stands
 
-**Updated:** 2026-08-28 · **Owner:** Nathan (Jason Page) · natepage67@gmail.com
+**Updated:** 2026-09-15 · **Owner:** Nathan (Jason Page) · natepage67@gmail.com
 **Repo:** `~/Documents/GitHub/Seal` · iOS 26.5+, SwiftUI, no backend
 
-New Swift files under `Seal/` join the target automatically (file-system-synced
-groups), so no project edits are needed to add one.
+New Swift files under `Seal/` join the target automatically (file system
+synced groups), so no project edits are needed to add one.
 
 ## What Seal is
 
-**A signed record of what happened between two people who met in person.** The
-record is of events, not content: it can show that a sealed card carrying a
-payment address was sent at a given moment, and prove those exact bytes have not
-changed, without ever being able to read the address.
+**Sealed envelopes for the people you leave behind.** One person writes a few
+envelopes (letter, photos, voice, secrets), hands security keys to custodians,
+sets the rule, and opens the app now and then. After a long silence, weeks of
+warnings and M physical key taps, the envelopes open on the recipients'
+phones. [docs/PRODUCT.md](docs/PRODUCT.md), [docs/RELEASE.md](docs/RELEASE.md).
 
-Chat is the surface. The record is the product. Full direction and spec:
-[docs/RECORD.md](docs/RECORD.md).
+The messenger it grew out of was retired on 2026-09-15 (phase 7 commit). The
+identity layer, the ceremony, the hybrid wrapping, the signed record with
+timestamps, custody receipts and sealed cards were kept and extended.
 
-## Identifiers
+## Identifiers (unchanged, do not change)
 
 - Team `8C4BM6A82T` · Bundle `io.github.jasonepage.Seal`
 - CloudKit container `iCloud.io.github.jasonepage.Seal`
-- WebAuthn relying party `sealmessenger.com` (Porkbun domain, Cloudflare zone,
-  Worker `plain-darkness-c20d` serves the site and the AASA file). Deploy the
-  site with `npx wrangler deploy` from the repo root.
-- App Store Connect: SKU `seal001`, internal TestFlight live, external group
-  "parents" created.
+- WebAuthn relying party `sealmessenger.com`
 
-## What works today
+## THE FIRST THING TO DO: BUILD IT
 
-Two people on two phones exchange end-to-end encrypted text and photos, verified
-on real hardware. Registration by hardware key or passkey, the in-person
-ceremony, groups, disappearing messages, screenshot notices, replies, reactions,
-push with the app closed, sealed cards, custody receipts, vouched
-introductions, backup keys, block and report.
+**Nothing written on 2026-09-15 has been compiled.** The conversion was done
+in an environment with no Xcode and no Swift toolchain of any kind. It was
+written carefully, but a job this size without a compiler will have typos and
+a few API mismatches. Expect an hour of fixing before it runs.
 
-## What is blocking
+1. `xcodebuild -project Seal.xcodeproj -scheme Seal -destination 'generic/platform=iOS' build`
+2. Fix what it reports, in place. The design does not hinge on any of it.
+3. Run a DEBUG build on a phone. The self-tests run at launch and `assert`
+   on failure (`Seal/SelfTest`). Read the `selftest` os-log category.
+4. Open the Time Travel screen (clock icon, DEBUG only) and run the story:
+   seal, travel 91 days, claim from a custodian phone, travel 21 and 14, tap
+   keys, combine. The owner opening the app at any point must cancel.
 
-1. **The CloudKit schema is not deployed to Production.** Until it is, backup
-   keys, the directory scan, `excludedCredentials` and security-key sign-in are
-   all broken in TestFlight, and they break quietly. Steps:
-   [docs/CLOUDKIT_DEPLOY.md](docs/CLOUDKIT_DEPLOY.md). **Only Nathan can do
-   this.**
-2. **Nothing since 2026-08-28 has been compiled.** A large amount of code and
-   copy changed in one session. Build before anything else.
-3. **A demo video** is the one real App Store submission blocker.
-   [docs/APP_STORE.md](docs/APP_STORE.md) has the rest of the list, including an
-   age rating item with a September 2026 deadline.
+Where compile errors are most likely, in order:
 
-## What is next
+- `Seal/Crypto/KEMBundle.swift` and `IdentityManager.mintMLKEMIfMissing`:
+  the CryptoKit `MLKEM768` API (`encapsulate()`, `decapsulate(_:)`,
+  `seedRepresentation`, `EncapsulationResult` member names). Confined there.
+- `Seal/Sync/EstateDirectory.swift`: the labelled tuple returned by
+  `CKDatabase.records(matching:resultsLimit:)` and `records(continuingMatchFrom:)`.
+- `Seal/Views/*`: SwiftUI view builder edge cases (`#if DEBUG` inside a
+  toolbar, `switch` over an optional enum in a `VStack`).
+- `Seal/Time/Clock.swift`: the module `Clock` protocol shadows Swift's. If
+  anything complains, it wants `Swift.Clock`.
 
-Phase 3 of the record: the export. A JSON document carrying every event with its
-signatures and timestamp tokens, a readable rendering of it, and
-`tools/verify_record.py`, a standalone verifier. Without that verifier, "anyone
-can check this" is marketing. [docs/RECORD.md](docs/RECORD.md) §6.
+## What is blocking (besides the build)
 
-Then ten pairs of real people on TestFlight for three weeks. Not ten people,
-pairs, because one person alone gets nothing. The question is not whether they
-chat. It is whether anyone creates a record and whether anyone ever pulls one
-back out.
+1. **The CloudKit schema.** `EstateEvent` (with `estate` QUERYABLE) must
+   exist in Development and be deployed to Production.
+   [docs/CLOUDKIT_DEPLOY.md](docs/CLOUDKIT_DEPLOY.md). Only Nathan can do this.
+2. **Every phone must sign in once** on the new build so its endorsement is
+   republished with the hybrid KEM bundle.
+3. **The site and the store listing** still describe a messenger
+   (`site/*.html`, `docs/archive/STORE_COPY.md`). Not rewritten in this pass.
+4. **A timestamp authority** is still FreeTSA, chosen for being free. See
+   [docs/RECORD.md](docs/RECORD.md) section 13.
 
-## Recent work, newest first
+## What was done on 2026-09-15, by phase
 
-- **Record phase 2**: RFC 3161 trusted timestamps, off by default, with the DER
-  encoder and status parser tested against OpenSSL. RECORD.md §13.
-- **Record phase 1**: the event projection and the timeline screen, plus
-  tombstones so a record line survives its content burning. RECORD.md §11, §12.
-- **The site and the listing**: sealmessenger.com rewritten for the new
-  positioning and deployed, App Store copy drafted. COLDSTART.md part 3,
-  docs/STORE_COPY.md.
-- **The shell merge**: one shell, no tab bar, Simplified mode became "Bigger
-  text", evidence moved behind Advanced. COLDSTART.md part 2.
-- **Cold start**: the invite path, which did not exist at all, plus a rewritten
-  first run. COLDSTART.md part 1.
+0. The uncommitted 2026-08-28 tree committed as it stood.
+1. Four security fixes with tests: root key pinning (`KeyPinStore`),
+   WebAuthn context enforced, unsigned `revokedAt` removed from the type,
+   v2 endorsement accepted only at canonical lengths.
+2. `Clock` protocol, `SystemClock`, `SimulatedClock`, threaded through.
+3. Shamir over GF(256) with Python vectors, the hybrid X25519 plus
+   ML-KEM-768 bundle, the Estate Key hierarchy with recipient isolation.
+4. Data model and the signed, hash linked estate log.
+5. The pure release state machine, exhaustively tested.
+6. CloudKit record types and the `EstateEngine`.
+7. The messenger removed (`git rm`, history kept).
+8. The screens: home, envelope editor, policy, person, guarded estate,
+   reveal, time travel.
+9. The capsule export, `docs/CAPSULE.md`, `tools/verify_capsule.py`
+   (tested against a synthetic capsule and a real OpenSSL RFC 3161 token).
+10. Docs rewritten; superseded docs in `docs/archive/`; em dashes removed
+    from every tracked file outside the archive.
+
+## Judgement calls a human should review
+
+Listed in the final report of the conversion session and repeated here:
+
+- **Recipients must be Seal identities** met in person. No "whoever opens
+  it" envelope exists. PRODUCT.md section 8.
+- **The Estate Key is published in the clear at release.** SDS.md section 2
+  explains why that is safe; check the argument.
+- **Custodians pin each other's root keys from the owner's signed epoch
+  statement** (transitive trust through the owner).
+- **After a veto, a new claim may open immediately.** RELEASE.md section 8.
+- **Authorization taps do not require user verification** by default.
+- **The record is a hash linked graph, not a chain**, because there is no
+  server to order concurrent writers.
+- **Tests are in the app target** rather than a test target.
+- **The invite record is addressed by hash in the clear**, so the directory
+  can see that a hash has some part in some estate.
+- **`Message`, `SealGroup`, `SenderChain` and the message transport in
+  `SyncEngine`** were left in place as dead code rather than deleted, to keep
+  the phase 7 diff to what the brief listed. Safe to remove later.
 
 ## Before you debug anything
 
-[docs/GOTCHAS.md](docs/GOTCHAS.md). Most of what is in there cost a day to find
-and looks like a different problem from the outside.
+[docs/GOTCHAS.md](docs/GOTCHAS.md), including the new section at the bottom.
 
 ## Working style
 
-Numbered steps for ops tasks. Concise replies. No em dashes anywhere, including
-in app copy. Commit after each working milestone, and check `git status` first
-because the working tree is often ahead of the last commit. Mom is a tester.
+Numbered steps for ops tasks. Concise replies. No em dashes anywhere. Commit
+after each working milestone, and check `git status` first. Mom is a tester.

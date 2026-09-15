@@ -11,7 +11,7 @@ import CryptoKit
 //  pipeline as `kind:"card"`, exactly the way `kind:"reaction"` and
 //  `kind:"screenshot"` do, so it inherits the sender-chain signature, the AAD
 //  transcript binding (group|epoch|sender|index|prev-hash) and TTL handling for
-//  free. There is deliberately NO second signature scheme — the message
+//  free. There is deliberately NO second signature scheme, the message
 //  signature IS the card's authenticity, and a second one would only be another
 //  thing to get wrong.
 //
@@ -32,7 +32,7 @@ import CryptoKit
 //  --------------------------
 //  That the address is correct, that the account exists, that the money will
 //  arrive, or that the sender wasn't tricked or compromised before they typed
-//  it. A card proves that THIS identity — hardware-rooted, met in person — sent
+//  it. A card proves that THIS identity, hardware-rooted, met in person, sent
 //  THESE exact bytes at this point in the transcript. Provenance, not truth.
 //  The UI must never say "verified address"; it says "Sealed by <name>".
 //
@@ -40,7 +40,7 @@ import CryptoKit
 //  receiver's ROOT credential, physically tapped, plus the giver's device key)
 //  and is therefore a strictly stronger claim. A card is one party asserting
 //  something; a receipt is two parties agreeing. Keep the copy for the two
-//  visibly different — see docs/CARDS.md.
+//  visibly different, see docs/CARDS.md.
 //
 //  Out of scope on purpose (TODOs where they'd hook in): org/issuer badges,
 //  audit export, backup keys, per-chain address validation, QR rendering.
@@ -110,12 +110,12 @@ enum SealedCardType: String, Codable, Hashable, CaseIterable {
 /// by the message signature and the AAD transcript binding.
 struct SealedCard: Codable, Hashable {
     let cardType: SealedCardType
-    /// Sender-supplied label ("My BTC cold wallet", "Wire instructions — escrow #4412").
+    /// Sender-supplied label ("My BTC cold wallet", "Wire instructions, escrow #4412").
     let title: String
     /// THE string that matters. The only copyable field.
     let value: String
     /// Free-text ticker, crypto addresses only ("BTC", "ETH"). Never validated
-    /// against a chain registry — it's a label, not a claim.
+    /// against a chain registry, it's a label, not a claim.
     var asset: String?
     /// Optional context, rendered as clearly NOT part of the sealed value.
     var note: String?
@@ -146,7 +146,7 @@ struct SealedCard: Codable, Hashable {
             case .emptyValue:
                 return "There's nothing to seal yet."
             case .valueTooLong(let bytes):
-                return "That's \(bytes) bytes — a sealed card holds up to \(SealedCard.maxValueBytes)."
+                return "That's \(bytes) bytes, a sealed card holds up to \(SealedCard.maxValueBytes)."
             case .addressHasWhitespace:
                 return "A crypto address can't contain spaces or line breaks. Check what you pasted."
             }
@@ -160,7 +160,7 @@ struct SealedCard: Codable, Hashable {
     /// rewriting the middle of a string somebody is about to send money against
     /// is precisely the class of bug this feature exists to prevent.
     ///
-    /// For `cryptoAddress` the only check is a sanity check — non-empty, no
+    /// For `cryptoAddress` the only check is a sanity check, non-empty, no
     /// internal whitespace. NO per-chain checksum validation, on purpose: a
     /// validator that doesn't know a chain rejects good addresses, and one that
     /// gets a checksum subtly wrong is worse than none. Render faithfully and
@@ -202,7 +202,7 @@ struct SealedCard: Codable, Hashable {
     // MARK: Compatibility
 
     /// What a pre-card build shows. It reads `MessagePayload.text` and nothing
-    /// else, so `sendCard` puts this string there as well as here — without
+    /// else, so `sendCard` puts this string there as well as here, without
     /// that, an older client renders an empty bubble.
     ///
     /// Deliberately excludes the title: the title is free text and could be
@@ -227,7 +227,7 @@ struct SealedCard: Codable, Hashable {
         case .location:
             what = "location"
         }
-        return "🔏 Sealed card: \(what) — update Seal to view"
+        return "🔏 Sealed card: \(what), update Seal to view"
     }
 
     // MARK: Display helpers
@@ -259,7 +259,7 @@ struct SealedCard: Codable, Hashable {
         return cardType.label
     }
 
-    /// What the copy confirmation says — the ACTUAL bytes that landed on the
+    /// What the copy confirmation says, the ACTUAL bytes that landed on the
     /// pasteboard, abbreviated. This is the anti-clipboard-swap cue: the reader
     /// checks these ends against the card, so a swapped string shows up as
     /// mismatched ends rather than as nothing at all.

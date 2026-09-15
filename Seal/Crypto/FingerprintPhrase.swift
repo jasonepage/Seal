@@ -3,7 +3,7 @@ import CryptoKit
 
 /// Human-checkable key fingerprints (UI.md §1): an emoji + three words derived
 /// from a public key. Two people say their friend's phrase out loud after a
-/// forge — a human-layer check that they verified the same key. Never hex.
+/// forge, a human-layer check that they verified the same key. Never hex.
 enum FingerprintPhrase {
     private static let emojis = [
         "🦊", "🦉", "🐢", "🐝", "🦭", "🐙", "🦅", "🐺",

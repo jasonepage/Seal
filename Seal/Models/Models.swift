@@ -13,10 +13,10 @@ struct RootIdentity: Codable, Identifiable, Hashable {
     let publicKey: Data                 // P-256, raw representation
     let tier: IdentityTier
     var displayName: String
-    /// Raw WebAuthn credential ID — needed to request assertions from this
+    /// Raw WebAuthn credential ID, needed to request assertions from this
     /// identity's authenticator (friend ceremony). Public, not secret.
     var rawCredentialID: Data?
-    /// Backup credentials this root has endorsed (FR-3, `seal.backup.v1` —
+    /// Backup credentials this root has endorsed (FR-3, `seal.backup.v1`, 
     /// see BackupCredential.swift), as published in the directory and already
     /// signature-checked and revocation-filtered by `SyncEngine.fetchIdentity`.
     ///

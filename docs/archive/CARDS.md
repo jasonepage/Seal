@@ -2,8 +2,8 @@
 
 **Version:** 0.1 · **Date:** 2026-08-25 · **Companions:** [SDS.md](SDS.md) · [UI.md](UI.md) · `Seal/Cards/SealedCard.swift`
 
-A **Sealed Card** carries a high-stakes string — a crypto wallet address, wire or
-payment instructions, or a short statement — through the ordinary message
+A **Sealed Card** carries a high-stakes string, a crypto wallet address, wire or
+payment instructions, or a short statement, through the ordinary message
 pipeline, wrapped in a UI that makes it impossible to mistake for chat and makes
 the sender's exact bytes the only thing a recipient can copy.
 
@@ -14,7 +14,7 @@ A card is `kind:"card"` inside `MessagePayload`, exactly the way
 buys, for free:
 
 - the sender-chain signature over `ciphertext ‖ aad`;
-- the AAD transcript binding — `group | epoch | sender | index | prev-hash`
+- the AAD transcript binding, `group | epoch | sender | index | prev-hash`
   (SDS §2), so a card can't be reordered, replayed into another conversation, or
   silently dropped without the next message failing;
 - TTL handling, the offline outbox, epoch rotation, block/report, reactions and
@@ -26,7 +26,7 @@ the card's authenticity. A separate one would be another thing to get wrong, and
 it would have to be verified against the same directory and the same endorsement
 chain anyway.
 
-A card is a **bubble kind** — `isNonBubble` stays false — so it gets `recipients`
+A card is a **bubble kind**, `isNonBubble` stays false, so it gets `recipients`
 and fires the normal push.
 
 ## 2. Payload
@@ -40,13 +40,13 @@ card: {
   value:        THE string. The only copyable field.
   asset:        free-text ticker, cryptoAddress only ("BTC", "ETH")
   note:         optional context, rendered as NOT part of the value
-  fallbackText: "🔏 Sealed card: BTC address — update Seal to view"
+  fallbackText: "🔏 Sealed card: BTC address, update Seal to view"
 }
 ```
 
 **Validation on send** (`SealedCard.validated`): surrounding whitespace trimmed,
 `value` non-empty and ≤ 2 KB of UTF-8, `title` non-empty. For `cryptoAddress`,
-one sanity check only — no internal whitespace.
+one sanity check only, no internal whitespace.
 
 **No per-chain checksum validation, ever.** A validator that doesn't know a chain
 rejects good addresses, and one that gets a checksum subtly wrong is worse than
@@ -57,7 +57,7 @@ exists to prevent.
 
 ### 2.1 Compose flow
 
-Two steps in one sheet — compose, then commit. Step 1 is the value field first
+Two steps in one sheet, compose, then commit. Step 1 is the value field first
 (title/asset/note appear once a value exists) with no warning banner, because
 there is nothing to check yet. Step 2 renders the value through the same
 `CardValueText` the recipient's bubble uses, puts the "sealed exactly as
@@ -68,8 +68,8 @@ preserves every field; the card is re-validated from the raw fields at send.
 
 ## 3. Old-build compatibility
 
-A pre-card build decodes a card payload without error — Swift's synthesized
-decoder ignores unknown keys — falls through the receive switch's `default:`
+A pre-card build decodes a card payload without error, Swift's synthesized
+decoder ignores unknown keys, falls through the receive switch's `default:`
 branch, and renders **`payload.text` and nothing else**.
 
 So `sendCard` writes `fallbackText` into `text` as well as into the card. Put the
@@ -79,10 +79,10 @@ against the pre-card field set for all three card types.
 
 On a build that *can* render cards, `text` is never displayed:
 `ChatEngine.summary` returns `🔏 <title>` for the chat list and reply quotes. The
-`value` is never summarised anywhere — a truncated address in a list row is an
+`value` is never summarised anywhere, a truncated address in a list row is an
 invitation to misread it.
 
-## 4. Copy behaviour — the whole point
+## 4. Copy behaviour, the whole point
 
 - Exactly one Copy button. It copies `value` byte for byte, never `displayValue`
   (which carries the readability spaces).
@@ -92,7 +92,7 @@ invitation to misread it.
   manager or another app that rewrites the string between the write and the read
   is caught, and the alert says not to paste it.
 - The confirmation shows the first and last six characters of what *actually*
-  landed, not a green tick — so the reader checks the ends against the card.
+  landed, not a green tick, so the reader checks the ends against the card.
   Values of 16 characters or fewer are shown whole.
 - A `nil` pasteboard read is reported as **"couldn't confirm"**, not as
   tampering. The pasteboard can decline to report its contents, and a false
@@ -105,7 +105,7 @@ is why the confirmation shows bytes rather than claiming success.
 
 ## 5. Verification, and what it actually proves
 
-Cards are the only message kind that keeps a `MessageProof` — the ciphertext,
+Cards are the only message kind that keeps a `MessageProof`, the ciphertext,
 signature, signer device key, and the AAD inputs. Ordinary bubbles are verified
 on arrival and then they're just text, which is fine for "see you saturday". A
 card can be acted on days later, and there *"it verified when it arrived"* is a
@@ -120,7 +120,7 @@ device **revoked after the card landed**.
 The per-message key is destroyed by the ratchet the instant a message is
 decrypted (SDS §2, per-message forward secrecy). The plaintext therefore can
 **never** be re-derived. So re-checking the signature proves the stored
-*ciphertext* is authentic — **not** that the card rendered on screen is what that
+*ciphertext* is authentic, **not** that the card rendered on screen is what that
 ciphertext contained.
 
 `MessageProof.cardDigest` closes that on our own side: a SHA-256 of the card as
@@ -130,7 +130,7 @@ corruption. It does **not** defend against anything that can rewrite the
 keychain, which would rewrite the digest too.
 
 The detail sheet's wording claims exactly this and no more: *"The message
-carrying this card is signed by key `<fp>` — a device `<name>` still endorses and
+carrying this card is signed by key `<fp>`, a device `<name>` still endorses and
 hasn't revoked. The card below matches the copy recorded when it arrived."*
 
 `.failed` and `.unavailable` are separate states on purpose. "The signature is
@@ -142,7 +142,7 @@ direction it resolved.
 
 That the address is correct. That the account exists. That the money will arrive.
 That the sender wasn't tricked or compromised *before* they typed it. A card
-proves that this identity — hardware-rooted, met in person — sent these exact
+proves that this identity, hardware-rooted, met in person, sent these exact
 bytes at this point in the transcript. **Provenance, not truth.** The UI never
 says "verified address"; it says "Sealed".
 
@@ -153,7 +153,7 @@ copy must keep the two visibly apart:
 
 | | Sealed Card | Custody Receipt |
 |---|---|---|
-| Parties | One — the sender asserts | Two — both sign the same commitment |
+| Parties | One, the sender asserts | Two, both sign the same commitment |
 | Strong half | Device key (root-endorsed) | Receiver's **root** credential, physically tapped |
 | Re-verifiable | Signature + digest, needs local state | Fully self-contained, offline, years later |
 | Says | "I sent you this string" | "I handed you this, you took it" |
@@ -179,12 +179,12 @@ FR-12, so `CardComposeSheet` warns before sending instead of overriding.
 - **Every field added to `MessageProof` in future must be optional.** A proof
   that fails to decode takes the whole message store with it.
 - Inbound `value` length is bounded by CloudKit's Bytes field, not by our 2 KB
-  send-side cap — a modified client could exceed it. The bubble line-limits long
+  send-side cap, a modified client could exceed it. The bubble line-limits long
   values and pushes the full string to the detail sheet.
 
 ## 9. Out of scope (TODO comments mark where each hooks in)
 
 Org/issuer badges (`SealedCard.validated`, beside `asset`), audit export and
 backup keys (`SealedCardDetailSheet.honestyBlock`), Android, per-chain address
-validation (§2 — deliberately never), QR rendering, and editing or retracting a
+validation (§2, deliberately never), QR rendering, and editing or retracting a
 sent card.

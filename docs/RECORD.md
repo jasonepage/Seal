@@ -1,5 +1,12 @@
 # The Record
 
+> **2026-09-15.** Seal became the sealed envelope product (docs/PRODUCT.md).
+> Sections 1 to 3 and 7 describe the messenger era and are kept for the
+> reasoning; sections 4, 5.2 and 13 (timestamps, canonical encoding, what a
+> token proves) apply unchanged and the estate log builds on them. The
+> export in section 6 became the capsule (docs/CAPSULE.md), and
+> `tools/verify_capsule.py` is the verifier that section 6 asked for.
+
 **Version:** 0.1 · **Date:** 2026-08-28 · **Companions:** [CARDS.md](CARDS.md) · [COLDSTART.md](COLDSTART.md) · `Seal/Receipts/CustodyReceipt.swift` · `Seal/Views/ForgeLogView.swift`
 
 ## 1. What Seal is

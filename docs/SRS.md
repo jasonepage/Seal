@@ -1,97 +1,99 @@
-# Software Requirements Specification — Seal
+# Software Requirements Specification: Seal, sealed envelopes
 
-**Version:** 0.1 · **Date:** 2026-06-11 · **Author:** Nathan Page
-**Platform:** iOS · **Companion doc:** [SDS.md](SDS.md)
+**Version:** 1.0 · **Date:** 2026-09-15 · **Companion:** [SDS.md](SDS.md)
 
-## 1. Introduction
+## 1. Purpose
 
-### 1.1 Purpose
-Seal is an iOS group-messaging app where identity and trust are rooted in physical FIDO2 hardware security keys (YubiKey, etc.). Friendships are established by physically tapping a friend's hardware key on your phone — trust requires real-world presence, not usernames or phone numbers.
+Let one person seal letters and secrets for named people, hand physical keys
+to trusted custodians, and have the envelopes open only after a long silence,
+weeks of warnings and a threshold of physical key taps. Nobody, including the
+vendor, can open one early.
 
-### 1.2 Scope
-- 1:1 and group end-to-end-encrypted (E2EE) chat with a Snapchat-like UX (camera-forward, ephemeral options).
-- Hardware key as the root of identity: sign-in, friend ceremonies, device endorsement, group invites.
-- CloudKit-first backend: no custom server holds credentials; Apple infrastructure provides storage, sync, and push.
+## 2. Users
 
-### 1.3 Definitions
-| Term | Meaning |
-|---|---|
-| Hardware key | FIDO2/CTAP2 security key with NFC or USB-C (e.g., YubiKey 5C NFC) |
-| Friend ceremony | In-person tap of a friend's hardware key to establish mutual trust |
-| Device key | P-256 keypair in the iPhone's Secure Enclave, endorsed by the hardware key |
-| Endorsement | Signature by a hardware key over a device key, binding device to identity |
-| RP ID | WebAuthn Relying Party identifier (a domain you control) |
+- **Owner**: writes, seals, and keeps the envelopes closed by opening the app.
+- **Custodian**: holds a key; may claim, object, tap.
+- **Recipient**: reads after release.
+- Half of all users are over sixty. Bigger text mode and plain language are
+  requirements, not options.
 
-### 1.4 Constraints
-- **C1:** FIDO2 keys sign assertions only; they cannot encrypt/decrypt. Message E2EE must use Secure Enclave keys gated by hardware-key endorsement.
-- **C2:** iOS security-key APIs (`ASAuthorizationSecurityKeyPublicKeyCredentialProvider`) require an RP ID — a domain serving an `apple-app-site-association` file. Static hosting only; no backend logic required.
-- **C3:** CloudKit: 1 MB/record, ~250 MB asset practical limit, no server-side code — all signature verification happens on-device.
-- **C4:** All users need an iCloud account and a supported hardware key.
-- **C5:** iOS 17+; NFC tap or USB-C insertion for key ceremonies.
+## 3. Functional requirements
 
-## 2. Users and Use Cases
-- **U1 New user:** registers an identity with their hardware key.
-- **U2 Friend pair:** two people meet in person and tap keys to befriend.
-- **U3 Group member:** creates/joins group chats, sends text, photos, video.
-- **U4 Multi-device user:** adds an iPad by endorsing it with the hardware key.
-- **U5 Key-loss victim:** recovers via a pre-registered backup key, or loses the identity.
+Identity and people (carried forward from v0.1):
 
-## 3. Functional Requirements
+- FR-1 Register with a FIDO2 security key or a platform passkey.
+- FR-2 Add a person only in person, by a ceremony in which they tap their key
+  on the owner's phone. The proven root key is pinned.
+- FR-3 Backup credentials, two-sided, root-revocable.
+- FR-4 Publish the identity to the directory; verify every chain on read.
 
-### 3.1 Identity & Registration
-- **FR-1:** User registers by creating a FIDO2 credential on their hardware key (NFC/USB-C); the credential public key is the user's root identity.
-- **FR-2:** App generates a Secure Enclave device key; the hardware key signs an endorsement of it. Only endorsed devices can decrypt messages.
-- **FR-3:** User may register up to 2 backup hardware keys at setup; any registered key can endorse new devices.
-- **FR-4:** Profile (display name, avatar) is stored in the user's CloudKit private/public zone, signed by the device key.
+Envelopes:
 
-### 3.2 Friend Ceremony
-- **FR-5:** To befriend, user A taps user B's hardware key on A's phone. A's app issues a fresh challenge; B's key signs it; A now holds an authenticated copy of B's root public key. Repeat in reverse for mutuality (single combined flow in UI).
-- **FR-6:** Friendship records (each party's signed attestation of the other's key) are stored in CloudKit and verified on-device by all clients.
-- **FR-7:** Remote befriending (QR/link) MAY be offered later but is out of scope for v1 — physical presence is the product.
-- **FR-8:** Users can remove friends; removal revokes their ability to invite the user to groups.
+- FR-30 Write an envelope for one recipient: title, letter, photos, one voice
+  message, and secrets sealed exactly as written.
+- FR-31 Secrets are shown again only after Face ID.
+- FR-32 Set the reveal order among a recipient's envelopes.
+- FR-33 Seal: encrypt everything on the phone, publish, and tell the
+  custodians and recipients they have a part.
+- FR-34 Editing an envelope un-seals it; sealing again republishes only what
+  changed and never touches media that did not.
 
-### 3.3 Group Chats
-- **FR-9:** Any user can create a group; creator becomes admin. Membership changes are signed by the actor's device key and verified by all members.
-- **FR-10:** Only friends (per FR-5) may be invited. Invitee accepts in-app; acceptance is signed.
-- **FR-11:** Groups support 2–64 members, text, images, video ≤ 60 s, reactions, and replies.
-- **FR-12:** Optional ephemeral mode: messages display a TTL and clients delete at expiry (client-enforced; see NFR-7 honesty requirement).
-- **FR-13:** Admins can remove members; removal triggers group key rotation so removed members cannot read new messages.
+Custodians and the rule:
 
-### 3.4 Messaging
-- **FR-14:** All message content is E2EE; CloudKit stores only ciphertext, signed sender metadata, and routing data.
-- **FR-15:** Messages are signed by the sender's device key; receivers verify the device key chains to a hardware-key endorsement of a known friend.
-- **FR-16:** Delivery via CloudKit shared-zone sync + APNs push (CKSubscription). Offline messages sync on next launch.
-- **FR-17:** Media is encrypted client-side and stored as CKAssets.
+- FR-40 Make a person a custodian; remove one.
+- FR-41 Record the key handover with the two-sided custody receipt.
+- FR-42 Set silence (30, 90, 180, 365 days), warning days, grace days,
+  threshold M of N, and objection behaviour (pause or veto).
+- FR-43 Changing custodians or threshold rotates the epoch on the next seal.
 
-### 3.5 Device & Key Management
-- **FR-18:** Adding a device requires a hardware-key tap on the new device (endorsement ceremony) plus existing-device approval.
-- **FR-19:** User can revoke a device; revocation is signed by a hardware key and propagated; group keys rotate.
-- **FR-20:** Losing all registered hardware keys = identity is unrecoverable (explicitly communicated at onboarding). No email/SMS reset exists by design.
+The release:
 
-### 3.6 Account Tiers, Review & Demo Mode
-- **FR-21:** The app supports two identity tiers: **Passkey** (platform passkey via `ASAuthorizationPlatformPublicKeyCredentialProvider`, Face ID-backed) and **Verified** (FIDO2 hardware key). Both use the same WebAuthn code path; Verified identities display a distinct badge, and groups may be marked "Verified-only."
-- **FR-22:** A **demo mode**, activated only by a designated App Review account (credentials in review notes), provides: passkey-based registration, a seeded identity with pre-established friends, and two active demo group chats with synthetic message history.
-- **FR-23:** Demo mode is fully disclosed in App Review notes and visually watermarked ("Demo") in-app; demo identities cannot befriend or message real users.
-- **FR-24:** A demo video showing the real hardware flow (NFC tap registration, two-phone friend ceremony) accompanies every submission per Guideline 2.1.
+- FR-50 The owner's phone writes a signed, timestamped heartbeat on every
+  launch and foreground; it never needs the hardware key.
+- FR-51 Custodian phones compute the state from the record and a clock; every
+  transition in [RELEASE.md](RELEASE.md) section 3.
+- FR-52 A claim can open only when the estate is overdue; every custodian is
+  notified; the owner is warned daily for the warning period.
+- FR-53 One heartbeat or cancellation from the owner stops any live claim.
+- FR-54 A custodian may object; pause slides deadlines, veto kills the claim.
+- FR-55 Authorising requires a physical key tap over a challenge bound to
+  estate, epoch, claim and record head, and delivers that custodian's share
+  to the claimant.
+- FR-56 The claimant combines M shares, each checked against its commitment,
+  and publishes the Estate Key.
+- FR-57 A recipient opens only their own envelopes, in reveal order, and can
+  copy a secret byte for byte with the pasteboard read back.
 
-## 4. Non-Functional Requirements
-- **NFR-1 Security:** E2EE for all content; forward secrecy on group key rotation events; no plaintext or private keys ever leave the device; Secure Enclave keys are non-exportable.
-- **NFR-2 Trust:** No trust-on-first-use for friends — every friendship is rooted in a physical key tap and verifiable signature chain.
-- **NFR-3 Privacy:** No phone numbers, emails, or contact upload. Apple (CloudKit) sees ciphertext + metadata only; document this honestly.
-- **NFR-4 Performance:** Message send-to-push p50 < 2 s on LTE; ceremony tap-to-confirm < 5 s.
-- **NFR-5 Availability:** Inherits CloudKit SLA; app must function read-only offline with queued sends.
-- **NFR-6 Cost:** $0 server cost target (CloudKit free tier + static AASA hosting); Apple Developer Program only.
-- **NFR-7 Honesty:** UI must not overclaim — ephemeral deletion is client-enforced and screenshots are possible; disclose like Snapchat does (screenshot detection best-effort).
-- **NFR-8 Accessibility/UX:** Key ceremonies must have clear NFC coaching UI; support USB-C keys for devices/users where NFC fails.
+The record and the archive:
 
-## 5. Out of Scope (v1)
-Android/web clients, stories/snap map, voice/video calls, remote friend adding, message search server-side, multi-iCloud-account support.
+- FR-60 Every event is device signed, hash linked, and re-verifiable against
+  the directory.
+- FR-61 Heartbeats, claims, taps, cancellations and releases carry RFC 3161
+  tokens obtained from the digest alone.
+- FR-62 Any party can export a capsule; a standalone script verifies it.
+- FR-63 The record screen shows every line with what Seal can honestly say
+  about its time.
 
-## 6. Risks
-| Risk | Impact | Mitigation |
-|---|---|---|
-| CloudKit can't verify signatures server-side | Malicious client could write garbage records | All clients verify signature chains; unverifiable records dropped |
-| Hardware key loss | Permanent identity loss | Mandatory backup-key prompt at onboarding (FR-3) |
-| RP ID domain requirement | Need a domain + AASA file | One-time static hosting (GitHub Pages / CloudFront) |
-| Apple account dependency | Excludes non-iCloud users | Accepted for v1; hybrid backend is the documented migration path (SDS §8) |
-| Group key rotation complexity | Bugs → members locked out | Conservative sender-key design + extensive unit tests |
+Testing:
+
+- FR-70 A `Clock` protocol is injected everywhere; a simulated clock and a
+  debug Time Travel screen run the whole machine in under two minutes.
+- FR-71 The state machine, Shamir, the key hierarchy and the security fixes
+  have executable tests that run at DEBUG launch.
+
+## 4. Non-functional requirements
+
+- NFR-1 No backend, no third party dependencies, CryptoKit only.
+- NFR-2 No new cryptographic primitives beyond Shamir over GF(256).
+- NFR-3 Metadata that leaks is written down, not hidden (PRODUCT.md section 8).
+- NFR-4 Every screen readable at the largest Dynamic Type size with Bigger
+  text on; every button at least 52 points.
+- NFR-5 No em dashes anywhere in the repository.
+- NFR-6 The relying party, bundle identifier, team and container never change.
+
+## 5. Constraints
+
+C1 FIDO2 keys sign only, so the root never encrypts. C2 The RP ID needs a
+domain serving the app site association file. C3 CloudKit schema changes are
+additive and deploy only by hand (CLOUDKIT_DEPLOY.md). C4 A recipient must be
+a Seal identity with published KEM keys.

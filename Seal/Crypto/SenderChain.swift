@@ -2,7 +2,7 @@ import Foundation
 import CryptoKit
 
 /// Per-member, per-group symmetric ratchet (SDS §2).
-/// Per-message keys are derived, used once, and the chain advances —
+/// Per-message keys are derived, used once, and the chain advances, 
 /// old chain states are discarded for forward secrecy.
 struct SenderChain {
     private(set) var chainKey: SymmetricKey

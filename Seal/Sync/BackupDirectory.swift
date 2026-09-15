@@ -3,7 +3,7 @@ import CloudKit
 import CryptoKit
 import os
 
-/// Directory half of backup credentials (FR-3, `seal.backup.v1` — see
+/// Directory half of backup credentials (FR-3, `seal.backup.v1`, see
 /// Seal/Identity/BackupCredential.swift for the trust argument).
 ///
 /// # Where a backup credential is stored
@@ -13,7 +13,7 @@ import os
 /// alongside real devices: that array is iterated by `HybridKEM.wrapToAll` and
 /// by the verified-endorsement set, and a WebAuthn credential is not a device
 /// with a KEM key. Every consumer would need a filter, and one missed filter
-/// is either a send failure or a verification hole — the exact class of bug
+/// is either a send failure or a verification hole, the exact class of bug
 /// behind the 6/26 desync. A field is cheap; a silently overloaded array is
 /// not.
 ///
@@ -39,13 +39,13 @@ extension SyncEngine {
         var errorDescription: String? {
             switch self {
             case .schemaNotDeployed:
-                "Backup keys aren't switched on in this environment yet. (The Identity record needs its backupEndorsements field — see the ops checklist in HANDOFF.)"
+                "Backup keys aren't switched on in this environment yet. (The Identity record needs its backupEndorsements field, see the ops checklist in HANDOFF.)"
             case .credentialNoLongerValid:
-                "That key is no longer a backup for this identity — it was revoked, or its endorsement doesn't check out."
+                "That key is no longer a backup for this identity, it was revoked, or its endorsement doesn't check out."
             case .identityUnavailable:
                 "Couldn't reach your identity in the directory to record the backup key. Check your connection and try again."
             case .credentialClaimConflict:
-                "Two different identities claim this key, so Seal can't tell which one is yours — and it won't guess. Nothing has been signed in to. This should never happen by accident; check with whoever set the backup key up."
+                "Two different identities claim this key, so Seal can't tell which one is yours, and it won't guess. Nothing has been signed in to. This should never happen by accident; check with whoever set the backup key up."
             case .unprovenIdentityRecord:
                 "The directory entry for this key was never signed by the key itself, so Seal won't trust it. Nothing has been signed in to."
             }
@@ -58,7 +58,7 @@ extension SyncEngine {
     /// credential or one of its backup credentials.
     struct DirectoryCredential {
         let credentialID: Data
-        /// `credentialIDHash` of the identity this credential belongs to —
+        /// `credentialIDHash` of the identity this credential belongs to, 
         /// for a root credential that is its own hash, for a backup it is the
         /// hash of the root that endorsed it. This is what turns a tapped
         /// backup key back into the identity it recovers.
@@ -75,7 +75,7 @@ extension SyncEngine {
     /// backup credential lives and no second write to fall out of step with
     /// the first. Cost: the scan carries those blobs, each holding a WebAuthn
     /// assertion. That lands on the same ~1k-identity ceiling `fetchAllCredentialIDs`
-    /// already documents (SDS §7) — revisit both together, not separately.
+    /// already documents (SDS §7), revisit both together, not separately.
     ///
     /// Signatures are NOT checked here. This list feeds `excludedCredentials`
     /// and an assertion allow-list, neither of which grants anything: a forged
@@ -91,12 +91,12 @@ extension SyncEngine {
             // predates `backupEndorsements` rejects the field in desiredKeys,
             // and registration exclusion plus security-key sign-in both depend
             // on this scan, so falling back to the legacy key set keeps them
-            // working — that is exactly the state the app was in before FR-3.
+            // working, that is exactly the state the app was in before FR-3.
             //
             // Every OTHER error rethrows. Swallowing a transient network
             // failure here would quietly drop backup credentials out of the
             // allow-list and surface as "No identity in the directory matches
-            // that key. Register instead?" — an invitation to abandon the
+            // that key. Register instead?", an invitation to abandon the
             // identity, shown to someone mid-recovery because of a blip.
             WebAuthnDiag.log.error("directory scan rejected backupEndorsements (schema not deployed?), retrying without it: \(error.localizedDescription, privacy: .public)")
             return try await scanDirectory(includingBackups: false)
@@ -148,8 +148,8 @@ extension SyncEngine {
         let root: RootIdentity
         /// The key the sign-in assertion is checked with: the root's own key,
         /// or the backup credential's. Verifying a backup's assertion against
-        /// the ROOT key would fail every time — different keys, different
-        /// signatures — so the caller must use this one, not `root.publicKey`.
+        /// the ROOT key would fail every time, different keys, different
+        /// signatures, so the caller must use this one, not `root.publicKey`.
         let publicKey: P256.Signing.PublicKey
         /// Non-nil when the person signed in with a backup credential.
         let backup: BackupCredential?
@@ -176,21 +176,21 @@ extension SyncEngine {
         // `SHA256(backupCredentialID)` is a record name NOBODY EVER CREATES.
         // An attacker can create an Identity record at exactly that name
         // carrying the backup's own public key. The recovering user's tap
-        // would then verify perfectly — against their own real key — while
+        // would then verify perfectly, against their own real key, while
         // resolving to the attacker's identity, and their phone would adopt a
         // record the attacker can rewrite at will. That is a hijack of the
         // exact moment this feature exists to serve.
         //
         // So: if more than one identity claims the tapped credential, refuse.
         // Failing closed costs a contested recovery an error message; guessing
-        // costs it the identity. (The claims list is unverified — it is a
+        // costs it the identity. (The claims list is unverified, it is a
         // conflict DETECTOR, not an authority. Authority still comes from the
         // signature checks below.)
         let claims = try? await fetchDirectoryCredentials()
         if let claims {
             let owners = Set(claims.filter { $0.credentialIDHash == hash }.map(\.ownerHash))
             if owners.count > 1 {
-                WebAuthnDiag.log.error("signIn: \(owners.count, privacy: .public) identities claim the tapped credential — refusing")
+                WebAuthnDiag.log.error("signIn: \(owners.count, privacy: .public) identities claim the tapped credential, refusing")
                 throw BackupKeyError.credentialClaimConflict
             }
         }
@@ -203,18 +203,18 @@ extension SyncEngine {
             }
             // Second lock on the same door, for when the scan was unavailable:
             // a real identity record contains at least one device endorsement
-            // signed by the key it publishes — that is what registration
+            // signed by the key it publishes, that is what registration
             // does. A squatted record cannot contain one without the private
             // key it is impersonating.
             guard await recordProvesKeyPossession(root: root) else {
-                WebAuthnDiag.log.error("signIn: record \(hash, privacy: .public) has no endorsement signed by the key it publishes — refusing")
+                WebAuthnDiag.log.error("signIn: record \(hash, privacy: .public) has no endorsement signed by the key it publishes, refusing")
                 throw BackupKeyError.unprovenIdentityRecord
             }
             return SignInCredential(root: root, publicKey: pub, backup: nil)
         }
 
-        // Not a root credential. A backup's hash is not a record name — the
-        // backup lives inside its owner's record — so this is the one place
+        // Not a root credential. A backup's hash is not a record name, the
+        // backup lives inside its owner's record, so this is the one place
         // that needs the directory scan to find who it belongs to.
         guard let directory = claims else {
             throw CeremonyManager.CeremonyError.directoryUnavailable
@@ -243,12 +243,12 @@ extension SyncEngine {
 
     /// True when this identity's record carries at least one device
     /// endorsement whose assertion verifies under the record's OWN published
-    /// public key — proof that whoever built the record held that private key.
+    /// public key, proof that whoever built the record held that private key.
     ///
     /// Deliberately checked against the RAW endorsement list, revoked entries
     /// included: the question is "did the holder of this key ever sign here",
     /// not "is that device still valid". Filtering by revocation would deadlock
-    /// an identity that revoked every device — it could never sign in again to
+    /// an identity that revoked every device, it could never sign in again to
     /// endorse a new one.
     private func recordProvesKeyPossession(root: RootIdentity) async -> Bool {
         guard let rootPub = try? P256.Signing.PublicKey(rawRepresentation: root.publicKey),
@@ -283,7 +283,7 @@ extension SyncEngine {
             do {
                 guard let record = try? await publicDB.record(for: recordID) else {
                     // No identity record to attach to. Publishing a fresh one
-                    // here would be wrong — it would have no endorsements and
+                    // here would be wrong, it would have no endorsements and
                     // could stomp a record we simply failed to read.
                     throw BackupKeyError.identityUnavailable
                 }
@@ -305,14 +305,14 @@ extension SyncEngine {
                 // Overwhelmingly the "unknown field" case: the schema hasn't
                 // been deployed to this environment yet. Say that, rather than
                 // handing the user a CloudKit sentence about arguments.
-                WebAuthnDiag.log.error("publishBackupCredential: invalidArguments — backupEndorsements field likely missing from this environment's schema")
+                WebAuthnDiag.log.error("publishBackupCredential: invalidArguments, backupEndorsements field likely missing from this environment's schema")
                 throw BackupKeyError.schemaNotDeployed
             }
         }
         throw BackupKeyError.identityUnavailable
     }
 
-    /// Backup credentials on an identity, verified and revocation-filtered —
+    /// Backup credentials on an identity, verified and revocation-filtered, 
     /// the list the keys panel renders. Reuses `fetchIdentity` so the UI can
     /// never show a backup that verification wouldn't honour.
     func fetchBackupCredentials(credentialIDHash: String) async throws -> [BackupCredential] {

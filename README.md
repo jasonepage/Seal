@@ -1,101 +1,65 @@
 # Seal
 
-**Seal is for the things you can't afford to send to the wrong person.**
+**Sealed envelopes for the people you leave behind.**
 
-A private photo. A bank account number. A crypto wallet address. A password.
-Once one of those reaches the wrong person, you cannot take it back.
+You write a small number of envelopes. Each holds a letter, a few photos, a
+voice message, and the things you never told anybody: the passwords, where
+the safe deposit key is, the combination, the seed phrase. You hand physical
+security keys to a few people you trust. You set the rule for how the
+envelopes open after you are gone.
 
-## How it is different
+Nobody can open one early. Not Apple, not us. It takes your custodians'
+physical keys, after a long silence from you, after weeks of warnings you can
+stop with one tap.
 
-In every other messaging app, the worst thing that can happen is that you were
-never talking to who you thought. A phone number can be faked. A voice can be
-cloned from ten seconds of audio. A stranger can set up an account with your
-son's name and photo in about a minute.
+## How it works
 
-Seal makes that impossible, and it does it in a way that sounds almost too
-simple: **you can only add someone by standing next to them.**
+1. **Register** with a security key or Face ID. Your key is your identity.
+2. **Meet people in person.** You add someone by standing next to them, once.
+   That is how their key becomes trusted, and it is the only way.
+3. **Write envelopes.** One for your wife with every password. One for each
+   child. One for your business partner with the registrar login.
+4. **Hand out keys.** Three keys, say: wife, brother, attorney. Each tap on
+   your phone is a signed receipt that the key changed hands.
+5. **Set the rule.** Any two of the three, after 90 days of silence, then 21
+   days of warnings, then 14 quiet days. Those are the defaults; you choose.
+6. **Tap Seal.** Everything is encrypted on your phone before it leaves.
+7. **Open the app now and then.** That is the whole job. Opening it is the
+   check-in that keeps the envelopes closed.
 
-The two of you are together, one phone scans the other, and the other person
-proves who they are right there in your hand. It takes about two minutes and it
-only ever happens once per person. After that you can message them from
-anywhere in the world, and every message really is from them.
+If you go quiet, a custodian can start a claim. You are warned every day for
+three weeks. Everyone who holds a key is told. If you open Seal once, it stops
+cold, and you do not need your key to do it. If you never do, and enough
+custodians tap their keys, the envelopes open on the phones of the people
+they were written for, in the order you chose, and nobody else's.
 
-Nobody can be tricked into a Seal connection, because there is nothing to
-trick. There is no username to search, no number to call, and no request that
-can arrive from a stranger.
+## What it promises
 
-## What you can do with it
+- An envelope cannot be opened early by anyone, including us.
+- Stopping a release is one tap. Starting one is hard.
+- The people holding keys learn nothing about what is in the envelopes or
+  who they are for.
+- The record of what happened, and the encrypted envelopes themselves, live
+  in a file you and your custodians keep. It can be checked with a small
+  script and no Seal, no Apple and no account: [docs/CAPSULE.md](docs/CAPSULE.md).
 
-**Send messages and photos.** They are scrambled on your phone before they
-leave it and can only be unscrambled on the other person's phone. Not by us,
-not by Apple, not by anyone who breaks into a server, because there is no
-server holding them. You can set messages to delete themselves on a timer.
+## What it does not promise
 
-**Send something that must be exact.** A wallet address or payment
-instructions go as a Sealed Card: locked exactly as written, copied character
-for character, and impossible to confuse with ordinary chat. If somebody
-changes a single character on the way, it shows.
-
-**Sign for a handover.** You give somebody a car, a deposit, a set of keys.
-Both of you sign the same receipt, in person, and either of you can prove
-later exactly what was handed over and to whom.
-
-**Keep a record.** Seal keeps a list of what has happened between you and each
-person: when you met, when you sent something sealed, when you signed for
-something. Each line is signed and cannot be edited afterwards, not even by
-you.
-
-## The family rule
-
-If it is about money and it did not arrive in Seal, it is not really them.
-That one sentence is easy to remember at eight or eighty, and it stops the
-scam phone call, the fake text and the cloned voicemail cold.
-
-## What it does not do
-
-It proves a message came from that person's phone. It does not know whether
-what they are asking for is a good idea, and it cannot tell you whether their
-phone is in their own hands. If a request feels strange, ring them.
-
-Messages set to disappear are removed from both phones on schedule, and Seal
-tells you when somebody takes a screenshot. It cannot stop a second phone
-pointed at a screen. Nothing can.
-
-**There is no password reset.** Your identity lives in your phone and in your
-key, not on a server, which is why nobody can steal it from us. It is also why
-nobody can give it back to you. Add a backup key early. The app asks you to.
-
-## Getting it
-
-iPhone only for now, through Apple TestFlight. Android is on the roadmap.
-[sealmessenger.com](https://sealmessenger.com)
-
----
+Seal cannot tell whether you are dead. Silence is silence, which is why the
+warnings exist. It proves that a specific key did a specific thing; it does
+not know who the legal person is. Once the envelopes are released, that
+cannot be undone. The full list is in [docs/PRODUCT.md](docs/PRODUCT.md).
 
 ## For developers
 
-iOS 26.5+, SwiftUI, no backend. Identity is a WebAuthn credential, either a
-FIDO2 hardware key (Verified tier) or a platform passkey, which endorses
-non-exportable Secure Enclave device keys. Messages are end-to-end encrypted
-with per-sender ratcheted chains (HKDF, AES-256-GCM) wrapped to members over
-X25519, with the AAD binding group, epoch, sender, index and previous message
-hash so a transcript cannot be reordered or truncated undetected. Transport is
-the CloudKit public database with deterministic record names. The only external
-dependency is a static AASA file on `sealmessenger.com`.
+- Start with [HANDOFF.md](HANDOFF.md), then [docs/GOTCHAS.md](docs/GOTCHAS.md).
+- Design: [docs/SDS.md](docs/SDS.md). Requirements: [docs/SRS.md](docs/SRS.md).
+- The release state machine: [docs/RELEASE.md](docs/RELEASE.md).
+- The signed record and timestamps: [docs/RECORD.md](docs/RECORD.md).
+- The export format and verifier: [docs/CAPSULE.md](docs/CAPSULE.md),
+  `tools/verify_capsule.py`.
 
-### Where to read what
-
-| Doc | What it is |
-|---|---|
-| [HANDOFF.md](HANDOFF.md) | **Start here.** Where the project stands today and what is blocking |
-| [docs/RECORD.md](docs/RECORD.md) | The current product direction and its spec |
-| [docs/GOTCHAS.md](docs/GOTCHAS.md) | Hard-won operational knowledge. Read before debugging anything |
-| [docs/SDS.md](docs/SDS.md) | Architecture: key hierarchy, crypto, data model, threat model |
-| [docs/SRS.md](docs/SRS.md) | Requirements, numbered FR-n |
-| [docs/UI.md](docs/UI.md) | Design language and screen specs |
-| [docs/CARDS.md](docs/CARDS.md) | Sealed Cards |
-| [docs/INTRODUCTIONS.md](docs/INTRODUCTIONS.md) | Vouched introductions |
-| [docs/COLDSTART.md](docs/COLDSTART.md) | First-run design, the shell merge, the site |
-| [docs/APP_STORE.md](docs/APP_STORE.md) | Submission status and what is still missing |
-| [docs/CLOUDKIT_DEPLOY.md](docs/CLOUDKIT_DEPLOY.md) | How to deploy the schema to Production |
-| [docs/archive/](docs/archive/) | Superseded thinking, kept for reference |
+Seal is SwiftUI on iOS 26.5, CryptoKit only, no backend, no dependencies.
+Team `8C4BM6A82T`, bundle `io.github.jasonepage.Seal`, relying party
+`sealmessenger.com`. A seal is wax on a letter the wrong person must not open,
+and breaking one is a ceremony. The name did not change.

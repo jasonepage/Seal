@@ -9,7 +9,7 @@ import CryptoKit
 /// Adding a backup key is a TWO-TAP ceremony on two different authenticators,
 /// and the order matters:
 ///
-///   1. The NEW key is tapped to create a credential. Nothing is trusted yet —
+///   1. The NEW key is tapped to create a credential. Nothing is trusted yet, 
 ///      at this point it is just a keypair that exists.
 ///   2. The ROOT key is tapped to sign a statement committing to that
 ///      credential's ID and public key. THAT is the authorisation, and it is
@@ -17,7 +17,7 @@ import CryptoKit
 ///      with physical access to the phone but not the root key gets as far as
 ///      step 1 and no further.
 ///
-/// The same shape as every other ceremony in Seal — the tap that matters is
+/// The same shape as every other ceremony in Seal, the tap that matters is
 /// the one that signs a commitment somebody else can recompute.
 extension CeremonyManager {
 
@@ -36,7 +36,7 @@ extension CeremonyManager {
         }
         setPhase(.searching)
         do {
-            // 0. Everything already in the directory — roots AND existing
+            // 0. Everything already in the directory, roots AND existing
             //    backups (fetchAllCredentialIDs covers both since FR-3). Our
             //    own root credential is appended even if the directory read
             //    failed, because "don't let this key back itself up" must not
@@ -59,7 +59,7 @@ extension CeremonyManager {
             let backupPublicKey = parsed.publicKey.rawRepresentation
             // Tier from what iOS ACTUALLY made, not from the button pressed.
             // The two normally agree, but the button is a request and this is
-            // the answer — and the ring colour, the icon and the recovery
+            // the answer, and the ring colour, the icon and the recovery
             // instructions all key off it, so a mislabelled backup key would
             // send someone hunting for a security key that is really a passkey
             // at the worst possible moment.
@@ -73,7 +73,7 @@ extension CeremonyManager {
             // (or, with attestation "none", not at all), so it is not a
             // dependable proof of possession of the credential's OWN key. And
             // without proof of possession the endorsement is a one-sided
-            // claim — a credential ID and public key are public, so any
+            // claim, a credential ID and public key are public, so any
             // identity could list somebody else's backup key in its own
             // record, signed by its own root, and it would verify. The
             // commitment names the root, so this signature cannot be lifted
@@ -101,7 +101,7 @@ extension CeremonyManager {
 
             // 3. The ROOT key signs the authorisation. Both providers are
             //    offered because the root might be a hardware key (NFC/USB-C)
-            //    or a passkey (Face ID) — same request builder the friend
+            //    or a passkey (Face ID), same request builder the friend
             //    forge and device revocation use.
             setPhase(.endorsing)
             let commitment = BackupCredential.endorsementCommitment(
@@ -120,7 +120,7 @@ extension CeremonyManager {
             // 4. Verify our OWN work before publishing it. Every other client
             //    will run exactly this check (BackupCredential.verified), so a
             //    statement that fails it is a dud that would sit in the
-            //    directory looking like a safety net while being none —
+            //    directory looking like a safety net while being none, 
             //    precisely the failure mode a backup key must not have.
             let rootPub = try P256.Signing.PublicKey(rawRepresentation: myRoot.publicKey)
             guard stored.verify(with: rootPub),
@@ -148,7 +148,7 @@ extension CeremonyManager {
             setPhase(.failed(CeremonyError.cancelled.localizedDescription))
             throw CeremonyError.cancelled
         } catch let error as ASAuthorizationError where error.code == .matchedExcludedCredential {
-            // Not the 1-key-1-identity deterrent this time — the person tried
+            // Not the 1-key-1-identity deterrent this time, the person tried
             // to back up a key with itself.
             setPhase(.failed(BackupCeremonyError.selfBackup.localizedDescription))
             throw BackupCeremonyError.selfBackup
@@ -171,7 +171,7 @@ extension CeremonyManager {
     /// longer exists.
     ///
     /// Revoke a backup credential. The ROOT key signs, exactly as it does for
-    /// a device (FR-19) — and ONLY the root key can, which is the deliberate
+    /// a device (FR-19), and ONLY the root key can, which is the deliberate
     /// asymmetry documented in BackupCredential.swift: a backup carries the
     /// identity forward but can never demote the credential that created it.
     ///
@@ -198,7 +198,7 @@ extension CeremonyManager {
                 authenticatorData: assertion.rawAuthenticatorData,
                 signature: assertion.signature)
             // Same reasoning as adding: verify before publishing. A revocation
-            // that doesn't verify is worse than a failed one — it looks like
+            // that doesn't verify is worse than a failed one, it looks like
             // the key is dead while every client still honours it.
             let rootPub = try P256.Signing.PublicKey(rawRepresentation: myRoot.publicKey)
             guard stored.verify(with: rootPub),

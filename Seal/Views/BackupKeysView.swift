@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Backup keys UI (FR-3, docs/UI.md §3.1 and §3.5) — the keys panel section,
+/// Backup keys UI (FR-3, docs/UI.md §3.1 and §3.5), the keys panel section,
 /// the add ceremony sheet, and the post-registration prompt.
 ///
 /// This is a SECURITY surface: no mascot, SF Pro, and brass only where a key
@@ -17,19 +17,19 @@ import SwiftUI
 
 enum BackupKeyCopy {
     /// docs/UI.md §3.1, verbatim. Do not soften.
-    static let stakes = "Lose every key, lose this identity. Nobody can reset it — not us, not Apple."
+    static let stakes = "Lose every key, lose this identity. Nobody can reset it, not us, not Apple."
 
     static let notMessages = "A backup key brings back who you are: the same name, the same seal, so your family can still check it's really you. It does NOT move your envelopes or your people onto the new phone. Those live on the phone you lost. Your family adds you again, in person, the way they did the first time, and you seal your envelopes again."
 
     static let stolenNotLost = "If your main key is stolen rather than lost, delete the identity and start fresh. A backup key can carry your identity forward, but it can't lock the thief out."
 
-    static let mustBeDifferent = "Use a second security key, or a passkey on someone else's phone — a helper you'd trust with your identity. The key you already sign in with can't back itself up."
+    static let mustBeDifferent = "Use a second security key, or a passkey on someone else's phone, a helper you'd trust with your identity. The key you already sign in with can't back itself up."
 
-    static let needsMainKey = "Adding or removing a backup key needs your main key — the one you started with. A phone you recovered using a backup key can't do it."
+    static let needsMainKey = "Adding or removing a backup key needs your main key, the one you started with. A phone you recovered using a backup key can't do it."
 
     /// Said after a recovery, where it cannot be mistaken for reassurance.
     /// The state is survivable but not stable, and the honest instruction is
-    /// to leave it — so the copy gives the instruction, not just the fact.
+    /// to leave it, so the copy gives the instruction, not just the fact.
     static let recoveredBody = "You signed in with your backup key, so you are still you: same name, same seal, and your family can check it's really you. Your envelopes and your people are not here: they were on the phone you lost. Your family will need to add you again, in person, and you will seal your envelopes again.\n\nYour main key is gone too, and this phone can't add another backup key or replace the one you used. Both need the main key. So one more loss would take this identity for good."
 
     /// Same reasoning as promptTitle: the flag no longer knows whether
@@ -112,8 +112,8 @@ struct BackupKeysSection: View {
             .parentTapTarget()
             // The demo account has no real credential behind it (its
             // rawCredentialID is nil), so the ceremony could only fail. The
-            // section still renders — a reviewer should see that backup keys
-            // exist — but the tap is off rather than dead-ending in a system
+            // section still renders, a reviewer should see that backup keys
+            // exist, but the tap is off rather than dead-ending in a system
             // sheet with nothing behind it.
             .disabled(DemoFixtures.isActive)
             .opacity(DemoFixtures.isActive ? 0.5 : 1)
@@ -152,7 +152,7 @@ struct BackupKeysSection: View {
             }
         }
         .confirmationDialog(
-            "Revoke this backup key? It can never sign in again — and any phone that was set up using it stops working too, permanently. Your main key signs the revocation, so this needs one more tap of it.",
+            "Revoke this backup key? It can never sign in again, and any phone that was set up using it stops working too, permanently. Your main key signs the revocation, so this needs one more tap of it.",
             isPresented: .init(get: { revoking != nil }, set: { if !$0 { revoking = nil } }),
             titleVisibility: .visible
         ) {
@@ -177,7 +177,7 @@ struct BackupKeysSection: View {
         HStack(spacing: 12) {
             Image(systemName: backup.tier == .verified ? "key.radiowaves.forward.fill" : "faceid")
                 // Tier decides the colour here exactly as it decides ring
-                // colour everywhere else (UI.md §1.1) — brass for a hardware
+                // colour everywhere else (UI.md §1.1), brass for a hardware
                 // key, silver for a passkey. It is not a claim that one is a
                 // better backup, only which kind it is.
                 .foregroundStyle(backup.tier == .verified ? SealTheme.brass : SealTheme.silver)
@@ -209,7 +209,7 @@ struct BackupKeysSection: View {
             loadError = nil
         } catch {
             // Don't claim there are no backup keys when we simply couldn't
-            // look — that is the one wrong answer on this screen.
+            // look, that is the one wrong answer on this screen.
             loadError = "Couldn't check your backup keys just now."
         }
     }
@@ -268,7 +268,7 @@ struct AddBackupKeySheet: View {
                             Text("Three taps, in this order")
                                 .font(.footnote.weight(.semibold))
                                 .foregroundStyle(.white.opacity(0.8))
-                            Text("1. The new key or phone — to create the key.\n2. The same key again — so it can confirm it's really yours.\n3. Your own key — to vouch for it.")
+                            Text("1. The new key or phone, to create the key.\n2. The same key again, so it can confirm it's really yours.\n3. Your own key, to vouch for it.")
                                 .font(.footnote)
                                 .foregroundStyle(.white.opacity(0.6))
                                 .fixedSize(horizontal: false, vertical: true)
@@ -312,7 +312,7 @@ struct AddBackupKeySheet: View {
                         .disabled(busy)
                         .padding(.horizontal, 24)
 
-                        Text("A passkey is saved to this phone's Apple ID unless iOS offers to put it on another device — so if the plan is \"my son's phone holds the backup\", make it on his phone, or use a security key. A passkey comes back on a new phone; a security key survives even if the Apple account doesn't. Either is a real backup; neither can be the one you already use.")
+                        Text("A passkey is saved to this phone's Apple ID unless iOS offers to put it on another device, so if the plan is \"my son's phone holds the backup\", make it on his phone, or use a security key. A passkey comes back on a new phone; a security key survives even if the Apple account doesn't. Either is a real backup; neither can be the one you already use.")
                             .font(.caption2)
                             .foregroundStyle(.white.opacity(0.4))
                             .multilineTextAlignment(.center)
@@ -352,7 +352,7 @@ struct AddBackupKeySheet: View {
             added = true
             onAdded()
         } catch CeremonyManager.CeremonyError.cancelled {
-            // User backed out of the system sheet — not an error worth shouting.
+            // User backed out of the system sheet, not an error worth shouting.
             errorText = nil
         } catch {
             errorText = (error as? LocalizedError)?.errorDescription
@@ -366,7 +366,7 @@ struct AddBackupKeySheet: View {
 
 /// Blocking card shown once, right after a fresh registration. Blocking
 /// because this is the only moment the person is guaranteed to be holding
-/// their key and thinking about it — and because the consequence of skipping
+/// their key and thinking about it, and because the consequence of skipping
 /// it is unrecoverable. "I accept the risk" is a real, first-class way out:
 /// the point is informed consent, not coercion.
 struct BackupKeyPrompt: View {
@@ -436,7 +436,7 @@ struct BackupKeyPrompt: View {
         .task { parentMode = ParentMode(ownerHash: myRoot.credentialIDHash).isOn }
         .sheet(isPresented: $showAdd) {
             AddBackupKeySheet(myRoot: myRoot, ceremony: ceremony, sync: sync) {
-                // A key was added — the prompt has done its job.
+                // A key was added, the prompt has done its job.
                 onFinish()
             }
         }
@@ -448,7 +448,7 @@ struct BackupKeyPrompt: View {
 /// Shown once, immediately after signing in with a backup key. Not a
 /// congratulation: the recovery worked, and the phone is now in a state that
 /// cannot be repaired from this phone. Saying that plainly at the only moment
-/// the person is definitely paying attention is the whole point — the standing
+/// the person is definitely paying attention is the whole point, the standing
 /// notice in the keys panel keeps it true afterwards.
 struct RecoveredIdentityNotice: View {
     let myRoot: RootIdentity

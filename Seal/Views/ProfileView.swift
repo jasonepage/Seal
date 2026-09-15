@@ -36,7 +36,7 @@ struct ProfileView: View {
     @State private var showHowTo = false
     @State private var timestampsOn = false
 
-    /// Live name — reflects an in-session rename immediately (myRoot is a
+    /// Live name, reflects an in-session rename immediately (myRoot is a
     /// passed-in copy that only refreshes when the parent re-renders).
     private var currentName: String { identity.rootIdentity?.displayName ?? myRoot.displayName }
 
@@ -69,9 +69,9 @@ struct ProfileView: View {
                         Button("Save") { Task { await saveName() } }
                         Button("Cancel", role: .cancel) {}
                     } message: {
-                        Text("This is only a label — your key stays your identity. Friends see the new name next time they sync.")
+                        Text("This is only a label, your key stays your identity. Friends see the new name next time they sync.")
                     }
-                    Label(myRoot.tier == .verified ? "Verified — hardware key" : "Passkey",
+                    Label(myRoot.tier == .verified ? "Verified, hardware key" : "Passkey",
                           systemImage: myRoot.tier == .verified ? "key.radiowaves.forward.fill" : "faceid")
                         .font(.subheadline)
                         .foregroundStyle(myRoot.tier == .verified ? SealTheme.brass : SealTheme.silver)
@@ -94,7 +94,7 @@ struct ProfileView: View {
                     }
 
                     // Commit-moment lock: one biometric check right at "Seal
-                    // and send". Deliberately NOT a gate on ordinary messages —
+                    // and send". Deliberately NOT a gate on ordinary messages, 
                     // friction belongs on the irreversible artifact, not chat.
                     if appLock.isAvailable {
                         settingRow(icon: "checkmark.seal", tint: SealTheme.brass,
@@ -277,7 +277,7 @@ struct ProfileView: View {
             ) {
                 Button("Sign out and delete local data", role: .destructive) {
                     // ContentView wipes the engines; Parent Mode is view-layer
-                    // presentation state, so it is cleared here — otherwise the
+                    // presentation state, so it is cleared here, otherwise the
                     // next identity on this phone would inherit it.
                     ParentMode.wipe(ownerHash: myRoot.credentialIDHash)
                     RecoveryNotice.wipe(ownerHash: myRoot.credentialIDHash)
@@ -285,7 +285,7 @@ struct ProfileView: View {
                 }
             }
             .confirmationDialog(
-                "Permanently delete your identity? It's removed from the directory, friends can no longer verify you, and ALL data is destroyed. This cannot be undone — not by you, not by us.",
+                "Permanently delete your identity? It's removed from the directory, friends can no longer verify you, and ALL data is destroyed. This cannot be undone, not by you, not by us.",
                 isPresented: $confirmDelete, titleVisibility: .visible
             ) {
                 Button("Delete identity forever", role: .destructive) {
@@ -293,7 +293,7 @@ struct ProfileView: View {
                 }
             }
             .confirmationDialog(
-                "Revoke this device? It can never sign or decrypt again. Your key signs the revocation — one more tap.",
+                "Revoke this device? It can never sign or decrypt again. Your key signs the revocation, one more tap.",
                 isPresented: .init(get: { revoking != nil }, set: { if !$0 { revoking = nil } }),
                 titleVisibility: .visible
             ) {
@@ -492,7 +492,7 @@ struct ProfileView: View {
         }
     }
 
-    /// Directory record first, local wipe second — if the network call fails
+    /// Directory record first, local wipe second, if the network call fails
     /// we keep local state so the user can retry (an orphaned directory
     /// record with no keys behind it would defeat the point of deletion).
     private func deleteIdentity() async {
@@ -503,13 +503,13 @@ struct ProfileView: View {
             do {
                 try await sync.deleteIdentity(credentialIDHash: myRoot.credentialIDHash)
             } catch {
-                // Only blame the connection when it actually is one — otherwise
+                // Only blame the connection when it actually is one, otherwise
                 // show the real CloudKit reason instead of hiding it.
                 let isNetwork = (error as? CKError).map {
                     $0.code == .networkUnavailable || $0.code == .networkFailure || $0.code == .notAuthenticated
                 } ?? false
                 deleteError = isNetwork
-                    ? "Couldn't reach iCloud to remove your directory entry — check your connection and try again."
+                    ? "Couldn't reach iCloud to remove your directory entry, check your connection and try again."
                     : "Delete failed: \(error.localizedDescription)"
                 return
             }
@@ -530,14 +530,14 @@ struct ProfileView: View {
         switch sync.status {
         case .published: "Published"
         case .publishing: "Publishing…"
-        case .idle: "—"
-        case .error: "Error — see home"
+        case .idle: ", "
+        case .error: "Error, see home"
         }
     }
 
     /// A settings row that stays operable at accessibility sizes.
     ///
-    /// The original shape — icon, label, Spacer, switch — squeezes the switch
+    /// The original shape, icon, label, Spacer, switch, squeezes the switch
     /// toward the edge once the label wraps to three or four lines, and the
     /// one control Parent Mode absolutely must leave reachable is the toggle
     /// that turns Parent Mode off. Above accessibility sizes the switch moves

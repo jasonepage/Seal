@@ -1,6 +1,6 @@
 # Deploying the CloudKit schema to Production
 
-**Date:** 2026-08-28 · Container `iCloud.io.github.jasonepage.Seal` · Team `8C4BM6A82T`
+**Date:** 2026-09-15 (EstateEvent added) · Container `iCloud.io.github.jasonepage.Seal` · Team `8C4BM6A82T`
 
 ## What this actually is
 
@@ -37,8 +37,16 @@ The deploy copies whatever Development has, so Development has to be right.
 
    Do **not** mark any of them queryable, sortable or searchable. Nothing
    queries on them and an index on a blob costs for nothing.
-5. Schema → Record Types. Confirm `PerkGrant` and `PerkClaim` exist.
-6. Schema → Indexes → `Identity`. Confirm `recordName` has a **QUERYABLE**
+5. Schema → Record Types. Confirm `EstateEvent` exists with fields `estate`
+   (String), `kind` (String), `actor` (String) and `payload` (Bytes). It is
+   created automatically the first time an Xcode build seals an estate
+   (Development has just-in-time schema); if it is missing, add it by hand.
+   `PerkGrant` and `PerkClaim` are retired and can stay or go; nothing reads
+   them.
+6. Schema → Indexes → `EstateEvent`. `estate` needs a **QUERYABLE** index.
+   Without it custodian phones cannot find an estate's events at all and the
+   failure is silent. `recordName` on `EstateEvent` needs nothing.
+7. Schema → Indexes → `Identity`. Confirm `recordName` has a **QUERYABLE**
    index. **This is the one that matters most.** Without it the directory scan,
    the one-key-one-identity check and security-key sign-in all break in
    TestFlight, and they break quietly.

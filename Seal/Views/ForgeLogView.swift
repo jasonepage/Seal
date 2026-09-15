@@ -1,14 +1,14 @@
 import SwiftUI
 
 /// The forge log (VISION.md): a verifiable diary of every human you've met.
-/// Each entry is backed by a signed ceremony attestation — not a claim, a proof.
+/// Each entry is backed by a signed ceremony attestation, not a claim, a proof.
 struct ForgeLogView: View {
     let myRoot: RootIdentity
     @Bindable var friendStore: FriendStore
 
     /// IN-PERSON friendships only. This screen is "signed proof that you
     /// met", and the share card literally says "Every friendship forged in
-    /// person" — a LINKED friendship (docs/INTRODUCTIONS.md) was never forged,
+    /// person", a LINKED friendship (docs/INTRODUCTIONS.md) was never forged,
     /// has no ceremony date worth printing, and must never be counted here.
     /// Listing them with a forge date would make the one screen whose whole
     /// claim is physical presence quietly untrue.
@@ -125,7 +125,7 @@ struct ForgeLogView: View {
         .onAppear { renderShareCard() }
         // `forged.count`, not `friends.count`: FriendStore.add is
         // remove-then-append, so a LINKED friend who later forges in person
-        // leaves the total unchanged while the forged count rises — and the
+        // leaves the total unchanged while the forged count rises, and the
         // share card would keep printing the old, too-low number.
         .onChange(of: forged.count) { renderShareCard() }
     }
@@ -164,7 +164,7 @@ struct ForgeLogView: View {
 }
 
 /// The shareable forge log: real-world social life as a verifiable brag.
-/// Rendered offscreen via ImageRenderer — keep it fixed-size and self-contained.
+/// Rendered offscreen via ImageRenderer, keep it fixed-size and self-contained.
 struct ForgeShareCard: View {
     let name: String
     let forged: Int

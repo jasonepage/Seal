@@ -4,7 +4,7 @@ import os   // Logger interpolation resolves at the call site
 
 /// CloudKit transport (SDS §1, §4): public DB for the identity directory,
 /// one custom zone per group shared via CKShare. Transport-level share
-/// membership is NOT trusted — cryptographic membership is the signed
+/// membership is NOT trusted, cryptographic membership is the signed
 /// MembershipLog + key epochs.
 @Observable
 final class SyncEngine {
@@ -39,7 +39,7 @@ final class SyncEngine {
     /// Deletion marker lives in its OWN record, separate from the (revivable)
     /// Identity record. The `tier="deleted"` flag on the Identity record alone
     /// is not enough: the app republishes that record on sign-in, on every
-    /// device refresh, and via HomeView's launch publish — and if the
+    /// device refresh, and via HomeView's launch publish, and if the
     /// record was removed outright (e.g. deleted in the CloudKit console),
     /// publishIdentity just re-creates a fresh LIVE one. A write-once tombstone
     /// record can't be revived by republishing the identity, because the
@@ -59,7 +59,7 @@ final class SyncEngine {
 
     /// Publish (or refresh) our Identity record in the public database so
     /// friends' clients can fetch and verify it. Record name = credentialIDHash,
-    /// so lookups are direct fetches — no queries needed.
+    /// so lookups are direct fetches, no queries needed.
     enum PublishOutcome {
         case published      // our endorsement is confirmed in the directory
         case refused        // permanent: tombstoned. Never retry.
@@ -68,14 +68,14 @@ final class SyncEngine {
 
     /// Why this reports three outcomes rather than a Bool: a caller that
     /// self-heals (HomeView's launch publish) has to retry a `failed`,
-    /// but must NOT retry a `refused` — a tombstoned identity can never
+    /// but must NOT retry a `refused`, a tombstoned identity can never
     /// publish, and retrying it on every launch, foreground and silent push
     /// would hammer CloudKit forever for a result that cannot change.
     ///
     /// Getting this right matters because an endorsement that never lands is
     /// invisible to peers, so every message this device signs is dropped by
     /// everyone as "signed by a device not among the sender's endorsed
-    /// devices" — and receivers skip slots they can't verify, so those
+    /// devices", and receivers skip slots they can't verify, so those
     /// messages are lost for good. Silent failure here is the most expensive
     /// failure in the app.
     @discardableResult
@@ -98,7 +98,7 @@ final class SyncEngine {
         // forge) publish to the SAME record name, so the change tag we read
         // can be stale by the time we save. CloudKit then rejects the write
         // with .serverRecordChanged. That used to end the attempt with nothing
-        // published and nothing retrying. Re-read and re-merge instead — the
+        // published and nothing retrying. Re-read and re-merge instead, the
         // merge is idempotent (dedupe by device key), so replaying it is safe.
         for attempt in 1...3 {
             do {
@@ -143,18 +143,18 @@ final class SyncEngine {
                 // Read back and confirm OUR endorsement survived: a save that
                 // "succeeded" but got clobbered by somebody else's concurrent
                 // merge is the same outcome as never publishing.
-                // A read that FAILS is not evidence of either — the save
+                // A read that FAILS is not evidence of either, the save
                 // already succeeded, so treat an unreadable read-back as
                 // published rather than raising a false alarm about keys.
                 guard let saved = try? await publicDB.record(for: recordID) else {
-                    WebAuthnDiag.log.info("publishIdentity: saved, but read-back failed — assuming published")
+                    WebAuthnDiag.log.info("publishIdentity: saved, but read-back failed, assuming published")
                     status = .published
                     return .published
                 }
                 let landed = (saved["deviceEndorsements"] as? Data)
                     .flatMap { try? JSONDecoder().decode([DeviceEndorsement].self, from: $0) } ?? []
                 guard landed.contains(where: { $0.devicePublicKey == endorsement.devicePublicKey }) else {
-                    WebAuthnDiag.log.error("publishIdentity: endorsement absent after save — concurrent merge dropped it (attempt \(attempt, privacy: .public))")
+                    WebAuthnDiag.log.error("publishIdentity: endorsement absent after save, concurrent merge dropped it (attempt \(attempt, privacy: .public))")
                     try? await Task.sleep(for: .milliseconds(200 << attempt))
                     continue
                 }
@@ -172,13 +172,13 @@ final class SyncEngine {
                 return .failed
             }
         }
-        status = .error("Couldn't publish this device's key — others won't be able to read your messages. It'll retry.")
+        status = .error("Couldn't publish this device's key, others won't be able to read your messages. It'll retry.")
         WebAuthnDiag.log.error("publishIdentity: gave up after 3 attempts")
         return .failed
     }
 
     /// Fetch a (claimed) identity from the directory. The caller must still
-    /// verify its endorsement chain — the server is untrusted for integrity.
+    /// verify its endorsement chain, the server is untrusted for integrity.
     func fetchIdentity(credentialIDHash: String) async throws -> (RootIdentity, [DeviceEndorsement])? {
         let recordID = CKRecord.ID(recordName: credentialIDHash)
         let record: CKRecord
@@ -225,8 +225,8 @@ final class SyncEngine {
 
         // Backup credentials (FR-3). THIS is the single point where a backup
         // is checked against the root signature and the revocation list, so
-        // every consumer downstream — the authority set in verifiedDevices,
-        // sign-in resolution, the profile list — inherits one filtered answer
+        // every consumer downstream, the authority set in verifiedDevices,
+        // sign-in resolution, the profile list, inherits one filtered answer
         // instead of each re-deriving it. An absent field means "no backups"
         // (an identity that has none, or a directory where the field is not
         // deployed yet) and is never an error.
@@ -244,20 +244,20 @@ final class SyncEngine {
         return (root, live)
     }
 
-    /// Every credential ID in the directory — fed to `excludedCredentials` at
+    /// Every credential ID in the directory, fed to `excludedCredentials` at
     /// registration so an authenticator that already holds a Seal identity
     /// refuses to mint a second one (1 key ≈ 1 account; SDS §7: deterrence,
-    /// not an invariant — FIDO2 reset or a modified client evades it).
+    /// not an invariant, FIDO2 reset or a modified client evades it).
     /// NOTE: requires the `recordName QUERYABLE` index on Identity in the
     /// CloudKit schema (console → Indexes → Identity), dev + Production.
-    /// Scale ceiling is documented in SDS §7 — revisit past ~1k identities.
+    /// Scale ceiling is documented in SDS §7, revisit past ~1k identities.
     /// Now a thin projection of `fetchDirectoryCredentials()` (FR-3, see
     /// Seal/Sync/BackupDirectory.swift), so BACKUP credential IDs land in this
     /// list too. Both callers need that:
-    ///   - registration's `excludedCredentials` — otherwise a key already
+    ///   - registration's `excludedCredentials`, otherwise a key already
     ///     serving as somebody's backup could mint a second identity, which is
     ///     exactly the hole 1-key-1-identity exists to deter (SDS §7);
-    ///   - security-key sign-in's allow-list — a non-discoverable backup key
+    ///   - security-key sign-in's allow-list, a non-discoverable backup key
     ///     recognises its own credential only when its ID is on the list, so
     ///     leaving it off would make the recovery key silently un-tappable.
     func fetchAllCredentialIDs() async throws -> [Data] {
@@ -286,19 +286,19 @@ final class SyncEngine {
     /// zero-server design the identity is the key/passkey, which survives the
     /// delete, so a bare deletion is silently re-created by the next sign-in's
     /// republish (and is readable anyway during CloudKit's propagation window).
-    /// Instead we write a durable tombstone — `tier` set to a deleted sentinel,
-    /// endorsements scrubbed — and keep the record as a gravestone that
+    /// Instead we write a durable tombstone, `tier` set to a deleted sentinel,
+    /// endorsements scrubbed, and keep the record as a gravestone that
     /// fetchIdentity, the sign-in allow-list, and publishIdentity all refuse to
     /// revive (FR-19). Uses only existing fields, so no schema change.
     func deleteIdentity(credentialIDHash: String) async throws {
         // 1. Authoritative deletion = a write-once marker record that THIS
         //    account creates and therefore OWNS. Creating a brand-new record
         //    always succeeds (you're the creator of what you create), so delete
-        //    works from ANY iCloud account — even when the Identity record was
+        //    works from ANY iCloud account, even when the Identity record was
         //    first published by a DIFFERENT account and the public-DB
         //    creator-only-write rule ("WRITE operation not permitted") won't let
         //    us touch it. If the marker already exists, the identity is already
-        //    dead — that's success too. Once present, isTombstoned() is true
+        //    dead, that's success too. Once present, isTombstoned() is true
         //    forever, so sign-in and every publish refuse to revive it.
         let tombID = CKRecord.ID(recordName: Self.tombstoneName(credentialIDHash))
         do {
@@ -313,7 +313,7 @@ final class SyncEngine {
         //    sentinel + scrub endorsements, so the fast path (fetchIdentity's
         //    tier check) sees it gone without the extra tombstone fetch. Only
         //    the record's creator may modify it, so this is skipped silently
-        //    when another account owns it — the marker in step 1 is what
+        //    when another account owns it, the marker in step 1 is what
         //    actually enforces deletion, so we must NOT fail the whole delete
         //    over a write we may not be permitted to make.
         let recordID = CKRecord.ID(recordName: credentialIDHash)
@@ -326,7 +326,7 @@ final class SyncEngine {
         // present: writing a field the Production schema doesn't have yet
         // would make the whole save fail, and account deletion is an App
         // Review 5.1.1(v) requirement that must not depend on a schema deploy.
-        // The write-once tombstone marker above is authoritative regardless —
+        // The write-once tombstone marker above is authoritative regardless, 
         // sign-in through a backup resolves to this root and checks it.
         if record["backupEndorsements"] != nil {
             record["backupEndorsements"] = Data()
@@ -352,10 +352,10 @@ final class SyncEngine {
     }
 
     // Moderation (App Store 1.2): reports are emailed to the developer from
-    // ChatView (mailto) — no CloudKit record / backend needed. Block is local
+    // ChatView (mailto), no CloudKit record / backend needed. Block is local
     // (ChatEngine). Action on a valid report = tombstone the identity (deleteIdentity).
 
-    // MARK: - Message transport (deterministic record names — no queries)
+    // MARK: - Message transport (deterministic record names, no queries)
     //
     // KeyEnvelope: "kenv.<groupID>[.e<epoch>].<senderHash>.<recipientHash>"
     // Message:     "msg.<groupID>[.e<epoch>].<senderHash>.<chainIndex>"
@@ -375,8 +375,8 @@ final class SyncEngine {
         // Fetch-then-update so we OVERWRITE an existing envelope instead of
         // failing on its change tag. The envelope for (group, epoch, sender,
         // recipient) must carry the sender's CURRENT chain key. If the sender
-        // re-keyed — a new session after a sign-out/reinstall wiped the local
-        // send chain — a plain create would collide with the old record and
+        // re-keyed, a new session after a sign-out/reinstall wiped the local
+        // send chain, a plain create would collide with the old record and
         // leave the recipient holding an envelope wrapped to stale keys
         // ("Couldn't unlock messages"). Replacing it is the fix.
         let record = (try? await publicDB.record(for: id))
@@ -422,7 +422,7 @@ final class SyncEngine {
     // MARK: - Push (CKQuerySubscription → APNs)
 
     /// One subscription per identity: fire when a Message names me a recipient.
-    /// The alert is static — content is ciphertext; there is nothing to preview.
+    /// The alert is static, content is ciphertext; there is nothing to preview.
     func ensureMessageSubscription(for myHash: String) async {
         // v2 = badge + content-available + title. Bumped because an existing
         // subscription is never reconfigured in place; the version forces a
@@ -442,7 +442,7 @@ final class SyncEngine {
         info.shouldBadge = true                     // app-icon badge: "something's waiting"
         // Also wake the app in the background to pre-fetch, so the message is
         // decrypted and waiting the instant they open it. Requires the
-        // "remote-notification" background mode (UIBackgroundModes) — without
+        // "remote-notification" background mode (UIBackgroundModes), without
         // that capability the alert still fires; only the silent wake no-ops.
         info.shouldSendContentAvailable = true
         subscription.notificationInfo = info
@@ -476,14 +476,14 @@ final class SyncEngine {
     // MARK: - Media (encrypted blobs as CKAssets)
 
     /// Store an already-encrypted media blob. The content key never comes
-    /// near this function — it travels inside the E2EE message payload.
+    /// near this function, it travels inside the E2EE message payload.
     func saveMediaAsset(_ encrypted: Data) async throws -> String {
         let name = "media.\(UUID().uuidString)"
         try await saveMediaAsset(encrypted, name: name)
         return name
     }
 
-    /// Caller-supplied record name — lets the offline outbox reserve the name
+    /// Caller-supplied record name, lets the offline outbox reserve the name
     /// up front and retry the exact same record later.
     func saveMediaAsset(_ encrypted: Data, name: String) async throws {
         let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(name)
@@ -517,7 +517,7 @@ final class SyncEngine {
     // MARK: - Custody receipts (CustodyReceipt.swift)
 
     /// Deliver the receiver's copy. Reuses the GroupInvite record type and its
-    /// already-queryable `recipient` field — **no schema change** — exactly as
+    /// already-queryable `recipient` field, **no schema change**, exactly as
     /// ForgeHandshake does. Both fields are ciphertext: the public database is
     /// world-readable, and a receipt can name an expensive object and carry a
     /// photo key, so nothing here may be published in the clear.
@@ -556,7 +556,7 @@ final class SyncEngine {
     }
 
     /// Publish the reciprocal half of a forge ceremony (ForgeHandshake.swift).
-    /// Reuses the GroupInvite record type deliberately — **no schema change**,
+    /// Reuses the GroupInvite record type deliberately, **no schema change**,
     /// and its `recipient` field is already queryable, which is what lets the
     /// other person find this without knowing our hash in advance. They
     /// genuinely don't know it: their phone took no part in the ceremony.
@@ -603,7 +603,7 @@ final class SyncEngine {
         guard let ck = error as? CKError else { return error.localizedDescription }
         switch ck.code {
         case .notAuthenticated: return "Sign in to iCloud in Settings to go online."
-        case .networkUnavailable, .networkFailure: return "No connection — will retry."
+        case .networkUnavailable, .networkFailure: return "No connection, will retry."
         case .quotaExceeded: return "iCloud storage is full."
         default: return "iCloud error \(ck.code.rawValue): \(ck.localizedDescription)"
         }

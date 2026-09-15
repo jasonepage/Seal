@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Onboarding registration (UI.md §3.1): tier choice, then the first tap —
+/// Onboarding registration (UI.md §3.1): tier choice, then the first tap, 
 /// the brand moment. Brass appears only at trust moments.
 struct RegistrationView: View {
     @Bindable var ceremony: CeremonyManager
@@ -121,7 +121,7 @@ struct RegistrationView: View {
         case .idle: "Sealed envelopes for the people you leave behind."
         case .searching: "Hold your key flat against the top of your phone…"
         case .reading: "Reading your key…"
-        case .endorsing: "One more tap — vouching for this phone…"
+        case .endorsing: "One more tap, vouching for this phone…"
         case .sealed: "Sealed. Welcome, \(displayName)."
         case .failed: "Sealed envelopes for the people you leave behind."
         }
@@ -130,7 +130,7 @@ struct RegistrationView: View {
     private func start(_ tier: IdentityTier) async {
         let name = displayName.trimmingCharacters(in: .whitespaces)
         // Reviewer/demo access (FR-22): the access code as the name drops into a
-        // fully-local demo account — no key or Face ID. Only this exact code
+        // fully-local demo account, no key or Face ID. Only this exact code
         // triggers it; everyone else registers normally.
         if name.caseInsensitiveCompare(DemoFixtures.accessCode) == .orderedSame {
             ceremony.activateDemo()

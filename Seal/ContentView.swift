@@ -35,7 +35,7 @@ struct ContentView: View {
                         }
                     }
                     // After a backup-key recovery (FR-3): say plainly that the
-                    // main key is gone and what to do about it. Shown once —
+                    // main key is gone and what to do about it. Shown once, 
                     // the keys panel keeps a standing notice, so this doesn't
                     // need to nag, only to land.
                     .fullScreenCover(isPresented: $showRecoveryNotice) {
@@ -59,12 +59,12 @@ struct ContentView: View {
             // second flag: a fresh registration has none, a sign-in carries
             // whatever the directory published. So registering prompts,
             // signing in on a phone whose identity still has no backup key
-            // prompts (it should — nothing has changed about the risk), and
+            // prompts (it should, nothing has changed about the risk), and
             // signing in on an identity that already has one stays quiet.
             let hasBackup = !(identity.rootIdentity?.backupCredentials ?? []).isEmpty
             let recovered = new.map { RecoveryNotice.needsAcknowledgement(ownerHash: $0) } ?? false
             // A phone that just came back from the dead has a more urgent
-            // truth to tell than "add a backup key" — and telling it to add
+            // truth to tell than "add a backup key", and telling it to add
             // one would be advice it cannot take, since that needs the root
             // key it no longer has.
             if new != nil, ceremony?.phase == .sealed, !DemoFixtures.isActive, recovered {
@@ -84,7 +84,7 @@ struct ContentView: View {
         }
     }
 
-    /// Stores are namespaced per identity — a new identity sees no data
+    /// Stores are namespaced per identity, a new identity sees no data
     /// from previous ones.
     private func setupEngines() {
         if ceremony == nil { ceremony = CeremonyManager(identity: identity) }
@@ -125,7 +125,7 @@ struct ContentView: View {
         identity.signOut()
     }
 
-    /// Delete identity: wipe local data AND this device's keys — nothing of
+    /// Delete identity: wipe local data AND this device's keys, nothing of
     /// this identity remains on the phone. The directory tombstone (write-once
     /// marker + tier flip) is written by ProfileView.deleteIdentity BEFORE this
     /// local wipe runs, so sign-in is refused and no device can republish it.

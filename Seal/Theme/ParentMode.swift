@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Text size — a per-DEVICE presentation flag (docs/COLDSTART.md).
+/// Text size, a per-DEVICE presentation flag (docs/COLDSTART.md).
 ///
 /// WHAT THIS USED TO BE. It was "Parent Mode", then "Simplified mode": a
 /// second shell for a phone an adult child had set up and handed to a parent.
@@ -16,7 +16,7 @@ import SwiftUI
 /// change, never a migration and never anything a peer can observe.
 ///
 /// Stored per identity in the keychain exactly like the Face ID lock
-/// (`seal.parentmode.<hash>`, presence = on — see AppLock.swift), so it is
+/// (`seal.parentmode.<hash>`, presence = on, see AppLock.swift), so it is
 /// wiped by sign-out and by delete along with every other local flag: a new
 /// identity on this phone starts normal.
 ///

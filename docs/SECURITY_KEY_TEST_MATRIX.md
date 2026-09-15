@@ -15,21 +15,21 @@ On device, open **Console.app** on the Mac (with the iPhone attached), select th
 phone, and filter on `subsystem:io.github.jasonepage.Seal category:webauthn`.
 In Xcode, the same lines print to the console while running.
 
-No secrets are logged — only algorithm IDs, curve, flag names, and byte lengths.
+No secrets are logged, only algorithm IDs, curve, flag names, and byte lengths.
 
 ### What the lines mean
 
 - `register: fmt=… ES256(P-256) P-256 flags=AT|UP|UV credIdLen=… xLen=32 yLen=32`
-  — a registration parsed. Watch for:
+  a registration parsed. Watch for:
   - `alg(...)` other than `ES256(P-256)` → key ignored the ES256 pin (will now
     fail loud with "unsupportedAlgorithm" instead of a generic error).
   - `xLen`/`yLen` not 32 → the key emits non-standard coordinate padding. This
-    is now auto-normalized, so it should still succeed — note it anyway.
+    is now auto-normalized, so it should still succeed, note it anyway.
   - `flags` missing `UV` on a PIN'd key → the key did not user-verify.
-- `verify: OK (flags=…)` — an assertion verified against the directory key.
-- `verify: signature did not parse as DER ECDSA (...)` — the key returned a
+- `verify: OK (flags=…)`, an assertion verified against the directory key.
+- `verify: signature did not parse as DER ECDSA (...)`, the key returned a
   signature shape CryptoKit can't read. Record sigLen.
-- `verify: signature parsed but did NOT match ...` — signature is well-formed but
+- `verify: signature parsed but did NOT match ...`, signature is well-formed but
   doesn't match the published public key (key/identity mismatch, or the wrong
   credential answered).
 
@@ -69,10 +69,10 @@ Result = ✅ works / ⚠️ works sometimes / ❌ fails. For ❌ and ⚠️, cop
   the PIN path in a broken state. FIXED by `userVerificationPreference =
   .preferred` (CeremonyManager, all 4 security-key requests) so iOS and the key
   agree. If a PIN'd key STILL fails over NFC after this, suspect transport
-  flakiness (multi-round-trip clientPIN over NFC) — retest over USB-C to isolate.
+  flakiness (multi-round-trip clientPIN over NFC), retest over USB-C to isolate.
 
 ## After the pass
 
 You'll have a table that says, per model, exactly which stage breaks and which log
-line fired. That collapses "buggy everywhere" into a short list of named issues —
+line fired. That collapses "buggy everywhere" into a short list of named issues, 
 bring it back and we fix them one at a time.

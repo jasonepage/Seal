@@ -4,12 +4,12 @@ import Foundation
 ///
 /// A recovered phone is in a genuinely reduced state, and the reduction is
 /// invisible: the identity is back, the friends are back, everything looks
-/// normal — but the root credential is gone, so this phone can neither add
+/// normal, but the root credential is gone, so this phone can neither add
 /// another backup key nor revoke the one it used (both ceremonies need a root
 /// tap, and the root is what was lost). The identity is frozen at one
 /// credential, and ONE more loss takes it for good.
 ///
-/// v1 does not fix that with crypto — a backup key gaining root authority is
+/// v1 does not fix that with crypto, a backup key gaining root authority is
 /// exactly the takeover the asymmetry exists to prevent, and a quorum design
 /// is a v2 problem. What v1 owes the person instead is the truth, said loudly
 /// enough that the frozen state is a BRIDGE rather than a destination: start a
@@ -27,7 +27,7 @@ enum RecoveryNotice {
     private static func seenKey(_ hash: String) -> String { "seal.recovered.seen.\(hash)" }
 
     /// Record that THIS sign-in used a backup credential. Called only after a
-    /// sign-in has fully succeeded — a resolution that later fails
+    /// sign-in has fully succeeded, a resolution that later fails
     /// verification, or a ceremony the user cancels mid-way, must not leave a
     /// phone claiming a recovery that never happened.
     static func record(ownerHash: String) {

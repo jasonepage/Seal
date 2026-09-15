@@ -7,7 +7,7 @@ import SwiftUI
 import UserNotifications
 
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
-    /// Posted whenever a push arrives — HomeView listens and refreshes chats.
+    /// Posted whenever a push arrives, HomeView listens and refreshes chats.
     static let messageArrived = Notification.Name("seal.messageArrived")
 
     func application(_ application: UIApplication,
@@ -24,7 +24,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 
     /// Foreground pushes: refresh the open chat live AND surface a banner, so
     /// activity in OTHER chats is noticeable while the app is open (the single
-    /// most-requested gap — previously all foreground banners were suppressed).
+    /// most-requested gap, previously all foreground banners were suppressed).
     /// TODO: suppress the banner when the user is actively viewing that chat
     /// (needs the group id in the push payload via desiredKeys).
     func userNotificationCenter(_ center: UNUserNotificationCenter,
@@ -33,7 +33,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         return [.banner, .sound, .list]
     }
 
-    // APNs registration diagnostics — surfaced for triaging "push didn't work"
+    // APNs registration diagnostics, surfaced for triaging "push didn't work"
     // (HANDOFF). A failure here means CloudKit can't deliver via APNs at all.
     func application(_ application: UIApplication,
                      didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {

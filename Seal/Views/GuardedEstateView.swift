@@ -24,7 +24,7 @@ struct GuardedEstateView: View {
     @State private var showObjectSheet = false
     @State private var claimReason = ""
     @State private var objectionNote = ""
-    @State private var opened: [EstateEngine.OpenedEnvelope]?
+    @State private var reveal: RevealPayload?
     @State private var showCapsule = false
 
     private var snapshot: ReleaseSnapshot? { estateEngine.guardedSnapshots[guarded.estateID] }
@@ -69,9 +69,9 @@ struct GuardedEstateView: View {
         .sheet(isPresented: $showCapsule) {
             CapsuleExportSheet(estateID: guarded.estateID, estateEngine: estateEngine, onClose: { showCapsule = false })
         }
-        .sheet(item: Binding(get: { opened.map { RevealPayload(envelopes: $0) } }, set: { if $0 == nil { opened = nil } })) { payload in
+        .sheet(item: $reveal) { payload in
             RevealView(envelopes: payload.envelopes, estateID: guarded.estateID, ownerName: live.ownerName,
-                       estateEngine: estateEngine, appLock: appLock, onClose: { opened = nil })
+                       estateEngine: estateEngine, appLock: appLock, onClose: { reveal = nil })
         }
         .alert("Seal", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
             Button("OK", role: .cancel) {}
@@ -225,7 +225,7 @@ struct GuardedEstateView: View {
                     Task {
                         await run {
                             guard await AppLock.confirmSeal(ownerHash: myRoot.credentialIDHash) else { return }
-                            opened = try await estateEngine.openEnvelopes(estateID: guarded.estateID)
+                            reveal = RevealPayload(envelopes: try await estateEngine.openEnvelopes(estateID: guarded.estateID))
                         }
                     }
                 } label: {

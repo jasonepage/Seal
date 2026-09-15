@@ -1,265 +1,186 @@
-# Software Design Specification — Seal
+# Software Design Specification: Seal, sealed envelopes
 
-**Version:** 0.1 · **Date:** 2026-06-11 · **Companion doc:** [SRS.md](SRS.md)
+**Version:** 1.0 · **Date:** 2026-09-15 · **Companions:** [SRS.md](SRS.md) · [PRODUCT.md](PRODUCT.md) · [RELEASE.md](RELEASE.md) · [CAPSULE.md](CAPSULE.md) · [RECORD.md](RECORD.md)
 
-## 1. Architecture Overview
+The messenger-era specification (v0.1, 2026-06-11) is in `git log`; its
+identity, ceremony and backup credential sections still describe the code
+and are carried forward below.
 
-CloudKit-first, serverless. The only non-Apple infrastructure is a static domain serving the WebAuthn AASA file.
+## 1. Architecture
 
-```
-┌─────────────── iPhone ───────────────┐
-│ SwiftUI App                          │
-│ ├─ ChatUI / CameraUI                 │
-│ ├─ IdentityManager  ──── NFC/USB-C ──┼──► FIDO2 Hardware Key
-│ ├─ CeremonyManager  (WebAuthn via    │     (root identity, signs only)
-│ │   ASAuthorizationServices)         │
-│ ├─ CryptoEngine ──► Secure Enclave   │
-│ │   (device keys, group sender keys) │
-│ └─ SyncEngine ──► CloudKit           │
-└──────────────────┬───────────────────┘
-                   │ ciphertext + signed records only
-        ┌──────────▼──────────┐      ┌────────────────────┐
-        │ CloudKit            │      │ Static host        │
-        │ public DB: identity │      │ sealmessenger.com/.well- │
-        │ directory           │      │ known/apple-app-   │
-        │ shared zones: groups│      │ site-association   │
-        │ APNs: push          │      │ (RP ID only)       │
-        └─────────────────────┘      └────────────────────┘
-```
-
-**Trust model in one sentence:** a hardware key's FIDO2 credential is a user's root public key; it endorses Secure Enclave device keys; device keys sign everything else (messages, invites, membership changes); every client verifies the full chain and trusts nothing the server says.
-
-## 2. Key Hierarchy & Cryptography
+CloudKit-first, serverless. The only non-Apple infrastructure is a static
+domain serving the WebAuthn app site association file.
 
 ```
-Root identity (FR-21 tiers)
-├─ Verified: FIDO2 hardware key (P-256, signs only)
-└─ Passkey:  platform passkey (Face ID, same WebAuthn path)
-   └─ endorses → Device signing key (Secure Enclave P-256, non-exportable)
-        ├─ signs → messages, profile, membership log, KEM keys
-        └─ certifies → Device KEM bundle (X25519 + ML-KEM-768, software)
-             └─ unwraps → Group sender keys (per-member symmetric ratchets)
-                  └─ derives → per-message AES-256-GCM keys
+┌──────────────── iPhone (owner, custodian, recipient: same app) ───────────────┐
+│ SwiftUI                                                                        │
+│ ├─ EstateHomeView / EnvelopeEditor / Policy / Person / GuardedEstate / Reveal  │
+│ ├─ IdentityManager  ── NFC/USB-C ──► FIDO2 key or passkey (root, signs only)   │
+│ ├─ CeremonyManager  (WebAuthn via ASAuthorizationServices, + release tap)      │
+│ ├─ EstateEngine ──► EstateKeys (Shamir, hybrid wraps), EstateLog, ReleaseFeed, │
+│ │                   ReleaseMachine (pure), Clock (injected)                    │
+│ ├─ TimestampService (RFC 3161, digest only leaves the phone)                   │
+│ └─ SyncEngine + EstateDirectory ──► CloudKit public DB                         │
+└──────────────────────────────┬─────────────────────────────────────────────────┘
+                               │ ciphertext, signed events, public keys only
+              ┌────────────────▼────────────────┐   ┌───────────────────────────┐
+              │ CloudKit public DB              │   │ sealmessenger.com         │
+              │ Identity, EstateEvent,          │   │ /.well-known/apple-app-   │
+              │ MediaAsset (blobs), GroupInvite │   │ site-association (RP only)│
+              └─────────────────────────────────┘   └───────────────────────────┘
+              Transport. NOT the archive of record: that is the capsule on disk.
 ```
 
-- **Root identity:** the WebAuthn credential ID + public key created at registration (FR-1/FR-21). Assertions over app-generated challenges prove key presence. Verified and Passkey tiers differ only in authenticator; all downstream crypto is identical.
-- **Device endorsement:** registration produces a root-key assertion whose `clientDataHash` commits to the new device's signing public key — a verifiable "this root vouches for this device" certificate. Same mechanism for friend ceremonies (challenge commits to a friendship statement).
-- **Hybrid post-quantum wrapping:** the Secure Enclave only does P-256, so each device also carries a software **KEM bundle** — X25519 **and** ML-KEM-768 (CryptoKit), combined HPKE-style: both shared secrets feed one HKDF, so an attacker must break both classical ECDH and the lattice KEM ("harvest-now-decrypt-later" resistance). The bundle's public keys are signed by the SE device key, so its authenticity is still enclave-rooted even though the KEM private keys live in the keychain (`.afterFirstUnlockThisDeviceOnly`, non-synchronized).
-- **Group messaging — MLS-informed sender keys:** each member maintains a per-group symmetric **sender chain**; per-message keys are ratcheted forward (`chainKey ← HKDF(chainKey)`) and deleted after use, giving per-message forward secrecy. Chains are distributed wrapped to every member device via the hybrid KEM. Membership changes advance the **epoch**: removal forces fresh chains wrapped only to remaining devices (post-compromise secrecy at epoch granularity). This is deliberately sender-keys-with-epochs rather than full RFC 9420 MLS — same security goals at 64-member scale, a fraction of the implementation surface, with a documented upgrade path to MLS if groups grow.
-- **Transcript integrity:** every message signature covers `(groupID, epoch, sender chain index, prev-message hash)`, making per-sender transcripts tamper-evident and reorder-evident — the server (or a member) can't silently drop or reorder a sender's messages.
-- **Key transparency, peer-to-peer:** clients gossip the head hash of each friend's `Identity` record (endorsements + revocations form an append-only hash chain). If Apple ever served two friends different versions of your identity, their clients detect the fork on next contact. No transparency log server needed.
-- **Deniability note:** messages are device-signed, so transcripts are cryptographically attributable — the *opposite* of Signal's deniability. This is a deliberate product choice (hardware-rooted accountability); documented so it's never an accident.
-- **1:1 chats** are 2-member groups — one code path.
-- **Why not encrypt with the hardware key:** FIDO2/CTAP2 exposes sign-only operations (C1). Some keys offer PIV/OpenPGP applets but iOS lacks practical CCID access over NFC; out of scope.
+**Trust model in one sentence:** a hardware key's FIDO2 credential is a
+person's root; it endorses Secure Enclave device keys; device keys sign every
+event; the root key of anyone you rely on is pinned at the ceremony where they
+proved it; every client verifies the full chain and trusts nothing the server
+says.
 
-## 3. Module Design
+## 2. Key hierarchy
 
-| Module | Responsibility | Key APIs |
-|---|---|---|
-| `IdentityManager` | Root identity, device keys, endorsement chain storage/verification | `ASAuthorizationSecurityKeyPublicKeyCredentialProvider`, `SecKeyCreateRandomKey` (Secure Enclave) |
-| `CeremonyManager` | UX + protocol for registration, friend, and device ceremonies | `ASAuthorizationController`, NFC coaching UI |
-| `CryptoEngine` | Sender keys, ratchets, wrap/unwrap, sign/verify | CryptoKit (`AES.GCM`, `HKDF`, `P256`) |
-| `SyncEngine` | CloudKit zones, CKShare lifecycle, subscriptions, conflict handling, outbox queue | `CKSyncEngine` |
-| `VerificationGate` | Validates every inbound record's signature chain before it reaches the model layer | — |
-| `ChatStore` | Local persistence (encrypted SQLite/SwiftData), message TTL enforcement | — |
-| `ChatUI` | SwiftUI: camera-forward capture, chat list, group screens, ceremony flows (see [UI.md](UI.md)) | — |
-| `DemoFixtures` | FR-22/23: seeded demo identity, synthetic friends/groups, demo watermark; compiled in but inert without the flagged review account | — |
+```
+Root identity (FIDO2 key or passkey, P-256, signs only, PINNED after ceremony)
+└─ endorses → Device signing key (Secure Enclave P-256)           seal.endorse.v3
+     ├─ signs → every EstateEvent, custody receipts
+     └─ certifies → Device KEM bundle: X25519 + ML-KEM-768 (KEMBundle)
+          └─ unwraps → what is wrapped to this device (HybridWrap):
 
-## 4. CloudKit Data Model
+Envelope Content Key   random 256 bit, AES-256-GCM, one per envelope
+    listed in
+Key Table              one per RECIPIENT, under a random Key Table Key
+    Key Table Key reachable two ways
+    ├─ wrapped to the OWNER's devices
+    └─ AES-GCM under the Estate Key, THEN wrapped to the RECIPIENT's devices
+Estate Key             one per owner per epoch
+    reachable two ways
+    ├─ wrapped to the OWNER's devices
+    └─ Shamir over GF(256), threshold M of N, each share wrapped to one
+       custodian's devices; SHA-256 commitments in the signed record
+```
 
-**Public DB** (discoverability, all records signed):
-- `Identity` — rootPublicKey (record name = key hash), displayName, avatar, deviceEndorsements[], backupEndorsements[] (§11), revocations[]
+- **Hybrid wrap** (`Crypto/KEMBundle.swift`): X25519 ephemeral agreement and
+  ML-KEM-768 encapsulation feed one HKDF-SHA256 with every public value in
+  the salt; AES-256-GCM with a domain separated AAD naming estate, epoch and
+  purpose. A device that predates the lattice key gets the classical suite
+  and the envelope says which. This replaces the never-true claim in the old
+  docs that `HybridKEM` was hybrid; the legacy X25519 path survives for
+  custody receipts and reads either bundle form.
+- **Shamir** (`Crypto/Shamir.swift`): the AES field, index ‖ bytes shares,
+  Lagrange at zero, vectors from an independent Python implementation. Bad
+  shares are caught by commitment and attributed to a custodian before any
+  combine.
+- **Recipient isolation**: a key table names its recipient nowhere and is
+  found by trial decryption. The claimant's Estate Key opens the inner layer
+  of every table and the outer layer of none. What leaks: recipient count,
+  blob count and sizes, and that a hash has some part in an estate.
+- **Rotation**: new epoch when custodians or threshold change. New Estate
+  Key, shares, owner wraps and per table inner ciphertexts. Blobs untouched.
+- **The Estate Key is published in the clear at release**, because on its own
+  it opens nothing. This is what lets recipients open their own tables
+  without the claimant ever learning who they are.
 
-**Private DB, custom zone per group, shared via `CKShare`:**
-- `Group` — groupID, name, signed `MembershipLog` (append-only: add/remove/role records, each signed by actor)
-- `KeyEnvelope` — senderKey wrapped to (memberDevice), epoch number
-- `Message` — ciphertext, senderDeviceKeyRef, signature, epoch, ttl, replyRef
-- `MediaAsset` — CKAsset (encrypted blob), contentKey wrapped in parent message
+## 3. Modules
 
-Group transport = CloudKit **shared zones**: creator owns the zone, members accept a `CKShare`. Membership in the share is *transport-level only*; cryptographic membership is the signed `MembershipLog` + key epochs — a zone participant without valid keys reads nothing.
-
-## 5. Core Flows
-
-**Registration (U1):** create FIDO2 credential (tap key) → generate SE device key → second tap signs endorsement → write `Identity` to public DB → prompt backup key (FR-3).
-
-**Friend ceremony (U2, both in person):**
-1. A's phone generates challenge `c_A` committing to `(A.root, B.claimed_root, timestamp)`.
-2. B taps **B's key** on A's phone → assertion proves B controls B.root. A stores signed friendship attestation.
-3. Roles swap on B's phone (B can scan a QR from A's screen to prefill A's identity, then A taps A's key).
-4. Both write mutual `Friendship` attestations; clients verify both directions before allowing invites.
-
-**Group invite (U3):** admin signs `add(member)` into MembershipLog → CKShare invitation via CloudKit sharing → invitee accepts + verifies log → each member wraps current sender key to the new member's devices (new epoch optional; required only on removal).
-
-**Message send:** ratchet chain key → AES-GCM encrypt → sign with device key → `CKSyncEngine` outbox → push fan-out via CKSubscription. Receive: verify signature chain (`VerificationGate`) → decrypt → store → schedule TTL deletion if ephemeral.
-
-**Member removal (FR-13):** admin signs `remove` → all remaining members generate fresh sender keys (new epoch) wrapped only to remaining devices → removed member's share participation revoked (transport) — but security never depends on the transport revocation.
-
-**New device (U4):** new device generates SE key → displays QR → hardware key tap on new device signs endorsement → existing device co-signs → endorsement appended to `Identity` → friends' clients accept it on next verify; group members re-wrap sender keys to the new device.
-
-**Revocation (FR-19/U5):** signed revocation record in `Identity`; clients treat revoked device keys as invalid from the revocation's signed timestamp; groups rotate epochs.
-
-## 6. WebAuthn / RP Notes
-- RP ID requires a domain (e.g., `sealmessenger.com`) serving `/.well-known/apple-app-site-association` with a `webcredentials` entry — static file, zero backend logic (C2).
-- Challenges are generated and verified **on-device by peers** (no server ceremony). This is non-standard WebAuthn but sound: the verifier is whoever needs the proof (the friend's phone), and challenges are fresh + context-bound to prevent replay.
-- Attestation: request `direct` attestation at registration if you later want to enforce genuine-key policies; don't enforce in v1.
-
-## 7. Threat Model (abridged)
-| Threat | Defense |
+| Module | Responsibility |
 |---|---|
-| Server (Apple) reads messages | E2EE; CloudKit holds ciphertext only |
-| Server forges membership/identity | All records signed; clients verify chains; server is untrusted for integrity |
-| Stolen phone (unlocked) | SE keys gated by `biometryCurrentSet` access control; hardware key absent → no new endorsements |
-| Stolen hardware key | Key alone can't read messages (no SE device key). **A backup key does NOT evict a thief** — revocation authority stays with the root credential (§11), so a stolen *root* means: delete the identity and start fresh. A stolen *backup* is revoked by the root. |
-| Replay of ceremony assertions | Fresh challenges bound to identities + timestamps |
-| Removed member reads on | Epoch rotation on removal |
-| Metadata exposure | Accepted residual risk: Apple sees who talks to whom and when. Document honestly (NFR-3). |
-| One key minting many identities | `excludedCredentials` at registration: every directory credential ID is passed, and an authenticator that already holds a Seal credential refuses to create another (works even for non-discoverable credentials — keys recognize their own credential IDs). **Deterrence, not an invariant**: a FIDO2 factory reset (which destroys the old identity's credential) or a modified client evades it, and the list must enumerate the whole directory (scale ceiling ~1k identities; requires `recordName QUERYABLE` index on Identity). True Sybil resistance is the in-person edge requirement — n accounts without forged friendships have no reach. Do not re-litigate: per-unit key attestation is impossible by FIDO2 design (batch certs, deliberate unlinkability). |
+| `Identity/IdentityManager` | Root identity, Secure Enclave device key, X25519 and ML-KEM-768 keys, endorsement verification (v3 framed, v2 canonical only), root-signed revocation |
+| `Identity/KeyPinStore` | Root key pinning: pinned at proof, enforced on every directory fetch, dropped only on removing a person |
+| `Identity/BackupCredential`, `Ceremony/BackupKeyCeremony` | FR-3 backup credentials, unchanged |
+| `Ceremony/CeremonyManager` | Registration, sign-in, the in-person ceremony, custody receipts, the release tap |
+| `Crypto/Shamir`, `Crypto/KEMBundle`, `Crypto/HybridKEM` | The primitives above |
+| `Estate/EstateModels` | Estate, Envelope, Custodian, Recipient, ReleasePolicy, EstateStore |
+| `Estate/EstateKeys` | The hierarchy: epochs, tables, content |
+| `Estate/EstateLog` | Signed, hash linked events; bodies; verifier; local store |
+| `Estate/ReleaseMachine`, `Estate/ReleaseFeed` | Pure state machine and events-to-snapshot |
+| `Estate/EstateEngine` | Every side effect: keychain, CloudKit, timestamps, ceremony |
+| `Estate/Capsule` | The export |
+| `Record/RecordEvent`, `Record/TimestampService` | The record projection and RFC 3161 |
+| `Sync/SyncEngine`, `Sync/EstateDirectory`, `Sync/BackupDirectory` | CloudKit |
+| `Time/Clock` | `Clock`, `SystemClock`, `SimulatedClock`, `Clocks.current` |
+| `SelfTest/*` | The in-target test suites (no test target exists) |
 
-## 8. Migration Path (if CloudKit outgrown)
-Add a thin Vapor/Cloudflare-Workers backend for: standard WebAuthn ceremonies, an identity directory not tied to iCloud, and Android/web clients. The signature-chain design is transport-agnostic — records move to any store without redesigning trust.
+## 4. CloudKit data model
 
-## 9. Tech Stack Summary
-SwiftUI + iOS 17, AuthenticationServices (FIDO2), CryptoKit + Secure Enclave, CKSyncEngine (CloudKit), SwiftData (encrypted local store), static AASA hosting. Zero recurring server cost.
+Public database, all world readable, all signed or encrypted:
 
-## 10. Founder Perks (PerkGrant / PerkClaim)
+- `Identity` (unchanged): `publicKey`, `tier`, `displayName`, `credentialID`,
+  `deviceEndorsements` (Bytes, `[DeviceEndorsement]`), `backupEndorsements`,
+  `revocations`.
+- `EstateEvent` **(new)**: name `eev.<estateID>.<eventID>`; `estate` (String,
+  **queryable**), `kind`, `actor`, `payload` (Bytes, the signed event JSON).
+  Immutable except that `timestampToken` is added later.
+- `MediaAsset` (reused): every encrypted blob, as a `CKAsset`. Names
+  `est.<estateID>.epoch.<n>`, `est.<estateID>.table.<tableID>`,
+  `est.<estateID>.blob.<blobID>`.
+- `GroupInvite` (reused): `estinv.<hash>.<estateID>`, `recipient` queryable,
+  `payload` an encrypted `EstateInvite`.
 
-Growth seeding: blank NFC keys ("forge packs") gifted to campus ambassadors and meetup hosts, with perks attached via **claim codes printed in the box** — never pre-registered keys, because custody of a key that minted an identity breaks the trust model (§7). The code is a bearer secret; the key in the box is factory-blank.
+One subscription per estate on `EstateEvent` (content available, static
+alert), plus the existing invite subscription. See
+[CLOUDKIT_DEPLOY.md](CLOUDKIT_DEPLOY.md) for the schema deploy.
 
-**Records (public DB, deterministic names, no queries):**
-- `PerkGrant` at `perk.<SHA256(code)>` — field `grant`: founder-key-signed JSON `{kind, number?, codeHashHex, issuedAtUnix, signature}`. Minted offline by `tools/mint_perks.py`; signed message is `seal.perk.grant.v1|<kind>|<number or '-'>|<codeHashHex>|<issuedAtUnix>` (byte-identical in Python minter and Swift verifier). The signature commits to the code hash, so a grant can't be served under a different code's record name.
-- `PerkClaim` at `pclaim.<SHA256(code)>` — field `claim`: device-key-signed JSON binding the perk to a root identity (`seal.perk.claim.v1|<codeHashHex>|<rootID>|<devicePubHex>|<claimedAtUnix>`). Created by the claimant.
+## 5. Core flows
 
-**Verification (client-side, always):** the founder public key is compiled into the app (`PerkAuthority.founderPublicKeyHex`; empty = fail closed). Before any perk renders: founder signature on the grant → edition rules (founder number hard-capped to 1–100 in the client, making "100 founders" a cryptographic promise; campus-founder is unnumbered) → claim/grant code-hash match → claim signature chains to an endorsed, unrevoked device of the claimed root. Friends' clients verify the attestation published in the claimant's `Identity.perks` field; verified results are cached with the friend (FriendStore).
+**Seal (owner).** Validate the rule → look up own devices, custodians and
+recipients through pinned fetches → new epoch if needed (Estate Key, shares,
+owner wraps, `epochPublished` with commitments and each custodian's root key)
+→ encrypt and upload every unsealed envelope's payload and media → build,
+encrypt and upload one key table per recipient → `vaultUpdated` → encrypted
+invites → subscription → heartbeat. Idempotent; the estate records progress.
 
-**One-time use, honestly:** there is no server to enforce uniqueness. We use CloudKit record **creation** atomicity: the first client to create `pclaim.<hash>` wins; the second gets `serverRecordChanged` and a clean "already claimed" error (re-redeeming your own code is idempotent). Creator-only write means nobody can stomp an existing claim even after the code hash becomes public via the claimant's Identity record. Residual risks, accepted and documented: (a) two simultaneous redeemers of the same code race — the loser finds out at redemption time, never silently; (b) Apple could *hide* a claim record (denial of badge display), but cannot *forge* one — forging requires the founder key plus an endorsed device key of the claimed identity; (c) a code is a bearer secret — whoever reads the box insert first wins, same as any gift card.
+**Heartbeat (owner).** On every launch and foreground: refresh, post
+`cancellation` if a claim is live, post `heartbeat`, stamp both.
 
-**Founder is an edition, not a tier:** ring color stays tier-determined (brass = Verified, silver = passkey) everywhere; the perk renders as a brass text line ("Founder № 7", "Campus founder") in the verification drawer, profile, and forge log — brass because a verified founder signature is a trust artifact.
+**Refresh (custodian, recipient).** Invites → for each estate: fetch events →
+admit the owner's events via the pinned owner key → take the newest epoch
+statement, pin fellow custodians from it → admit custodian events → merge →
+snapshot → state → subscription → post `silenceObserved` if overdue and none
+in 24 hours.
 
-## 11. Backup Credentials (FR-3) — `seal.backup.v1`
+**Claim, object, tap, release, open.** [RELEASE.md](RELEASE.md) sections 3
+and 6; `EstateEngine` methods of the same names.
 
-Losing the only registered credential loses the identity forever. A **backup
-credential** is a second WebAuthn credential (hardware key, or a passkey on a
-helper's phone) that the root identity has endorsed, so a family survives a
-lost key.
+## 6. WebAuthn
 
-**The statement.** A root-key assertion whose challenge is
+RP ID `sealmessenger.com`. Challenges are generated and verified on device by
+whoever needs the proof. `WebAuthnAssertion.verify` enforces the RP hash, user
+presence and `clientData.type == webauthn.get`; user verification is
+optional per call. All four security key requests use `.preferred` UV.
 
-```
-SHA256("seal.backup.v1" ‖ credentialID ‖ publicKey)
-```
+## 7. Threat model
 
-Both halves are committed. Committing to the ID alone would let a tampered
-directory keep the ID and swap the key — total takeover; committing to the key
-alone would let it re-point the ID. Same reasoning that made `seal.endorse.v2`
-bind the signing and KEM keys together.
+| Threat | Defence |
+|---|---|
+| Apple or anyone reads an envelope | Content keys inside encrypted tables; tables need recipient's device key plus Estate Key; Estate Key needs owner device or M shares |
+| Directory swaps a friend's, custodian's or claimant's root key | Pinned at proof; enforced on every fetch; fellow custodians pinned from the owner's signed epoch statement |
+| Directory forges or hides events | Every event device signed, device endorsement re-verified; hiding is detectable only through capsules held by several custodians and by timestamp tokens |
+| Directory un-verifies a device | Unsigned `revokedAt` removed; only root-signed revocations count |
+| A signature from another site or a registration replayed | RP hash, UP and type enforced |
+| A re-split endorsement evades revocation | v3 framing; v2 accepted only at canonical lengths |
+| A custodian submits a bad share | Per share commitment in the signed record names them |
+| Custodians collude early | Cannot: shares are useless until the machine reaches claimOpen, and the claimant's phone enforces that; more to the point, M of N colluding custodians is the trust the owner chose. The record shows exactly who tapped when. |
+| Owner declared dead while alive | Silence, warnings on every channel, grace, one-tap cancel without the hardware key, objections |
+| A custodian's phone clock lies | Timestamp tokens on heartbeats, claims, taps, releases; the feed prefers the authority's time |
+| Stolen phone, unlocked | Secrets shown only after Face ID; SE keys device bound; a stolen owner phone can heartbeat (a thief keeping you "alive" is a known limit) |
+| Harvest now, decrypt later | ML-KEM-768 in every estate wrap |
+| The company disappears | The capsule and `tools/verify_capsule.py` |
 
-**The statement is two-sided.** The root's endorsement alone is a one-sided
-claim, and a credential ID and public key are both PUBLIC once published — so
-any identity could list somebody else's backup credential in its own record,
-signed by its own root, and it would verify. The backup credential therefore
-also signs its own acceptance:
+Accepted and documented: metadata (who has a part in whose estate, counts and
+sizes), one key one identity being deterrence only, and everything in
+PRODUCT.md section 8.
 
-```
-SHA256("seal.backup.accept.v1" ‖ rootIDHash ‖ credentialID ‖ publicKey)
-```
+## 8. Backup credentials (FR-3)
 
-verified under the BACKUP's key. It names the root, so it cannot be lifted into
-another identity's record. `BackupCredential.verified` requires BOTH halves;
-either missing or failing drops the entry. This costs a third tap when adding a
-key (new key creates → new key accepts → root endorses), because WebAuthn
-registration attestation is signed by a batch key, or not at all, and is not a
-dependable proof of possession of the credential's own key.
+Unchanged from v0.1 section 11 and still in force: two-sided
+`seal.backup.v1` / `seal.backup.accept.v1` statements, the root-or-backup
+authority set in `verifiedDevices`, asymmetric revocation. A phone recovered
+with a backup key gets fresh KEM keys and therefore needs the owner to seal
+again (owner) or the owner to re-seal for it (custodian or recipient) before
+it can open anything wrapped to the lost phone. The UI says so.
 
-**Sign-in resolution fails closed on a contested credential.** Before FR-3 the
-only tappable credential was a root, whose record name was already occupied by
-its owner (public-DB first-creator-wins). A backup credential's ID becomes
-public on publication and `SHA256(backupCredentialID)` is a record name **nobody
-ever creates** — an attacker can create an Identity record there holding the
-backup's own public key, and a recovering user's tap would verify perfectly
-(it is genuinely their key) while resolving to the attacker's record. Two locks:
-(1) if more than one identity claims the tapped credential, sign-in refuses
-rather than guessing; (2) a record is only accepted as an identity if it carries
-at least one device endorsement signed by the key it publishes — proof the
-builder held that private key, which a squatter cannot fake. The claims list is
-unverified and is a conflict DETECTOR only; authority still comes from
-signatures.
+## 9. Tech stack
 
-**Storage.** A new `backupEndorsements` field (Bytes, JSON `[BackupCredential]`)
-on the existing `Identity` record. **No new record type.** Not folded into
-`deviceEndorsements`: that array is iterated by `HybridKEM.wrapToAll` and by the
-verified-endorsement set, and a credential is not a device with a KEM key —
-every consumer would need a filter, and one missed filter is a send failure or
-a verification hole.
-
-**Authority set.** `IdentityManager.verifiedDevices` verifies a device
-endorsement against the root credential **or any non-revoked backup**, not the
-root alone. This is required, not cosmetic: sign-in endorses the phone it runs
-on, so recovery on a new phone produces a *backup-signed* device endorsement.
-The set travels on `RootIdentity.backupCredentials`, populated (verified and
-revocation-filtered) by `SyncEngine.fetchIdentity`, so every existing consumer
-inherits it without a call-site change.
-
-**Wire compatibility.** A build older than FR-3 verifies against the root only,
-so it will not accept a backup-signed device endorsement — a recovered phone
-can talk to this build and newer, not older. Same class of break as the
-`wrapToAll` envelope change, same answer: the family updates together.
-
-**Revocation is asymmetric, deliberately.** The root revokes a backup with
-`SHA256("seal.backup.revoke.v1" ‖ publicKey)`, appended to the *existing*
-`revocations` list (no new field; the domain string is what distinguishes it
-from a device's `seal.revoke.v1`). **A backup credential revokes nothing.** If a
-backup could revoke the root, a stolen backup would be a full takeover *with
-eviction of the real owner* — strictly worse than the loss FR-3 exists to
-survive. The honest consequence, stated in-app: a main key that was stolen
-rather than lost cannot be evicted; delete the identity and start fresh.
-Symmetric co-root revocation is a v2 problem needing a quorum design.
-
-**Sign-in** accepts any non-revoked credential on the identity. A root
-credential's hash is its record name (direct fetch). A backup's is not — it
-lives inside its owner's record — so `resolveSignInCredential` falls back to the
-directory scan to find the owner, then verifies the tap against the *backup's*
-public key and the backup's endorsement against the root's. Tombstones are
-checked on the identity that would be recovered, so deletion can't be undone
-through a backup key.
-
-**`excludedCredentials` / allow-list.** `fetchAllCredentialIDs` is now a
-projection of `fetchDirectoryCredentials()`, which returns root *and* backup
-credentials, so a key already serving as somebody's backup can't mint a second
-identity, and a non-discoverable backup key is tappable at sign-in. The scan
-carries each record's backup blob and lands on the same ~1k-identity ceiling
-§7 already documents — revisit both together.
-
-**What a backup key cannot do:** recover message history, or move the friend
-list. Per-message keys are ratcheted forward and destroyed after use (§2), and
-the sender chains that would re-derive them were wrapped to KEM keys that died
-with the lost phone. Friendships are the easily-missed half: `FriendStore` is
-keychain-local per identity and nothing republishes it, so a recovered phone
-starts with an empty friend list while peers still hold their side. What is
-restored is the IDENTITY — same root, same seal — so friends can verify it is
-really you when they add you again in person. The UI says exactly that. (If
-friendship mirroring to CloudKit ever lands, FR-5/6, this gets better on its
-own; until then, re-forging is the recovery path for the social graph.)
-
-**A recovered phone is frozen at one credential.** Both backup ceremonies need
-a ROOT tap, so a phone recovered *with* a backup key can neither add another
-backup nor revoke the one it used — the root is the thing that was lost. This
-follows directly from the asymmetry above and is stated in the UI, not left to
-be discovered. Revoking a backup is also retroactive: every device endorsement
-that backup signed stops verifying, so revoking the key a phone was recovered
-with kills that phone. The confirmation dialog says so.
-
-**Residual, accepted:** a backup revoked seconds ago stays trusted in an
-in-memory directory cache until the next fetch — the same window a revoked
-device has today, self-healing through the same `forceRefresh` path. The local
-keychain copy of one's own identity is persisted WITHOUT `backupCredentials`
-precisely so it can never become a never-refiltered authority set.
-
-**Known, NOT introduced by FR-3, and worth fixing separately:** `DeviceEndorsement.revokedAt`
-is an unsigned field that `verifiedDevices` treats as authoritative, so anyone
-able to write a record can un-verify every device on it (DoS, no key needed);
-`seal.endorse.v2` concatenates two variable-length values without length
-framing; `WebAuthnAssertion.verify` checks the ECDSA signature but not the RP ID
-hash, the UP/UV flags, or `clientData.type`; and nothing pins a friend's root
-public key at forge time, so the directory's `publicKey` field is trusted on
-every fetch.
-
+SwiftUI, iOS 26.5, AuthenticationServices, CryptoKit (P-256, X25519,
+ML-KEM-768, AES-GCM, HKDF), CloudKit public database, keychain JSON stores,
+AVFoundation for the voice message. No third party dependencies. No backend.

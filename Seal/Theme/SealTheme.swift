@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// "Vault Warmth" design language (docs/UI.md §1).
-/// Brass is reserved EXCLUSIVELY for trust moments — key taps, verified
+/// Brass is reserved EXCLUSIVELY for trust moments, key taps, verified
 /// badges, endorsements. Never use it for generic accents.
 enum SealTheme {
     static let ink = Color(red: 0.047, green: 0.055, blue: 0.071)      // #0C0E12

@@ -9,14 +9,14 @@ struct IdentityRing: View {
     /// This friendship came from an INTRODUCTION, not a ceremony
     /// (docs/INTRODUCTIONS.md). It overrides the tier colour completely:
     /// brass means a key was tapped in front of you, and a linked friend's
-    /// wasn't — whatever kind of key they hold.
+    /// wasn't, whatever kind of key they hold.
     ///
     /// Silver, DASHED (docs/TRUST.md §5.1 already calls vouched edges dashed),
     /// plus a `link` glyph so the difference survives greyscale, colour
     /// blindness and a 26pt colony bar (the ColonyBar reverses its zIndex so
     /// the glyph isn't painted over by the next ring).
     ///
-    /// **It defaults to false, so it is opt-in — any NEW call site that can
+    /// **It defaults to false, so it is opt-in, any NEW call site that can
     /// render a FRIEND must pass it**, or that friend silently gets a brass
     /// ring they did not earn. The call sites that don't pass it are the ones
     /// that can only ever draw the local user (Profile, the Parent Mode

@@ -60,7 +60,7 @@ struct FriendsView: View {
     @State private var recordFor: FriendStore.StoredFriend?
     @Environment(\.openURL) private var openURL
     /// Circle isn't reachable in Parent Mode (HomeView renders the chat list
-    /// alone), so this is belt and braces — but the rule "accepting an
+    /// alone), so this is belt and braces, but the rule "accepting an
     /// introduction is simplified-mode work, MAKING one is not" belongs on the
     /// control, not only in the shell that happens to hide it today.
     @Environment(\.parentMode) private var parentMode
@@ -205,10 +205,10 @@ struct FriendsView: View {
     /// Scrollable body + an action footer pinned above the tab bar.
     ///
     /// The ceremony screens used to be a bare VStack with Spacers. A VStack
-    /// does not clip or scroll — when its content is taller than the screen it
+    /// does not clip or scroll, when its content is taller than the screen it
     /// simply overflows in BOTH directions, so the step rail slid up under the
     /// status bar while the primary button slid down under the tab bar, with no
-    /// way to reach it. That is why the "Ready — they tap their key" button was
+    /// way to reach it. That is why the "Ready, they tap their key" button was
     /// unreachable on a smaller/older phone: the screen wasn't just clipped, it
     /// was unscrollable. Long role banners, the passkey explainer and large
     /// Dynamic Type all make this worse.
@@ -228,7 +228,7 @@ struct FriendsView: View {
             .padding(.top, 8)
             .padding(.bottom, 16)
         }
-        // Don't rubber-band when everything already fits — on a big phone the
+        // Don't rubber-band when everything already fits, on a big phone the
         // short screens should feel static, not loose.
         .scrollBounceBehavior(.basedOnSize)
         .safeAreaInset(edge: .bottom) {
@@ -280,7 +280,7 @@ struct FriendsView: View {
             .clipShape(RoundedRectangle(cornerRadius: 20))
             // The camera is the flexible child that soaks up slack, so at large
             // Dynamic Type the role banner could squeeze it to nothing and push
-            // Cancel off-screen — trapping the user in a live camera with no
+            // Cancel off-screen, trapping the user in a live camera with no
             // exit. A floor here keeps the preview usable.
             .frame(minHeight: 180)
             .padding(.horizontal, 24)
@@ -313,14 +313,14 @@ struct FriendsView: View {
                 .foregroundStyle(.white.opacity(0.7))
 
             RoleBanner(icon: "key.radiowaves.forward.fill",
-                       text: "Hand this phone to \(friend.displayName). They prove their key on THIS phone — it never leaves your hands together.")
+                       text: "Hand this phone to \(friend.displayName). They prove their key on THIS phone, it never leaves your hands together.")
 
             if friend.tier == .passkey {
                 PasskeyHybridCard(friendName: friend.displayName)
             }
         } actions: {
             Button { Task { await forge(friend) } } label: {
-                Label("Ready — \(friend.displayName) taps their key", systemImage: "key.radiowaves.forward.fill")
+                Label("Ready, \(friend.displayName) taps their key", systemImage: "key.radiowaves.forward.fill")
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 6)
             }
@@ -362,7 +362,7 @@ struct FriendsView: View {
             Text(FingerprintPhrase.phrase(for: friend.publicKey))
                 .font(.title3)
                 .foregroundStyle(SealTheme.brass)
-            Text("Say it out loud to each other — matching phrases, matching keys.")
+            Text("Say it out loud to each other, matching phrases, matching keys.")
                 .font(.caption2)
                 .foregroundStyle(.white.opacity(0.4))
                 .multilineTextAlignment(.center)
@@ -444,7 +444,7 @@ struct FriendsView: View {
             stage = .sealed(friend)
             // Hand them their half of the edge so their phone completes the
             // friendship on its own (ForgeHandshake.swift). Without this the
-            // ceremony has to be run a SECOND time on their device — the step
+            // ceremony has to be run a SECOND time on their device, the step
             // everybody forgets. Deliberately after `stage = .sealed`, and
             // deliberately non-throwing: the forge already succeeded here, and
             // a directory hiccup must not turn a good ceremony into an error.

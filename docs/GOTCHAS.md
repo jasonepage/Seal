@@ -116,3 +116,28 @@ the house style. The site pages are clean; the app is not.
   (`seal.chats.<hash>`, `seal.friends.<hash>`, and so on). Sign-out wipes local
   state and leaves the identity in the directory. Anything new that stores per
   identity must be added to `ContentView.wipeLocalAndEngines`.
+
+## The sealed envelope conversion (2026-09-15)
+
+- **Nothing in the conversion has been compiled.** It was written without
+  Xcode. The first build will find typos. Fix them in place; the design does
+  not depend on any of them.
+- **`MLKEM768` API names are the most likely compile error.** Everything that
+  touches ML-KEM is in `Seal/Crypto/KEMBundle.swift` and the two lines in
+  `IdentityManager.mintMLKEMIfMissing`. If CryptoKit spells `encapsulate()`,
+  `decapsulate(_:)` or `seedRepresentation` differently, the fix is local.
+- **The `Clock` protocol shadows Swift's.** Write `Swift.Clock` if you ever
+  need the standard library one. Nothing does today.
+- **Tests live in the app target** (`Seal/SelfTest`) because there is no test
+  target and the project file is not hand edited. They run at DEBUG launch
+  and `assert`. A failing self-test therefore crashes a debug build on
+  purpose. The Time Travel screen runs them on demand.
+- **A phone that has not signed in since the conversion has no ML-KEM key**
+  and gets classical-only wraps. Sign in once on every phone. The endorsement
+  is republished with the hybrid bundle.
+- **Removing a person drops their key pin.** That is the only way a pin goes
+  away. If someone genuinely re-registers, remove and re-meet them.
+- **`EstateEvent` needs its `estate` field QUERYABLE** in every environment,
+  same class of silent failure as the `Identity` index.
+- **Demo mode seeds a sealed estate but publishes nothing.** Every engine
+  method checks `DemoFixtures.isActive` and returns; the buttons are disabled.

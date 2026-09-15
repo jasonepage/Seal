@@ -23,7 +23,7 @@ import os
 //
 //      SHA256( "seal.receipt.v1" | giver | receiver | photoHash | desc | at | nonce )
 //
-//  * The RECEIVER signs it with their ROOT credential — a hardware key or
+//  * The RECEIVER signs it with their ROOT credential, a hardware key or
 //    passkey, physically tapped on the giver's phone. That is the strong half:
 //    it cannot be produced remotely, and it is the receiver saying "I took
 //    this," not the giver claiming they handed it over.
@@ -31,14 +31,14 @@ import os
 //    which their root credential already endorsed, so the issuer is pinned too.
 //
 //  Anyone can verify both signatures later against the public directory, with
-//  no server and no account — see `verify(against:)`. Change one character of
+//  no server and no account, see `verify(against:)`. Change one character of
 //  the description, or swap the photo, and both signatures fail.
 //
 //  WHAT IT DELIBERATELY DOES NOT PROVE
 //  -----------------------------------
 //  That a credential belongs to a named legal person. Seal proves credential A
 //  handed something to credential B. Binding a credential to a passport is what
-//  notaries sell and Seal does not do it — do not let the UI imply otherwise.
+//  notaries sell and Seal does not do it, do not let the UI imply otherwise.
 //  Also: the photo hash proves the photo hasn't changed since signing, NOT that
 //  the photo depicts the truth. It's evidence, not omniscience.
 
@@ -62,7 +62,7 @@ struct CustodyReceipt: Codable, Identifiable, Hashable {
     let photoSHA256: Data?
     /// Whole seconds since 1970, stored as an integer ON PURPOSE. A `Date` is
     /// encoded by JSONEncoder as a Double, and this value is rebuilt into a
-    /// signed commitment on the verifier's machine — an integer round-trips
+    /// signed commitment on the verifier's machine, an integer round-trips
     /// exactly, and more importantly it cannot carry a hostile magnitude like
     /// 1e300 into a trapping `Int64(_: Double)` conversion and crash the app.
     let signedAtEpoch: Int64
@@ -70,13 +70,13 @@ struct CustodyReceipt: Codable, Identifiable, Hashable {
 
     var signedAt: Date { Date(timeIntervalSince1970: TimeInterval(signedAtEpoch)) }
 
-    /// Receiver's ROOT-credential assertion over the commitment — the strong half.
+    /// Receiver's ROOT-credential assertion over the commitment, the strong half.
     let receiverAssertion: WebAuthnAssertion
     /// Giver's Secure Enclave device signature over the same commitment.
     let giverSignature: Data
     let giverDevicePublicKey: Data
 
-    /// Encrypted photo in CloudKit + its content key. Local/private only —
+    /// Encrypted photo in CloudKit + its content key. Local/private only, 
     /// never published in the clear (see ReceiptService.publish).
     var mediaRef: String?
     var mediaKey: Data?
@@ -135,7 +135,7 @@ struct CustodyReceipt: Codable, Identifiable, Hashable {
     }
 
     /// Re-verify from scratch against the public directory. `directory` maps a
-    /// root hash to that identity and its VERIFIED device endorsements — the
+    /// root hash to that identity and its VERIFIED device endorsements, the
     /// same thing SyncEngine.fetchIdentity returns.
     ///
     /// `photo` is optional: pass the bytes to also confirm the image still
@@ -176,7 +176,7 @@ struct CustodyReceipt: Codable, Identifiable, Hashable {
 // MARK: - Local store
 
 /// Receipts this device holds, as giver or receiver. Keychain-JSON namespaced
-/// per identity, same pattern as FriendStore — a receipt is evidence, so it
+/// per identity, same pattern as FriendStore, a receipt is evidence, so it
 /// must survive app relaunch and must never leak across identities.
 @Observable
 final class ReceiptStore {
@@ -184,7 +184,7 @@ final class ReceiptStore {
     let ownerHash: String
     private var storageKey: String { "seal.receipts.\(ownerHash)" }
 
-    /// Deliberately does NOT read the keychain — this is constructed inside a
+    /// Deliberately does NOT read the keychain, this is constructed inside a
     /// NavigationLink destination, which SwiftUI evaluates on every parent body
     /// pass. Call `loadIfNeeded()` from a `.task` instead.
     init(ownerHash: String) {
@@ -193,7 +193,7 @@ final class ReceiptStore {
 
     private var didLoad = false
     /// True when a stored blob existed but wouldn't decode. Saving is then
-    /// refused, because `save()` writes the whole array — one unreadable blob
+    /// refused, because `save()` writes the whole array, one unreadable blob
     /// would otherwise silently overwrite every receipt the user owns the
     /// moment they added a new one. Receipts are evidence; losing them quietly
     /// is worse than failing loudly.
@@ -207,7 +207,7 @@ final class ReceiptStore {
             receipts = decoded
         } else {
             loadFailed = true
-            ReceiptService.log.error("ReceiptStore: stored receipts wouldn't decode — refusing to overwrite them")
+            ReceiptService.log.error("ReceiptStore: stored receipts wouldn't decode, refusing to overwrite them")
         }
     }
 
@@ -250,14 +250,14 @@ enum ReceiptService {
         case noRecipientKeys
         var errorDescription: String? {
             switch self {
-            case .noDeviceKey: return "This device has no signing key — re-register."
-            case .noRecipientKeys: return "They have no message keys published — they need to reopen Seal."
+            case .noDeviceKey: return "This device has no signing key, re-register."
+            case .noRecipientKeys: return "They have no message keys published, they need to reopen Seal."
             }
         }
     }
 
     /// Run the handover ceremony. The RECEIVER taps their key on this (the
-    /// giver's) phone, exactly like the friend ceremony — so this must be
+    /// giver's) phone, exactly like the friend ceremony, so this must be
     /// called with both people physically present.
     static func issue(item: String,
                       photo: Data?,
@@ -283,7 +283,7 @@ enum ReceiptService {
 
         // Strong half: their hardware key, on this phone, over this commitment.
         // The ceremony rebuilds the commitment from these fields rather than
-        // trusting bytes we hand it — see signReceipt.
+        // trusting bytes we hand it, see signReceipt.
         let assertion = try await ceremony.signReceipt(
             receiptID: receiptID,
             giverHash: myRoot.credentialIDHash,
@@ -351,7 +351,7 @@ enum ReceiptService {
         return receipt
     }
 
-    /// Pull any receipts issued to me. Idempotent — records are never deleted,
+    /// Pull any receipts issued to me. Idempotent, records are never deleted,
     /// so this runs against the same ones forever and must no-op once stored.
     @discardableResult
     static func check(myRoot: RootIdentity,
@@ -373,7 +373,7 @@ enum ReceiptService {
                 log.error("check: couldn't open receipt \(item.receiptID, privacy: .public)")
                 continue
             }
-            // Naming us as the receiver proves NOTHING — receiverHash is a
+            // Naming us as the receiver proves NOTHING, receiverHash is a
             // field the sender chose, and the public database accepts writes
             // from anyone. Without the signature check below, a stranger could
             // read our public KEM key, wrap any JSON they liked to it, and
@@ -388,11 +388,11 @@ enum ReceiptService {
                     directory[hash] = entry
                 }
             }
-            // No `photo:` — the image lives in CloudKit and isn't needed to
+            // No `photo:`, the image lives in CloudKit and isn't needed to
             // check the signatures; the photo HASH is already inside them.
             let verdict = receipt.verify(against: directory, using: identity)
             guard verdict.isValid else {
-                log.error("check: REJECTED receipt \(item.receiptID, privacy: .public) — \(String(describing: verdict), privacy: .public)")
+                log.error("check: REJECTED receipt \(item.receiptID, privacy: .public), \(String(describing: verdict), privacy: .public)")
                 continue
             }
             store.add(receipt)

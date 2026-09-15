@@ -63,7 +63,7 @@ enum HybridKEM {
     /// KEM keys. The receiver holds only one private key but may be endorsed
     /// under several (multi-device, or a re-key the sender's directory view
     /// hasn't caught up to). Wrapping to all of them means whichever key the
-    /// receiver actually has can open its own copy — self-healing against a
+    /// receiver actually has can open its own copy, self-healing against a
     /// stale `.last`-endorsement view, which was a real cross-device failure
     /// ("Sync failed / CryptoKit error 3"). Empty/duplicate keys are skipped;
     /// at least one must wrap or this throws.
