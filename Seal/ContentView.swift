@@ -6,7 +6,7 @@
 import SwiftUI
 
 struct ContentView: View {
-    @State private var identity = IdentityManager()
+    @State private var identity: IdentityManager
     @State private var ceremony: CeremonyManager?
     @State private var sync = SyncEngine()
     @State private var friendStore: FriendStore?
@@ -15,6 +15,20 @@ struct ContentView: View {
     @State private var showBackupPrompt = false
     @State private var showRecoveryNotice = false
     @Environment(\.scenePhase) private var scenePhase
+
+    /// The ceremony has to exist before the first frame is drawn.
+    ///
+    /// It used to be built in `.onAppear`. On a phone with no identity yet,
+    /// both branches of the Group below were false, so the Group drew
+    /// nothing at all, and `.onAppear` does not fire on a view with no
+    /// content. Nothing ran, nothing was drawn, and the app came up to a
+    /// blank white screen and stayed there. Building the ceremony here means
+    /// the registration screen is on screen from the first frame.
+    init() {
+        let identity = IdentityManager()
+        _identity = State(initialValue: identity)
+        _ceremony = State(initialValue: CeremonyManager(identity: identity))
+    }
 
     var body: some View {
         Group {
@@ -46,6 +60,11 @@ struct ContentView: View {
                     }
             } else if let ceremony {
                 RegistrationView(ceremony: ceremony, sync: sync)
+            } else {
+                // Should not happen now that the ceremony is built in init,
+                // but a view that draws nothing is also a view that never
+                // appears, and that is what a blank white screen is made of.
+                SealTheme.ink.ignoresSafeArea()
             }
         }
         .onAppear { setupEngines() }
