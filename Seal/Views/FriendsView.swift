@@ -42,7 +42,8 @@ struct FriendsView: View {
     /// after the distribution channel changes underneath it.
     private static let inviteURL = URL(string: "https://sealmessenger.com")!
     private static let inviteMessage = """
-        I'm moving the private stuff off text messages. Seal only works between \
+        I'm putting my passwords and a few letters in sealed envelopes for when I'm \
+        gone, and I'd like you to hold one of the keys. Seal only works between \
         people who set it up face to face, so grab it and we'll take two minutes \
         next time we're together. sealmessenger.com
         """
@@ -368,7 +369,7 @@ struct FriendsView: View {
                 .padding(.horizontal, 32)
 
             RoleBanner(icon: "arrow.triangle.2.circlepath",
-                       text: "One direction done. For \(friend.displayName) to message you, run it once more on THEIR phone: they scan your seal, you tap your key.")
+                       text: "One direction done. For \(friend.displayName) to hand you a key or write you an envelope, run it once more on THEIR phone: they scan your seal, you tap your key.")
         } actions: {
             Button { stage = .list } label: {
                 Label("Show my seal for the other direction", systemImage: "qrcode")

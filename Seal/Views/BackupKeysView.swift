@@ -19,7 +19,7 @@ enum BackupKeyCopy {
     /// docs/UI.md §3.1, verbatim. Do not soften.
     static let stakes = "Lose every key, lose this identity. Nobody can reset it — not us, not Apple."
 
-    static let notMessages = "A backup key brings back who you are — the same name, the same seal, so your family can still check it's really you. It does NOT move your chats or your friend list onto the new phone: those live on the phone you lost, and the keys that could read old messages are destroyed as they're used. Your family adds you again, in person, the way they did the first time."
+    static let notMessages = "A backup key brings back who you are: the same name, the same seal, so your family can still check it's really you. It does NOT move your envelopes or your people onto the new phone. Those live on the phone you lost. Your family adds you again, in person, the way they did the first time, and you seal your envelopes again."
 
     static let stolenNotLost = "If your main key is stolen rather than lost, delete the identity and start fresh. A backup key can carry your identity forward, but it can't lock the thief out."
 
@@ -30,7 +30,7 @@ enum BackupKeyCopy {
     /// Said after a recovery, where it cannot be mistaken for reassurance.
     /// The state is survivable but not stable, and the honest instruction is
     /// to leave it — so the copy gives the instruction, not just the fact.
-    static let recoveredBody = "You signed in with your backup key, so you are still you — same name, same seal, and your family can check it's really you. Your chats and your friend list are not here: they were on the phone you lost. Your family will need to add you again, in person.\n\nYour main key is gone too, and this phone can't add another backup key or replace the one you used — both need the main key. So one more loss would take this identity for good."
+    static let recoveredBody = "You signed in with your backup key, so you are still you: same name, same seal, and your family can check it's really you. Your envelopes and your people are not here: they were on the phone you lost. Your family will need to add you again, in person, and you will seal your envelopes again.\n\nYour main key is gone too, and this phone can't add another backup key or replace the one you used. Both need the main key. So one more loss would take this identity for good."
 
     /// Same reasoning as promptTitle: the flag no longer knows whether
     /// anyone else is involved, so the copy stops assuming one.
@@ -248,7 +248,7 @@ struct AddBackupKeySheet: View {
                         .multilineTextAlignment(.center)
 
                     if added {
-                        Text("If you lose your main key, this one signs you back in as you. Your chats and friend list don't travel with it — your family adds you again in person.")
+                        Text("If you lose your main key, this one signs you back in as you. Your envelopes and your people don't travel with it. Your family adds you again in person.")
                             .font(.callout)
                             .foregroundStyle(.white.opacity(0.7))
                             .multilineTextAlignment(.center)

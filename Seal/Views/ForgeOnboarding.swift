@@ -33,16 +33,16 @@ struct WelcomeCarousel: View {
 
     private let panels: [Panel] = [
         Panel(symbol: "lock.shield.fill",
-              title: "For the things you can't send twice",
-              body: "A photo. A wallet address. An account number. Once it reaches the wrong person, you can't take it back. Seal is built for exactly those messages.",
+              title: "For the things you never told anybody",
+              body: "The passwords. Where the safe deposit key is. The combination. The seed phrase. A letter to each of them. Sealed now, opened only after you are gone, by people you chose.",
               brass: true),
         Panel(symbol: "hand.tap.fill",
-              title: "Nobody can pretend to be your person",
-              body: "There's no username to spoof and no phone number to fake. You add someone by standing next to them, once. After that, every message from them is provably from them.",
+              title: "Nobody can open one early",
+              body: "Not Apple, not us. It takes your custodians' physical keys, after a long silence from you, after weeks of warnings you can stop with one tap.",
               brass: false),
         Panel(symbol: "person.2.fill",
-              title: "Two people, together, once",
-              body: "That's the whole setup. A couple of minutes side by side, and then it works from anywhere. If the person you want isn't with you yet, invite them and do it when you meet.",
+              title: "Keys change hands in person",
+              body: "You hand a security key to each custodian, standing next to them, once. Their tap on your phone is the receipt. After that they do nothing for years.",
               brass: false)
     ]
 

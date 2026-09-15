@@ -87,7 +87,7 @@ struct RegistrationView: View {
                     Button("Cancel", role: .cancel) {}
                 }
 
-                Text("Your key is your identity. People are added in person.\nA backup key can bring your identity back. Your messages can't.")
+                Text("Your key is your identity. People are added in person.\nA backup key can bring your identity back.")
                     .font(.caption2)
                     .foregroundStyle(.white.opacity(0.45))
                     .multilineTextAlignment(.center)
@@ -118,12 +118,12 @@ struct RegistrationView: View {
 
     private var statusLine: String {
         switch ceremony.phase {
-        case .idle: "For the messages you can't afford to send to the wrong person."
+        case .idle: "Sealed envelopes for the people you leave behind."
         case .searching: "Hold your key flat against the top of your phone…"
         case .reading: "Reading your key…"
         case .endorsing: "One more tap — vouching for this phone…"
         case .sealed: "Sealed. Welcome, \(displayName)."
-        case .failed: "For the messages you can't afford to send to the wrong person."
+        case .failed: "Sealed envelopes for the people you leave behind."
         }
     }
 

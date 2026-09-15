@@ -212,7 +212,7 @@ struct ProfileView: View {
                     .padding(.horizontal, 24)
                     .padding(.top, 16)
 
-                    Text("Signing out deletes this device's keys, chats, and friends. Your identity stays in the directory — sign back in with your key or Face ID.")
+                    Text("Signing out deletes this device's copy of your envelopes and your people. Your identity stays in the directory. Sign back in with your key or Face ID.")
                         .font(.caption2)
                         .foregroundStyle(.white.opacity(0.4))
                         .multilineTextAlignment(.center)
@@ -272,7 +272,7 @@ struct ProfileView: View {
                 }
             }
             .confirmationDialog(
-                "This deletes this device's keys, chats, and friends — they don't come back. Your identity survives; sign in again with your key or Face ID.",
+                "This deletes this device's copy of your envelopes and your people. They do not come back. Your identity survives; sign in again with your key or Face ID.",
                 isPresented: $confirmReset, titleVisibility: .visible
             ) {
                 Button("Sign out and delete local data", role: .destructive) {
@@ -343,7 +343,7 @@ struct ProfileView: View {
                     // not a trust claim about a person (UI.md §1.1).
                     settingRow(icon: "clock.badge.checkmark", tint: SealTheme.silver,
                                title: "Independent timestamps",
-                               subtitle: "Ask a timestamp authority to sign each record line, so its time is not just this phone's word. Only a hash is sent, never your messages, but it does tell that authority something was recorded.",
+                               subtitle: "Ask a timestamp authority to sign each record line, so its time is not just this phone's word. Only a hash is sent, never an envelope, but it does tell that authority something was recorded.",
                                isOn: .init(
                                    get: { timestampsOn },
                                    set: { value in

@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Seal uses the microphone to record a voice message for an envelope. The recording is encrypted before it leaves this phone.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Seal uses your photos to add a picture to an envelope. The picture is encrypted before it leaves this phone.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
