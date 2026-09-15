@@ -136,7 +136,7 @@ final class CeremonyManager: NSObject {
                 devicePublicKey: devicePub,
                 kemBundlePublicKeys: identity.kemPublicKeyData ?? Data(),
                 assertion: try JSONEncoder().encode(stored),
-                createdAt: .now
+                createdAt: Clocks.current.now
             )
 
             // 5. Persist locally.
@@ -323,7 +323,7 @@ final class CeremonyManager: NSObject {
                     clientDataJSON: endorseAssertion.rawClientDataJSON,
                     authenticatorData: endorseAssertion.rawAuthenticatorData,
                     signature: endorseAssertion.signature)),
-                createdAt: .now)
+                createdAt: Clocks.current.now)
 
             identity.completeRegistration(identity: root, endorsement: endorsement)
             // Recovered with a backup key? Remember it (FR-3). Recorded HERE,
@@ -394,12 +394,12 @@ final class CeremonyManager: NSObject {
             // at the moment of proof, not later when the store is written.
             KeyPinStore.pin(hash: friend.credentialIDHash, publicKey: friend.publicKey)
 
-            let attestation = FriendshipAttestation(nonce: nonce, timestamp: .now, assertion: stored)
+            let attestation = FriendshipAttestation(nonce: nonce, timestamp: Clocks.current.now, assertion: stored)
             let friendship = Friendship(
                 friendRootID: friend.credentialIDHash,
                 attestation: try JSONEncoder().encode(attestation),
                 reverseAttestation: nil,    // their phone runs the mirror ceremony
-                forgedAt: .now
+                forgedAt: Clocks.current.now
             )
             phase = .sealed
             SealTheme.sealHaptic()
@@ -557,7 +557,7 @@ final class CeremonyManager: NSObject {
             let revocation = DeviceRevocation(
                 devicePublicKey: devicePublicKey,
                 assertion: try JSONEncoder().encode(stored),
-                revokedAt: .now)
+                revokedAt: Clocks.current.now)
             try await directory.publishRevocation(revocation, for: myRoot.credentialIDHash)
             phase = .sealed
             SealTheme.sealHaptic()

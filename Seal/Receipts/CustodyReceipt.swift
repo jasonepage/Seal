@@ -269,7 +269,7 @@ enum ReceiptService {
 
         let nonce = randomNonce()
         let receiptID = UUID().uuidString
-        let signedAtEpoch = Int64(Date.now.timeIntervalSince1970)
+        let signedAtEpoch = Int64(Clocks.current.now.timeIntervalSince1970)
         let photoHash = photo.map { Data(SHA256.hash(data: $0)) }
 
         let commitment = CustodyReceipt.commitment(

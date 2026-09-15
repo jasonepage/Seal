@@ -135,7 +135,7 @@ extension CeremonyManager {
                 label: label.trimmingCharacters(in: .whitespacesAndNewlines),
                 assertion: try JSONEncoder().encode(stored),
                 acceptance: try JSONEncoder().encode(acceptance),
-                createdAt: .now)
+                createdAt: Clocks.current.now)
 
             // 5. Publish. A backup nobody can read about is not a backup: the
             //    recovering phone finds this key through the directory, so the
@@ -211,7 +211,7 @@ extension CeremonyManager {
             let revocation = DeviceRevocation(
                 devicePublicKey: backup.publicKey,
                 assertion: try JSONEncoder().encode(stored),
-                revokedAt: .now)
+                revokedAt: Clocks.current.now)
             try await directory.publishRevocation(revocation, for: myRoot.credentialIDHash)
             setPhase(.sealed)
             SealTheme.sealHaptic()

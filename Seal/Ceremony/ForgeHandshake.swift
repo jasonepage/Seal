@@ -97,7 +97,7 @@ enum ForgeHandshakeService {
                 senderDevicePublicKey: devicePub,
                 nonce: attestation.nonce,
                 signature: signature.derRepresentation,
-                forgedAt: .now))
+                forgedAt: Clocks.current.now))
             log.info("publish: handshake sent to \(friend.credentialIDHash, privacy: .public)")
         } catch {
             log.error("publish: \(error.localizedDescription, privacy: .public)")

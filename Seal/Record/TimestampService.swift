@@ -153,9 +153,9 @@ enum TimestampService {
             records[hex] = TimestampRecord(digestHex: hex,
                                            token: token ?? Data(),
                                            authority: authority,
-                                           obtainedAt: Date(),
+                                           obtainedAt: Clocks.current.now,
                                            attempts: attempts,
-                                           lastAttemptAt: Date())
+                                           lastAttemptAt: Clocks.current.now)
             changed = true
         }
         guard changed else { return nil }

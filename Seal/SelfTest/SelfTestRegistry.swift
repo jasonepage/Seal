@@ -4,5 +4,6 @@ import Foundation
 enum SelfTestRegistry {
     static var suites: [SelfTest.Suite] {
         SecurityFixTests.suites
+            + ClockTests.suites
     }
 }
