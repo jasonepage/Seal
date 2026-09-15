@@ -145,6 +145,32 @@ Listed in the final report of the conversion session and repeated here:
   `SyncEngine`** were left in place as dead code rather than deleted, to keep
   the phase 7 diff to what the brief listed. Safe to remove later.
 
+## Known UI debt: the You screen is cluttered
+
+Raised 2026-09-15 after the first screenshots, and agreed. Flattening the
+Advanced drawer into one screen was right, but every row kept its full weight,
+so the screen is now a wall of paragraphs. The fix is not to hide things
+again. It is to make each row one line and put the explanation behind an
+info button the person taps when they want it.
+
+The specific work, none of it done:
+
+1. **Setting rows are a title and a switch.** If the subtitle runs past about
+   six words it goes behind an (i) that expands in place. "Independent
+   timestamps" is five lines of standing text today. "Bigger text" is three.
+2. **The Seal, Directory and This device card goes behind a closed
+   disclosure** called something like "Technical details". Nobody reads a
+   truncated hex hash, and the fingerprint phrase at the top of the same
+   screen ("juniper evergreen dell") is already the readable form of it. Show
+   the phrase, put the hex behind the disclosure with a copy button.
+3. **The backup keys card is two long paragraphs.** Both go behind the (i).
+   The card becomes a heading and "Add a backup key".
+4. **The no-backup-key alarm and the backup keys section now say the same
+   thing twice** on one screen, which they did not when one of them was a
+   drawer away. Keep the alarm, shrink the section.
+
+The rest of the app reads clean. This is one screen.
+
 ## Ideas that are written down, not built
 
 - **The interview that fixes the blank page.** [docs/PRODUCT.md](docs/PRODUCT.md)

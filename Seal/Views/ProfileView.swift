@@ -536,7 +536,10 @@ struct ProfileView: View {
         switch sync.status {
         case .published: "Published"
         case .publishing: "Publishing…"
-        case .idle: ", "
+        // Was a bare ", ". The phase 10 em dash sweep replaced a lone em
+        // dash with a comma and a space, and it shipped as a row reading
+        // "Directory    ,". Never leave punctuation standing in for a word.
+        case .idle: "Not checked yet"
         case .error: "Error, see home"
         }
     }
