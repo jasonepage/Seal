@@ -23,6 +23,16 @@ import os
 //  publishes nothing under that name, the hash is still derived from a
 //  credential the tapper just used, so it can only be their own.
 //
+//  What is REFUSED. A backup key. A backup credential has no directory
+//  record of its own: it lives inside the root identity's record, under
+//  backupEndorsements. So a backup tap finds nothing published under its
+//  hash, skips the match check above, and would tombstone the BACKUP's
+//  hash while the root identity stays alive. From then on sign-in refuses
+//  that backup key and says the identity was deleted, which is not true.
+//  The person most likely to reach for the spare key is the person whose
+//  main key is already giving them trouble, and that is the person this
+//  would strand. So a backup tap is refused and sent to Delete identity.
+//
 //  Then it is the ordinary delete: write-once tombstone marker on the
 //  server, the hash into this phone's graveyard, best-effort flip of the
 //  live record. Nothing is signed in to, no device is endorsed.
@@ -31,11 +41,17 @@ extension CeremonyManager {
 
     enum RetireError: LocalizedError {
         case keyDoesNotMatchRecord
+        case keyIsABackup
+        case identityAlreadyRetired
 
         var errorDescription: String? {
             switch self {
             case .keyDoesNotMatchRecord:
                 "That key does not match the identity published under its name, so Seal did not retire anything."
+            case .keyIsABackup:
+                "That is a backup key for an identity that is still in use, so Seal did not retire anything. A backup key is not an identity of its own. To delete that identity, sign in to it and use Delete identity on the You screen."
+            case .identityAlreadyRetired:
+                "That is a backup key for an identity that was already deleted. Nothing was changed."
             }
         }
     }
@@ -45,6 +61,8 @@ extension CeremonyManager {
         setPhase(.searching)
         do {
             let challenge = Self.randomChallenge()
+            // Kept so the backup check after the tap does not scan twice.
+            var scanned: [SyncEngine.DirectoryCredential]?
             let request: ASAuthorizationRequest
             switch tier {
             case .passkey:
@@ -60,12 +78,12 @@ extension CeremonyManager {
                 securityRequest.userVerificationPreference = .preferred
                 // Dead identities included: a non-discoverable key can only
                 // answer for an ID that is on the list.
-                let ids: [Data]
                 do {
-                    ids = try await directory.fetchDirectoryCredentials(includingDead: true).map(\.credentialID)
+                    scanned = try await directory.fetchDirectoryCredentials(includingDead: true)
                 } catch {
                     throw CeremonyError.directoryUnavailable
                 }
+                let ids = (scanned ?? []).map(\.credentialID)
                 guard !ids.isEmpty else { throw CeremonyError.directoryEmpty }
                 securityRequest.allowedCredentials = ids.map {
                     ASAuthorizationSecurityKeyPublicKeyCredentialDescriptor(
@@ -89,6 +107,32 @@ extension CeremonyManager {
                 signature: assertion.signature)
             guard Self.clientDataChallengeMatches(stored.clientDataJSON, expected: challenge) else {
                 throw CeremonyError.verificationFailed
+            }
+
+            // REFUSE A BACKUP KEY (see the note at the top of this file).
+            // Fails closed: without the directory there is no way to tell a
+            // root credential from a backup one, and a tombstone cannot be
+            // written without the directory anyway, so nothing is lost.
+            let all: [SyncEngine.DirectoryCredential]
+            if let scanned {
+                all = scanned
+            } else {
+                do {
+                    all = try await directory.fetchDirectoryCredentials(includingDead: true)
+                } catch {
+                    WebAuthnDiag.log.error("retire: directory unreachable, refusing to retire \(hash, privacy: .public) unchecked")
+                    throw CeremonyError.directoryUnavailable
+                }
+            }
+            if let backup = all.first(where: { $0.isBackup && $0.credentialIDHash == hash }) {
+                let ownerRetired: Bool
+                do {
+                    ownerRetired = try await directory.isTombstoned(credentialIDHash: backup.ownerHash)
+                } catch {
+                    throw CeremonyError.directoryUnavailable
+                }
+                WebAuthnDiag.log.error("retire: refused, \(hash, privacy: .public) is a backup credential for \(backup.ownerHash, privacy: .public) (owner retired: \(ownerRetired, privacy: .public))")
+                throw ownerRetired ? RetireError.identityAlreadyRetired : RetireError.keyIsABackup
             }
 
             // If a record is published under this name, the tap must match it.
