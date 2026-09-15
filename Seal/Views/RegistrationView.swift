@@ -28,7 +28,7 @@ struct RegistrationView: View {
 
                 Text(statusLine)
                     .font(.callout)
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(.white.opacity(0.8))
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
 
@@ -42,35 +42,47 @@ struct RegistrationView: View {
                         .padding(.horizontal, 32)
                 }
 
-                TextField("Your name", text: $displayName)
-                    .textFieldStyle(.plain)
-                    .padding()
-                    .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 24)
+                // The name field and the two buttons are one thing to do,
+                // so they sit in one block rather than floating 28 points
+                // apart like unrelated sections.
+                VStack(spacing: 14) {
+                    TextField("", text: $displayName,
+                              prompt: Text("Your name").foregroundStyle(.white.opacity(0.55)))
+                        .textFieldStyle(.plain)
+                        .foregroundStyle(.white)
+                        .padding()
+                        .background(.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .strokeBorder(.white.opacity(nameIsEmpty ? 0.32 : 0.16), lineWidth: 1)
+                        )
 
-                // Face ID leads, the security key follows (docs/COLDSTART.md
-                // 3.3). The hardware key is an upgrade, not a gate; putting it
-                // first told most people they were in the wrong app.
-                VStack(spacing: 12) {
-                    Button { Task { await start(.passkey) } } label: {
-                        Label("Set up with Face ID", systemImage: "faceid")
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 6)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(SealTheme.brass)
+                    // Face ID leads, the security key follows (docs/COLDSTART.md
+                    // 3.3). The hardware key is an upgrade, not a gate; putting it
+                    // first told most people they were in the wrong app.
+                    Group {
+                        Button { Task { await start(.passkey) } } label: {
+                            Label("Set up with Face ID", systemImage: "faceid")
+                        }
+                        .buttonStyle(SealPrimaryButtonStyle())
 
-                    Button { Task { await start(.verified) } } label: {
-                        Label("I have a security key", systemImage: "key.radiowaves.forward.fill")
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 6)
+                        Button { Task { await start(.verified) } } label: {
+                            Label("I have a security key", systemImage: "key.radiowaves.forward.fill")
+                        }
+                        .buttonStyle(SealSecondaryButtonStyle())
                     }
-                    .buttonStyle(.bordered)
-                    .tint(.white)
+                    .disabled(busy || nameIsEmpty)
+
+                    // Both buttons are off until there is a name in the
+                    // field. Say why, instead of leaving two dim shapes and
+                    // no reason for them.
+                    if nameIsEmpty {
+                        Text("Type your name above to start.")
+                            .font(.footnote)
+                            .foregroundStyle(.white.opacity(0.65))
+                    }
                 }
                 .padding(.horizontal, 24)
-                .disabled(busy || displayName.trimmingCharacters(in: .whitespaces).isEmpty)
 
                 Button {
                     showSignInOptions = true
@@ -89,7 +101,7 @@ struct RegistrationView: View {
 
                 Text("Your key is your identity. People are added in person.\nA backup key can bring your identity back.")
                     .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.45))
+                    .foregroundStyle(.white.opacity(0.6))
                     .multilineTextAlignment(.center)
                     .padding(.bottom, 16)
             }
@@ -107,6 +119,10 @@ struct RegistrationView: View {
         )) {
             WelcomeCarousel { welcomeSeen = true }
         }
+    }
+
+    private var nameIsEmpty: Bool {
+        displayName.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     private var phaseIsTrust: Bool {
