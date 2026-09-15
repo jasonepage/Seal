@@ -128,6 +128,20 @@ struct EstateHomeView: View {
 
     // MARK: - Status
 
+    /// What is waiting to be sealed, in plain words, or nil when everything
+    /// the owner has written is published and wrapped. Drafts are named first
+    /// because an unsealed envelope is the one thing here that silently does
+    /// nothing at all.
+    private var unsealedLine: String? {
+        guard let estate, estate.hasUnsealedChanges else { return nil }
+        let drafts = estate.envelopes.filter { !$0.sealed }.count
+        if drafts > 0 {
+            let subject = drafts == 1 ? "1 envelope is" : "\(drafts) envelopes are"
+            return "\(subject) only on this phone. Until you seal them they will not open for anyone, ever. Tap Seal the envelopes below."
+        }
+        return "Your rule or your key holders changed since you last sealed. Seal again to give your key holders fresh shares. Your envelopes themselves are not touched."
+    }
+
     private var statusCard: some View {
         let state = estateEngine.ownerState
         let snapshot = estateEngine.ownerSnapshot
@@ -137,9 +151,22 @@ struct EstateHomeView: View {
                 Text("Sealed envelopes").font(.system(.title2, design: .rounded, weight: .semibold))
                 Text("Write a few envelopes. Hand keys to people you trust. Set the rule for how they open after you are gone. Nobody, including us, can open one early.")
             case .active?, .cancelled?:
-                Label("Your envelopes are closed.", systemImage: "checkmark.seal.fill")
-                    .font(.system(.title3, design: .rounded, weight: .semibold))
-                    .foregroundStyle(SealTheme.brass)
+                // This banner reads the RELEASE state, which only says whether
+                // a claim is running. It used to announce "Your envelopes are
+                // closed" on top of a list showing two envelopes marked "not
+                // sealed yet", which is the worst lie the app could tell: those
+                // two exist on this phone and nowhere else, and would open for
+                // nobody. Say the true thing first.
+                if let unsealedLine {
+                    Label("Not sealed yet.", systemImage: "exclamationmark.circle.fill")
+                        .font(.system(.title3, design: .rounded, weight: .semibold))
+                        .foregroundStyle(.orange)
+                    Text(unsealedLine)
+                } else {
+                    Label("Your envelopes are closed.", systemImage: "checkmark.seal.fill")
+                        .font(.system(.title3, design: .rounded, weight: .semibold))
+                        .foregroundStyle(SealTheme.brass)
+                }
                 if let last = snapshot?.lastHeartbeatAt {
                     Text("You last checked in \(last.formatted(.relative(presentation: .named))). Opening Seal is the check-in. If you go quiet for \(estate?.policy.silenceDays ?? 90) days, your custodians can start the process, and you will be warned for weeks before anything opens.")
                 }
