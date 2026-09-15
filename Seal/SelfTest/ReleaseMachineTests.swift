@@ -214,6 +214,8 @@ enum ReleaseMachineTests {
         s.authorizations = [.init(custodianHash: "wife", at: claimAt.addingTimeInterval(50 * day)),
                             .init(custodianHash: "brother", at: claimAt.addingTimeInterval(50 * day))]
         t.equal(ReleaseMachine.state(s, now: claimAt.addingTimeInterval(51 * day)), .objected, "veto: taps on a vetoed claim do nothing")
+        t.check(ReleaseMachine.custodianCanClaim(s, now: claimAt.addingTimeInterval(51 * day)),
+                "veto: a new claim may open because the owner is still silent")
         // A new claim starts a new countdown.
         s.claim = claim(at: claimAt.addingTimeInterval(60 * day), id: "claim-2")
         s.objections = []

@@ -77,7 +77,10 @@ enum ReleaseFeed {
                 }
             case .released:
                 if let body = e.body(ReleasedBody.self) { releases.append((body.claimID, at)) }
-            case .epochPublished, .vaultUpdated, .silenceObserved:
+            case .epochPublished:
+                // The threshold travels with the shares; the days do not.
+                if let body = e.body(EpochBody.self) { policy.threshold = body.threshold }
+            case .vaultUpdated, .silenceObserved:
                 break
             }
         }

@@ -228,7 +228,14 @@ enum ReleaseMachine {
     }
 
     static func custodianCanClaim(_ s: ReleaseSnapshot, now: Date) -> Bool {
-        state(s, now: now) == .overdue
+        if state(s, now: now) == .overdue { return true }
+        // After a veto the estate reads `objected` until a new claim opens,
+        // but the owner is still silent: a new claim may open once the
+        // silence period stands again (RELEASE.md section 8).
+        if case .vetoed = voidReason(s) {
+            return now.timeIntervalSince(s.silenceAnchor) > s.policy.silence
+        }
+        return false
     }
 
     static func custodianCanAuthorize(_ s: ReleaseSnapshot, now: Date, custodianHash: String) -> Bool {

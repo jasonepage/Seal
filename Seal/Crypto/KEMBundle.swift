@@ -180,8 +180,13 @@ enum HybridWrap {
             ss2 = try latticeKey.decapsulate(ct).withUnsafeBytes { Data($0) }
             mlkemCiphertext = ct
         }
+        // The salt names the bundle the SENDER wrapped to. A classical
+        // envelope was wrapped to a bundle with no lattice key, even if this
+        // device has one now, so rebuild that bundle from the suite.
+        let recipient = KEMBundle(x25519: mine.x25519.publicKey.rawRepresentation,
+                                  mlkem768: envelope.suite == hybridSuite ? mine.publicBundle.mlkem768 : nil)
         let key = wrapKey(ss1: ss1, ss2: ss2, ephemeral: envelope.ephemeralPublicKey,
-                          recipient: mine.publicBundle, mlkemCiphertext: mlkemCiphertext)
+                          recipient: recipient, mlkemCiphertext: mlkemCiphertext)
         return try AES.GCM.open(try AES.GCM.SealedBox(combined: envelope.ciphertext), using: key, authenticating: aad)
     }
 

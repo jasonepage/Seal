@@ -425,11 +425,11 @@ struct FriendsView: View {
             stage = .failed("That's your own seal."); return
         }
         do {
-            guard let (friend, _) = try await sync.fetchIdentity(credentialIDHash: hash) else {
+            guard let found = try await sync.fetchIdentity(credentialIDHash: hash) else {
                 stage = .failed("Nobody in the directory with that seal. Have they registered?")
                 return
             }
-            stage = .confirm(friend)
+            stage = .confirm(found.0)
         } catch {
             stage = .failed("Couldn't reach the directory: \(error.localizedDescription)")
         }

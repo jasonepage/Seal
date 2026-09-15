@@ -16,14 +16,14 @@ extension CeremonyManager {
 
     func signReleaseAuthorization(challenge: Data, myRoot: RootIdentity) async throws -> WebAuthnAssertion {
         guard let credentialID = myRoot.rawCredentialID else { throw CeremonyError.missingCredentialID }
-        phase = .searching
+        setPhase(.searching)
         do {
             let credential = try await performRequest(
                 makeAssertionRequest(tier: myRoot.tier, challenge: challenge, allowedCredentialID: credentialID))
             guard let assertion = credential as? ASAuthorizationPublicKeyCredentialAssertion else {
                 throw CeremonyError.unexpectedCredential
             }
-            phase = .reading
+            setPhase(.reading)
             let stored = WebAuthnAssertion(credentialID: assertion.credentialID,
                                            clientDataJSON: assertion.rawClientDataJSON,
                                            authenticatorData: assertion.rawAuthenticatorData,
@@ -33,14 +33,14 @@ extension CeremonyManager {
                   Self.clientDataChallengeMatches(stored.clientDataJSON, expected: challenge) else {
                 throw CeremonyError.verificationFailed
             }
-            phase = .sealed
+            setPhase(.sealed)
             SealTheme.sealHaptic()
             return stored
         } catch let error as ASAuthorizationError where error.code == .canceled {
-            phase = .failed(CeremonyError.cancelled.localizedDescription)
+            setPhase(.failed(CeremonyError.cancelled.localizedDescription))
             throw CeremonyError.cancelled
         } catch {
-            phase = .failed((error as? LocalizedError)?.errorDescription ?? "Something went wrong. Tap to try again.")
+            setPhase(.failed((error as? LocalizedError)?.errorDescription ?? "Something went wrong. Tap to try again."))
             throw error
         }
     }

@@ -107,6 +107,7 @@ enum Shamir {
     /// Random coefficients from the system CSPRNG. The deterministic variant
     /// below exists only so the test vectors can be reproduced byte for byte.
     static func split(secret: Data, threshold: Int, shares: Int) throws -> [Share] {
+        guard threshold >= 1, threshold <= shares else { throw ShamirError.badThreshold }
         guard !secret.isEmpty else { throw ShamirError.emptySecret }
         var coefficients: [[UInt8]] = []
         coefficients.reserveCapacity(secret.count)

@@ -101,11 +101,17 @@ final class EstateEngine {
                                                  fallbackPolicy: estate.policy, estateCreatedAt: estate.createdAt)
         }
         for g in guarded {
+            // No events yet means nothing to reason about: leave the snapshot
+            // absent so the screens say "waiting" rather than "overdue".
+            guard let events = guardedEvents[g.estateID], !events.isEmpty else {
+                guardedSnapshots[g.estateID] = nil
+                continue
+            }
             let policy = g.epoch.map { ReleasePolicy(threshold: $0.threshold) } ?? ReleasePolicy(threshold: 1)
-            guardedSnapshots[g.estateID] = ReleaseFeed.snapshot(events: guardedEvents[g.estateID] ?? [],
+            guardedSnapshots[g.estateID] = ReleaseFeed.snapshot(events: events,
                                                                 ownerHash: g.ownerHash,
                                                                 fallbackPolicy: policy,
-                                                                estateCreatedAt: clock.now)
+                                                                estateCreatedAt: .distantPast)
         }
         NotificationCenter.default.post(name: Self.changed, object: nil)
     }
@@ -314,6 +320,8 @@ final class EstateEngine {
             let created = try sign(.estateCreated, estateID: e.id, payload: body, previous: previous)
             try await publish(created, into: e.id, mine: true)
             previous = created.digest
+            e.publishedPolicy = e.policy
+            estate = e; saveEstate()
         }
 
         // 1. The epoch.
@@ -342,20 +350,33 @@ final class EstateEngine {
             let event = try sign(.epochPublished, estateID: e.id, payload: body, previous: previous)
             try await publish(event, into: e.id, mine: true)
             previous = event.digest
+            // Every table's release wrap must move to the new epoch, so mark
+            // everything unsealed BEFORE recording the epoch as published: a
+            // failure between the two must leave the next run re-wrapping.
+            for i in e.envelopes.indices { e.envelopes[i].sealed = false }
             e.epoch = epoch
             e.epochPublished = true
             e.publishedCustodianHashes = e.custodians.map(\.rootHash)
             e.publishedThreshold = e.policy.threshold
             estate = e; saveEstate()
             estateKey = newKey
-            // Every table's release wrap must move to the new epoch.
-            for i in e.envelopes.indices { e.envelopes[i].sealed = false }
         } else {
             guard let data = try await sync.fetchEstateBlob(name: EstateNames.epochBlob(e.id, e.epoch)),
                   let material = try? JSONDecoder().decode(EpochKeyMaterial.self, from: data) else {
                 throw EngineError.notReady("The published key material for this estate could not be fetched.")
             }
             estateKey = try EstateKeyHierarchy.openEstateKeyAsOwner(material, mine: mine)
+        }
+
+        // 1b. The rule, whenever it changed since it was last announced. The
+        //     threshold also travels in the epoch statement; the days do not.
+        if e.publishedPolicy != e.policy {
+            let body = try EstateEvent.encodeBody(PolicyBody(policy: e.policy))
+            let event = try sign(.policyChanged, estateID: e.id, payload: body, previous: previous)
+            try await publish(event, into: e.id, mine: true)
+            previous = event.digest
+            e.publishedPolicy = e.policy
+            estate = e; saveEstate()
         }
 
         // 2. Blobs for every unsealed envelope.

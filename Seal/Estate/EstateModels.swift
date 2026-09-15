@@ -206,6 +206,9 @@ struct Estate: Codable, Hashable {
     var publishedThreshold: Int = 0
     /// Table ids published in the last vault statement, for the record.
     var publishedTableIDs: [String] = []
+    /// The rule as last published, so a change to silence, warning or grace
+    /// days is noticed and announced with a policyChanged event.
+    var publishedPolicy: ReleasePolicy? = nil
 
     struct TableKeyRecord: Codable, Hashable {
         let tableID: String
@@ -243,7 +246,7 @@ struct Estate: Codable, Hashable {
     }
 
     var hasUnsealedChanges: Bool {
-        needsNewEpoch || envelopes.contains { !$0.sealed }
+        needsNewEpoch || publishedPolicy != policy || envelopes.contains { !$0.sealed }
     }
 }
 
