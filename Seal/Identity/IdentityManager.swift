@@ -67,7 +67,7 @@ final class IdentityManager {
             mlkemSeed = seed
             return
         }
-        let seed = MLKEM768.PrivateKey().seedRepresentation
+        guard let seed = KEMPrivateBundle.newMLKEMSeed() else { return }
         KeychainStore.save(seed, for: Self.mlkemKeyTag(identityHash))
         mlkemSeed = seed
     }

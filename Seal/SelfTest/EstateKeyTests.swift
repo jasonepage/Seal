@@ -22,7 +22,7 @@ enum EstateKeyTests {
     /// hybrid bundle landed.
     static func hybridDevice() -> KEMPrivateBundle {
         KEMPrivateBundle(x25519: Curve25519.KeyAgreement.PrivateKey(),
-                         mlkem768Seed: MLKEM768.PrivateKey().seedRepresentation)
+                         mlkem768Seed: KEMPrivateBundle.newMLKEMSeed())
     }
 
     /// A device with only X25519, like a phone that has not signed in since.
@@ -37,7 +37,11 @@ enum EstateKeyTests {
         let legacy = legacyDevice()
 
         let bundle = hybrid.publicBundle
-        t.check(bundle.isHybrid, "a device with a lattice seed publishes a hybrid bundle")
+        t.equal(bundle.isHybrid, hybrid.mlkem768Seed != nil, "a device with a lattice seed publishes a hybrid bundle")
+        guard bundle.isHybrid else {
+            t.check(true, "below iOS 26: classical only, hybrid checks skipped")
+            return
+        }
         t.equal(KEMBundle.parse(bundle.encoded), bundle, "hybrid bundle round-trips through its encoding")
         t.equal(KEMBundle.parse(legacy.publicBundle.encoded), legacy.publicBundle, "legacy bundle round-trips")
         t.check(KEMBundle.parse(Data(repeating: 1, count: 33)) == nil, "an odd length is not a bundle")

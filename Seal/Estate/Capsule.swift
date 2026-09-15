@@ -19,7 +19,7 @@ import CryptoKit
 //  docs/CAPSULE.md. Bump `version` for any incompatible change and keep the
 //  verifier reading the old one.
 
-struct Capsule: Codable {
+struct SealCapsule: Codable {
     static let format = "seal.capsule"
     static let version = 1
 
@@ -121,21 +121,21 @@ enum CapsuleBuilder {
         // Identities: owner, custodians, and every actor that appears.
         var wanted = Set([ownerHash] + custodianHashes + events.map(\.actorHash))
         wanted.insert(mine)
-        var identities: [String: Capsule.Identity] = [:]
+        var identities: [String: SealCapsule.Identity] = [:]
         for hash in wanted {
             guard let found = try? await sync.fetchIdentity(credentialIDHash: hash) else { continue }
             let (root, endorsements) = found
             let live = IdentityManager.verifiedDevices(root: root, endorsements: endorsements)
-            identities[hash] = Capsule.Identity(
+            identities[hash] = SealCapsule.Identity(
                 rootHash: hash,
                 publicKeyHex: root.publicKey.hexString,
                 displayName: root.displayName,
                 tier: root.tier.rawValue,
                 deviceEndorsements: live.compactMap { e in
                     guard let a = try? JSONDecoder().decode(WebAuthnAssertion.self, from: e.assertion) else { return nil }
-                    return Capsule.Endorsement(devicePublicKeyHex: e.devicePublicKey.hexString,
+                    return SealCapsule.Endorsement(devicePublicKeyHex: e.devicePublicKey.hexString,
                                                kemBundleHex: e.kemBundlePublicKeys.hexString,
-                                               assertion: Capsule.Assertion(a),
+                                               assertion: SealCapsule.Assertion(a),
                                                createdAtEpoch: RecordEvent.epochSeconds(e.createdAt))
                 })
         }
@@ -171,9 +171,9 @@ enum CapsuleBuilder {
         let snapshot = engine.estate?.id == estateID ? engine.ownerSnapshot : engine.guardedSnapshots[estateID]
         let state = snapshot.map { ReleaseMachine.state($0, now: engine.now).rawValue } ?? "unknown"
 
-        let capsule = Capsule(
-            format: Capsule.format,
-            version: Capsule.version,
+        let capsule = SealCapsule(
+            format: SealCapsule.format,
+            version: SealCapsule.version,
             relyingPartyID: CeremonyManager.relyingPartyID,
             exportedAtEpoch: RecordEvent.epochSeconds(engine.now),
             exportedBy: mine,
@@ -181,7 +181,7 @@ enum CapsuleBuilder {
             ownerHash: ownerHash,
             identities: identities,
             events: events.map { e in
-                Capsule.Event(id: e.id, estateID: e.estateID, kind: e.kind.rawValue, actorHash: e.actorHash,
+                SealCapsule.Event(id: e.id, estateID: e.estateID, kind: e.kind.rawValue, actorHash: e.actorHash,
                               actorDevicePublicKeyHex: e.actorDevicePublicKey.hexString,
                               occurredAtEpoch: e.occurredAtEpoch,
                               previousDigestHex: e.previousDigest.hexString,

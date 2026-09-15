@@ -30,11 +30,13 @@ import CryptoKit
 //
 //  COMPILER NOTE, READ BEFORE BLAMING THIS FILE. The ML-KEM API used here is
 //  CryptoKit's `MLKEM768` as introduced with iOS 26. The code in this file was
-//  written without a compiler available, and the exact member names of that
-//  API (`encapsulate()` returning `sharedSecret` and `encapsulated`,
-//  `decapsulate(_:)`, `seedRepresentation`) are the single most likely thing
-//  in the whole conversion to need a one-line correction in Xcode. Everything
-//  that touches ML-KEM is confined to this file so that correction is local.
+//  written without a compiler available; the first Xcode build showed that
+//  `PrivateKey.init()` throws and that the seed initialiser is
+//  `init(seedRepresentation:publicKey:)`, both fixed. The project's deployment
+//  target is below iOS 26 in one configuration, so every ML-KEM call is behind
+//  `#available(iOS 26.0, *)` and a phone below that gets the classical suite.
+//  Everything that touches ML-KEM is confined to this file and to
+//  `KEMPrivateBundle.newMLKEMSeed`, so any remaining correction is local.
 
 struct KEMBundle: Hashable {
     static let magic = Data("SKB1".utf8)
@@ -76,8 +78,19 @@ struct KEMPrivateBundle {
     let mlkem768Seed: Data?
 
     var publicBundle: KEMBundle {
-        KEMBundle(x25519: x25519.publicKey.rawRepresentation,
-                  mlkem768: mlkem768Seed.flatMap { try? MLKEM768.PrivateKey(seedRepresentation: $0).publicKey.rawRepresentation })
+        var lattice: Data? = nil
+        if #available(iOS 26.0, *), let seed = mlkem768Seed {
+            lattice = try? MLKEM768.PrivateKey(seedRepresentation: seed, publicKey: nil).publicKey.rawRepresentation
+        }
+        return KEMBundle(x25519: x25519.publicKey.rawRepresentation, mlkem768: lattice)
+    }
+
+    /// A fresh ML-KEM-768 seed, or nil below iOS 26.
+    static func newMLKEMSeed() -> Data? {
+        if #available(iOS 26.0, *) {
+            return try? MLKEM768.PrivateKey().seedRepresentation
+        }
+        return nil
     }
 }
 
@@ -120,6 +133,7 @@ enum HybridWrap {
         var mlkemCiphertext = Data()
         var suite = classicalSuite
         if let latticeKeyBytes = recipient.mlkem768 {
+            guard #available(iOS 26.0, *) else { throw WrapError.badRecipient }
             guard let latticeKey = try? MLKEM768.PublicKey(rawRepresentation: latticeKeyBytes) else {
                 throw WrapError.badRecipient
             }
@@ -160,8 +174,9 @@ enum HybridWrap {
         var ss2 = Data()
         var mlkemCiphertext = Data()
         if envelope.suite == hybridSuite {
+            guard #available(iOS 26.0, *) else { throw WrapError.badEnvelope }
             guard let seed = mine.mlkem768Seed, let ct = envelope.mlkemCiphertext else { throw WrapError.badEnvelope }
-            let latticeKey = try MLKEM768.PrivateKey(seedRepresentation: seed)
+            let latticeKey = try MLKEM768.PrivateKey(seedRepresentation: seed, publicKey: nil)
             ss2 = try latticeKey.decapsulate(ct).withUnsafeBytes { Data($0) }
             mlkemCiphertext = ct
         }

@@ -653,7 +653,9 @@ final class EstateEngine {
     func verifiedAuthorizations(estateID: String) async throws -> [(event: EstateEvent, body: AuthorizationBody)] {
         let (g, s) = try guardedEstate(estateID)
         guard let claim = s.claim, let epoch = g.epoch else { return [] }
-        var out: [(EstateEvent, AuthorizationBody)] = []
+        // Spelled with its labels: an array of unlabelled tuples is a
+        // different type and does not convert (see IdentityManager.authorityKeys).
+        var out: [(event: EstateEvent, body: AuthorizationBody)] = []
         for event in (guardedEvents[estateID] ?? []) where event.kind == .authorization {
             guard let body = event.body(AuthorizationBody.self), body.claimID == claim.id, body.epoch == epoch.epoch,
                   let found = try? await lookup(event.actorHash),
@@ -662,7 +664,7 @@ final class EstateEngine {
                                                        recordHeadDigest: body.recordHeadDigest)
             guard body.assertion.verify(with: key),
                   CeremonyManager.clientDataChallengeMatches(body.assertion.clientDataJSON, expected: challenge) else { continue }
-            out.append((event, body))
+            out.append((event: event, body: body))
         }
         return out
     }
