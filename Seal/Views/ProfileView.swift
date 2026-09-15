@@ -102,9 +102,9 @@ struct ProfileView: View {
                     // lost a build to a type-check timeout once already.
                     backupWarning
                     onThisPhoneSection
-                    yourKeysSection
                     yourRecordSection
                     helpSection
+                    yourKeysSection
                     accountSection
                 }
                 // iPad/large widths: keep profile content a centered, readable
@@ -269,6 +269,23 @@ struct ProfileView: View {
         // Shown whenever there is any device at all. "You have exactly one
         // phone" is an answer, not noise.
         if !devices.isEmpty { devicesCard }
+
+        // Last thing on the screen, shut. Nobody reads a truncated hex hash,
+        // and the fingerprint phrase at the top of this screen is the same
+        // number in words a person can say out loud to their daughter. This is
+        // evidence for the one day somebody needs to check it, so it sits at
+        // the bottom beside the other reference material rather than in the
+        // middle of the keys somebody came here to manage.
+        DisclosureCard(title: "Technical details") {
+            VStack(alignment: .leading, spacing: 10) {
+                infoRow("Seal", String(myRoot.credentialIDHash.prefix(24)) + "\u{2026}")
+                Text("The same seal as the words under your name.")
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.4))
+                infoRow("Directory", directoryStatus)
+                infoRow("This device", identity.deviceEndorsement != nil ? "Endorsed" : "Not endorsed")
+            }
+        }
     }
 
     @ViewBuilder
@@ -349,23 +366,6 @@ struct ProfileView: View {
         .buttonStyle(.plain)
         .padding(.horizontal, 24)
         .parentTapTarget()
-
-        // Last thing on the screen, shut. Nobody reads a truncated hex hash,
-        // and the fingerprint phrase at the top of this screen is the same
-        // number in words a person can say out loud to their daughter. This is
-        // evidence for the one day somebody needs to check it, so it sits at
-        // the bottom beside the other reference material rather than in the
-        // middle of the keys somebody came here to manage.
-        DisclosureCard(title: "Technical details") {
-            VStack(alignment: .leading, spacing: 10) {
-                infoRow("Seal", String(myRoot.credentialIDHash.prefix(24)) + "\u{2026}")
-                Text("The same seal as the words under your name.")
-                    .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.4))
-                infoRow("Directory", directoryStatus)
-                infoRow("This device", identity.deviceEndorsement != nil ? "Endorsed" : "Not endorsed")
-            }
-        }
     }
 
     @ViewBuilder
