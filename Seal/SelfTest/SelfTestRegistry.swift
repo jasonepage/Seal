@@ -7,5 +7,7 @@ enum SelfTestRegistry {
             + ClockTests.suites
             + ShamirTests.suites
             + EstateKeyTests.suites
+            + ReleaseMachineTests.suites
+            + EstateLogTests.suites
     }
 }

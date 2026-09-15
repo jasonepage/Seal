@@ -163,6 +163,16 @@ enum TimestampService {
         return records
     }
 
+    /// Stamp one digest, for the estate log (Estate/EstateEngine.swift).
+    /// Unlike `stampPending` this does not consult the Advanced toggle: an
+    /// estate's heartbeats and claims are the thing the timestamps exist for,
+    /// and the owner agreed to it when they created the estate. Returns nil
+    /// on any failure.
+    static func stamp(digest: Data, authority: String = defaultAuthority) async -> Data? {
+        guard let url = URL(string: authority) else { return nil }
+        return await request(digest: digest, from: url)
+    }
+
     /// One round trip. Returns the response bytes on success, nil on anything
     /// else. Failure is ordinary here: no network, an authority having a bad
     /// day, a captive portal returning HTML. None of those are worth an alert.
@@ -293,6 +303,71 @@ enum TimestampDER {
         var status = 0
         for offset in 0..<valueLength { status = (status << 8) | Int(bytes[index + offset]) }
         return status
+    }
+
+    /// The authority's `genTime`, read from the TSTInfo inside the token.
+    ///
+    /// TSTInfo is SEQUENCE { version, policy, messageImprint, serialNumber
+    /// INTEGER, genTime GeneralizedTime, ... }. The message imprint ends with
+    /// OUR digest, which `contains` has already located, so this walks
+    /// forward from the digest: one INTEGER (the serial), then one
+    /// GeneralizedTime (0x18). Anything else is nil. This is the same
+    /// discipline as `status`: a shallow, targeted read that can produce a
+    /// wrong answer only by returning nil, never by inventing a time. It is
+    /// used by the release feed to prefer the authority's time over the
+    /// actor's clock. The token's signature is still only verified by
+    /// tools/verify_capsule.py, and the record screen says so.
+    static func genTime(of response: Data, digest: Data) -> Date? {
+        let bytes = [UInt8](response)
+        let pin = [UInt8](digest)
+        guard !pin.isEmpty, bytes.count > pin.count else { return nil }
+        var start: Int? = nil
+        for i in 0...(bytes.count - pin.count) where Array(bytes[i..<(i + pin.count)]) == pin {
+            start = i
+            break
+        }
+        guard var index = start else { return nil }
+        index += pin.count
+
+        func skipTLV(expecting tag: UInt8) -> Range<Int>? {
+            guard index < bytes.count, bytes[index] == tag else { return nil }
+            index += 1
+            guard index < bytes.count else { return nil }
+            let first = bytes[index]
+            index += 1
+            var length = 0
+            if first < 0x80 {
+                length = Int(first)
+            } else {
+                let byteCount = Int(first & 0x7F)
+                guard byteCount > 0, byteCount <= 4, index + byteCount <= bytes.count else { return nil }
+                for _ in 0..<byteCount { length = (length << 8) | Int(bytes[index]); index += 1 }
+            }
+            guard index + length <= bytes.count else { return nil }
+            let range = index..<(index + length)
+            index += length
+            return range
+        }
+
+        guard skipTLV(expecting: 0x02) != nil,                  // serialNumber
+              let timeRange = skipTLV(expecting: 0x18),          // genTime
+              let text = String(bytes: bytes[timeRange], encoding: .ascii),
+              text.count >= 15, text.hasSuffix("Z") else { return nil }
+        // YYYYMMDDHHMMSS[.fff]Z
+        let core = String(text.prefix(14))
+        guard core.allSatisfy(\.isNumber) else { return nil }
+        func part(_ from: Int, _ length: Int) -> Int? {
+            let s = core.index(core.startIndex, offsetBy: from)
+            return Int(core[s..<core.index(s, offsetBy: length)])
+        }
+        guard let year = part(0, 4), let month = part(4, 2), let day = part(6, 2),
+              let hour = part(8, 2), let minute = part(10, 2), let second = part(12, 2) else { return nil }
+        var components = DateComponents()
+        components.year = year; components.month = month; components.day = day
+        components.hour = hour; components.minute = minute; components.second = second
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        return calendar.date(from: components)
     }
 
     /// Byte scan, used only to REJECT a token that cannot be about our event.
