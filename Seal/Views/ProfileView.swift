@@ -103,8 +103,8 @@ struct ProfileView: View {
                     backupWarning
                     onThisPhoneSection
                     yourRecordSection
-                    helpSection
                     yourKeysSection
+                    helpSection
                     accountSection
                 }
                 // iPad/large widths: keep profile content a centered, readable
