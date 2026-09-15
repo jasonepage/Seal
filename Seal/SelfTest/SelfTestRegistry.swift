@@ -5,5 +5,7 @@ enum SelfTestRegistry {
     static var suites: [SelfTest.Suite] {
         SecurityFixTests.suites
             + ClockTests.suites
+            + ShamirTests.suites
+            + EstateKeyTests.suites
     }
 }

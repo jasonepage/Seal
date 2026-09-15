@@ -14,6 +14,9 @@ final class IdentityManager {
     // phone gets its own key (no cross-identity device-key linkage).
     private static func deviceKeyTag(_ hash: String) -> String { "seal.deviceKey.\(hash)" }
     private static func kemKeyTag(_ hash: String) -> String { "seal.kemKey.\(hash)" }
+    /// ML-KEM-768 seed (Crypto/KEMBundle.swift). Absent on phones that
+    /// predate the hybrid bundle; minted on the next sign-in.
+    private static func mlkemKeyTag(_ hash: String) -> String { "seal.mlkemKey.\(hash)" }
     // Legacy un-scoped tags (pre-scoping builds) — migrated once on load.
     private static let legacyDeviceKeyTag = "seal.deviceKey"
     private static let legacyKemKeyTag = "seal.kemKey"
@@ -53,7 +56,20 @@ final class IdentityManager {
         let kem = Curve25519.KeyAgreement.PrivateKey()
         KeychainStore.save(kem.rawRepresentation, for: Self.kemKeyTag(identityHash))
         kemPrivateKey = kem
+        mintMLKEMIfMissing(for: identityHash)
         return key
+    }
+
+    /// The lattice half of the KEM bundle. Software key, this device only,
+    /// its public half signed into the endorsement beside the X25519 key.
+    private func mintMLKEMIfMissing(for identityHash: String) {
+        if let seed = KeychainStore.load(Self.mlkemKeyTag(identityHash)) {
+            mlkemSeed = seed
+            return
+        }
+        let seed = MLKEM768.PrivateKey().seedRepresentation
+        KeychainStore.save(seed, for: Self.mlkemKeyTag(identityHash))
+        mlkemSeed = seed
     }
 
     /// Reuse this phone's existing device key for `identityHash` if the
@@ -78,13 +94,24 @@ final class IdentityManager {
             KeychainStore.save(kem.rawRepresentation, for: Self.kemKeyTag(identityHash))
             kemPrivateKey = kem
         }
+        mintMLKEMIfMissing(for: identityHash)
         return key
     }
 
-    /// This device's X25519 KEM private key (decrypts wrapped sender keys).
+    /// This device's X25519 KEM private key.
     private(set) var kemPrivateKey: Curve25519.KeyAgreement.PrivateKey?
+    /// This device's ML-KEM-768 seed, nil on a phone that has not signed in
+    /// since the hybrid bundle landed.
+    private(set) var mlkemSeed: Data?
 
-    var kemPublicKeyData: Data? { kemPrivateKey?.publicKey.rawRepresentation }
+    /// Both halves together, for opening estate wraps.
+    var kemPrivateBundle: KEMPrivateBundle? {
+        kemPrivateKey.map { KEMPrivateBundle(x25519: $0, mlkem768Seed: mlkemSeed) }
+    }
+
+    /// What goes into the device endorsement: the hybrid bundle when this
+    /// phone has an ML-KEM key, the bare X25519 key otherwise.
+    var kemPublicKeyData: Data? { kemPrivateBundle?.publicBundle.encoded }
 
     // MARK: - Registration persistence
 
@@ -142,8 +169,9 @@ final class IdentityManager {
     func signOut() {
         rootIdentity = nil
         deviceEndorsement = nil
-        deviceKey = nil          // in-memory only — keychain copy survives
+        deviceKey = nil          // in-memory only; the keychain copy survives
         kemPrivateKey = nil
+        mlkemSeed = nil
         KeychainStore.delete(Self.identityKey)
         KeychainStore.delete(Self.endorsementKey)
     }
@@ -162,7 +190,9 @@ final class IdentityManager {
         if let hash {
             KeychainStore.delete(Self.deviceKeyTag(hash))
             KeychainStore.delete(Self.kemKeyTag(hash))
+            KeychainStore.delete(Self.mlkemKeyTag(hash))
         }
+        mlkemSeed = nil
         // Legacy un-scoped keys, if any, go too.
         KeychainStore.delete(Self.legacyDeviceKeyTag)
         KeychainStore.delete(Self.legacyKemKeyTag)
@@ -194,6 +224,7 @@ final class IdentityManager {
         if let data = KeychainStore.load(Self.kemKeyTag(hash)) {
             kemPrivateKey = try? Curve25519.KeyAgreement.PrivateKey(rawRepresentation: data)
         }
+        mlkemSeed = KeychainStore.load(Self.mlkemKeyTag(hash))
     }
 
     // MARK: - Verification

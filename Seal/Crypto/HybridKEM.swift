@@ -1,10 +1,9 @@
 import Foundation
 import CryptoKit
 
-/// Key wrapping for sender-chain distribution (SDS §2).
-/// v1: X25519 ephemeral-static ECDH + HKDF + AES-256-GCM.
-/// TODO(post-spike): add ML-KEM-768 alongside X25519 (hybrid — both secrets
-/// feed one HKDF) once the CryptoKit API surface is confirmed on-device.
+/// Classical key wrapping (X25519 ephemeral-static ECDH + HKDF + AES-256-GCM).
+/// Used by custody receipts. The estate wraps use the hybrid X25519 plus
+/// ML-KEM-768 construction in Crypto/KEMBundle.swift instead.
 enum HybridKEM {
     struct Envelope: Codable {
         let ephemeralPublicKey: Data
@@ -16,7 +15,12 @@ enum HybridKEM {
     // MARK: - Single-envelope primitives
 
     /// ECDH-wrap a chain key to ONE recipient device X25519 public key.
-    private static func wrapEnvelope(_ chainKey: Data, to recipientKEMPublicKey: Data) throws -> Envelope {
+    private static func wrapEnvelope(_ chainKey: Data, to recipientKEMPublicKeyOrBundle: Data) throws -> Envelope {
+        // An endorsement may now carry a hybrid KEMBundle (Crypto/KEMBundle.swift)
+        // instead of a bare X25519 key. This legacy path uses the X25519 half
+        // either way, so receipts keep working against every endorsement.
+        guard let bundle = KEMBundle.parse(recipientKEMPublicKeyOrBundle) else { throw KEMError.badRecipientKey }
+        let recipientKEMPublicKey = bundle.x25519
         guard let recipientPub = try? Curve25519.KeyAgreement.PublicKey(
             rawRepresentation: recipientKEMPublicKey) else { throw KEMError.badRecipientKey }
 
