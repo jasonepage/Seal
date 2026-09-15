@@ -42,6 +42,13 @@ struct EnvelopeEditorView: View {
                                 .scrollContentBackground(.hidden)
                                 .frame(minHeight: 160)
                         }
+                        // The letter only. Deliberately NOT on the secrets,
+                        // where a password read aloud in a kitchen is a worse
+                        // idea than typing it, and where a transcriber that
+                        // hears "capital B, one, ampersand" and writes
+                        // something close is a secret that quietly stops
+                        // working. Secrets are typed, exactly as written.
+                        DictationButton(text: $envelope.letter)
                         secretsBlock
                         mediaBlock
                         Text("Written for \(recipientName). Opens on their phone, in the order you choose, only after your custodians release it.")

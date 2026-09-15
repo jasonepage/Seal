@@ -168,6 +168,14 @@ struct EnvelopeInterviewView: View {
 
             answerBox
 
+            // Talking beats typing for the question this screen is asking,
+            // and it is the microphone Seal can make a promise about, unlike
+            // the one on the system keyboard right above it (Dictation.swift).
+            // It draws nothing at all on a phone that cannot transcribe on
+            // device, so there is no dead control to explain.
+            DictationButton(text: answerBinding,
+                            promise: "Your voice stays on this phone. Seal does not send it anywhere.")
+
             if askingFollowUp {
                 HStack(spacing: 10) {
                     ProgressView().tint(.white.opacity(0.6))

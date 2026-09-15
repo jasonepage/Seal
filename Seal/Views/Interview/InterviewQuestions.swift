@@ -175,7 +175,11 @@ enum InterviewQuestions {
     enum Intro {
         static let title = "A few questions, then a draft."
 
-        static let promise = "Nothing you write here leaves your phone. There is no account, no server and no upload in this part of Seal. Anything smart happens on the phone itself, or not at all."
+        // Says "write or say" because this screen now offers a microphone.
+        // The old wording promised only about typing while a microphone sat
+        // one tap away, which is the exact shape of a promise that is true
+        // and reads as a lie the moment somebody uses the other input.
+        static let promise = "Nothing you write or say here leaves your phone. There is no account, no server and no upload in this part of Seal. Your voice is turned into words on the phone itself, or not at all."
 
         static let control = "At the end you get a draft in the normal editor. You change every word of it. Nothing is sealed, signed or sent until you tap Seal yourself."
 
