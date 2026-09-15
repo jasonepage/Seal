@@ -4,7 +4,9 @@ import UIKit
 //  SystemCameraPicker.swift
 //  Seal
 //
-//  The system camera, for a handover photo or an envelope photo. The custom
+//  The system camera, for an envelope photo. It also served the handover
+//  photo until the general-purpose handover screen was removed; a key
+//  handover to a custodian never had a photo. The custom
 //  AVFoundation controller that lived in Seal/Camera went with the chat; a
 //  legacy product needs a photo taken, not a camera-forward experience, and
 //  the system picker is bigger, plainer and reads better with Bigger text on.

@@ -47,15 +47,13 @@ struct HomeView: View {
                 .requestAuthorization(options: [.alert, .sound, .badge])
             await MainActor.run { UIApplication.shared.registerForRemoteNotifications() }
             await sync.ensureInviteSubscription(for: myRoot.credentialIDHash)
-            await ForgeHandshakeService.check(myRoot: myRoot, identity: identity,
-                                              friendStore: friendStore, sync: sync)
+            await checkInbound()
             await refreshEverything()
         }
         .onReceive(NotificationCenter.default.publisher(for: AppDelegate.messageArrived)) { _ in
             guard !DemoFixtures.isActive else { return }
             Task {
-                await ForgeHandshakeService.check(myRoot: myRoot, identity: identity,
-                                                  friendStore: friendStore, sync: sync)
+                await checkInbound()
                 await refreshEverything()
             }
         }
@@ -63,12 +61,29 @@ struct HomeView: View {
             if phase == .active, !DemoFixtures.isActive {
                 Task {
                     try? await UNUserNotificationCenter.current().setBadgeCount(0)
-                    await ForgeHandshakeService.check(myRoot: myRoot, identity: identity,
-                                                      friendStore: friendStore, sync: sync)
+                    await checkInbound()
                     await refreshEverything()
                 }
             }
         }
+    }
+
+    /// Anything addressed to this phone that arrives through the directory
+    /// rather than through a tap: the other half of a forge handshake, and a
+    /// handover receipt somebody issued to us.
+    ///
+    /// The receipt pull used to live in the Handovers screen, which meant a
+    /// custodian only learned they had been handed a key if they went looking
+    /// for a page most of them would never open. That screen is gone and this
+    /// runs on every launch, every foreground and every push instead, which
+    /// is where it should have been.
+    private func checkInbound() async {
+        await ForgeHandshakeService.check(myRoot: myRoot, identity: identity,
+                                          friendStore: friendStore, sync: sync)
+        let receipts = ReceiptStore(ownerHash: myRoot.credentialIDHash)
+        receipts.loadIfNeeded()
+        await ReceiptService.check(myRoot: myRoot, identity: identity,
+                                   store: receipts, sync: sync)
     }
 
     /// The heartbeat first, because it is the line that matters most, then

@@ -306,16 +306,12 @@ struct ProfileView: View {
         .padding(.horizontal, 24)
         .parentTapTarget()
 
-        NavigationLink {
-            ReceiptsView(myRoot: myRoot, identity: identity,
-                         ceremony: ceremony, sync: sync)
-        } label: {
-            pageRow("Handovers", "shippingbox.fill",
-                    "Signed receipts for things handed over in person.")
-        }
-        .buttonStyle(.plain)
-        .padding(.horizontal, 24)
-        .parentTapTarget()
+        // There was a "Handovers" page here, and a 573-line screen behind it
+        // for photographing any object and signing a receipt for it with
+        // anybody, friend or not. That was the messenger's ambition, not this
+        // product's. The one handover that matters to a will is the security
+        // key reaching a custodian, and that is recorded from the person's
+        // own page and shows up in the Record as a line like any other.
 
         // Off by default and asked for explicitly, because turning it on
         // means something leaves this phone. Silver: it changes what Seal can
