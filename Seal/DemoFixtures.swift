@@ -358,14 +358,14 @@ enum DemoFixtures {
 
         // Group: friends planning to meet — reactions + a quote-reply in the
         // hero screenshot (the product in one frame).
-        add(ChatEngine.Chat(id: UUID(), name: "haul out 🦭",
+        add(ChatEngine.Chat(id: UUID(), name: "cabin trip 🦭",
                             memberHashes: [owner, maya, alex, sam],
                             ttl: nil, epoch: 0, creatorHash: owner),
             [Line(sender: maya, text: "who's in for the climbing gym saturday", minutesAgo: 38),
-             Line(sender: alex, text: "in. bringing my brother — he wants his ring forged after",
+             Line(sender: alex, text: "in. bringing my brother, he wants to get set up after",
                   minutesAgo: 31, reactions: [maya: "🔥", owner: "👍"]),
              Line(sender: owner, text: "I'll bring the spare key for him", minutesAgo: 24),
-             Line(sender: sam, text: "another one joins the colony 🦭",
+             Line(sender: sam, text: "one more of us 🦭",
                   minutesAgo: 17, reactions: [owner: "❤️", maya: "🦭"]),
              Line(sender: maya, text: "10am. don't be late nathan", minutesAgo: 6, replyTo: 2)])
 
@@ -412,9 +412,9 @@ enum DemoFixtures {
         add(ChatEngine.Chat(id: ChatEngine.pairChatID(owner, alex),
                             name: "Alex",
                             memberHashes: [owner, alex], ttl: nil),
-            [Line(sender: alex, text: "forged with two people at the meetup last night",
+            [Line(sender: alex, text: "added two people at the meetup last night",
                   minutesAgo: 1_320, reactions: [owner: "🔥"]),
-             Line(sender: owner, text: "your forge log is growing fast", minutesAgo: 1_290)])
+             Line(sender: owner, text: "your history is growing fast", minutesAgo: 1_290)])
 
         // 1:1 carrying the Sealed Card (docs/CARDS.md). The card is INBOUND on
         // purpose: the recipient's side is the one with the Copy button and the

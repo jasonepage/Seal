@@ -610,12 +610,10 @@ struct VerificationSheet: View {
                         .foregroundStyle(SealTheme.brass)
                         .padding(.top, 28)
 
-                    // Parent Mode says the same thing without the vocabulary. The
-                    // original sentence is not deleted — it moves into Details
-                    // below, verbatim.
-                    Text(parentMode
-                         ? "Messages here are locked to your phone and theirs. Anything that doesn't check out is never shown to you."
-                         : "Every message is encrypted on-device and its signature chain is verified before display. Unverifiable messages are dropped.")
+                    // The plain sentence for everyone. The technical one is
+                    // not deleted: it sits in the Details disclosure lower down
+                    // in this same drawer, verbatim.
+                    Text("Messages here are locked to your phone and theirs. Anything that doesn't check out is never shown to you.")
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.6))
                         .multilineTextAlignment(.center)
@@ -624,7 +622,7 @@ struct VerificationSheet: View {
                     VStack(spacing: 14) {
                         memberRow(name: "\(myRoot.displayName) (you)", tier: myRoot.tier, publicKey: myRoot.publicKey,
                                   perks: perksByMember[myRoot.credentialIDHash] ?? [],
-                                  plainLine: parentMode ? "This is you." : nil)
+                                  plainLine: "This is you.")
                         ForEach(otherMembers, id: \.credentialIDHash) { member in
                             HStack {
                                 memberRow(name: member.displayName, tier: member.tier, publicKey: member.publicKey,
@@ -666,10 +664,12 @@ struct VerificationSheet: View {
 
                     // Introduce this person to someone else you've met in
                     // person. 1:1 only (an introduction names exactly two
-                    // people), in-person only (it doesn't chain), and not in
-                    // Parent Mode (UI.md §Parent Mode: accepting yes,
-                    // initiating no — that's the helper's job).
-                    if !parentMode, let candidate = introduceCandidate {
+                    // people) and in-person only (it doesn't chain). The
+                    // old "not in Parent Mode" rule went with the mode:
+                    // making an introduction is not an advanced act, and
+                    // gating it on a text-size switch would hide a
+                    // headline feature from whoever turned the type up.
+                    if let candidate = introduceCandidate {
                         Button {
                             introducing = candidate
                         } label: {
@@ -692,16 +692,14 @@ struct VerificationSheet: View {
                         .padding(.horizontal, 24)
                     }
 
-                    if parentMode {
-                        parentDetails
-                            .padding(.horizontal, 24)
-                    } else {
-                        Text("Say these phrases out loud together — matching phrases mean matching keys.")
-                            .font(.caption2)
-                            .foregroundStyle(.white.opacity(0.4))
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 40)
-                    }
+                    // The Details disclosure is now everyone's. It is a
+                    // strict superset of what the top level used to show:
+                    // the technical sentence, every member's fingerprint
+                    // phrase, the instruction to say them out loud, and the
+                    // epoch line. Nothing was dropped, it moved one tap
+                    // down (docs/COLDSTART.md).
+                    parentDetails
+                        .padding(.horizontal, 24)
 
                     // The TTL disclosure stays visible in BOTH modes. It is a
                     // limitation of the promise this drawer makes, not vocabulary,
@@ -711,13 +709,6 @@ struct VerificationSheet: View {
                         Text("Disappearing messages are deleted from devices on schedule, but screenshots are always possible.")
                             .font(.caption2)
                             .foregroundStyle(.orange.opacity(0.8))
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 40)
-                    }
-                    if !parentMode, chat.currentEpoch > 0 {
-                        Text("Keys rotated \(chat.currentEpoch) time\(chat.currentEpoch == 1 ? "" : "s") — removed members can't read anything sent after their removal.")
-                            .font(.caption2)
-                            .foregroundStyle(.white.opacity(0.4))
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 40)
                     }
@@ -836,23 +827,12 @@ struct VerificationSheet: View {
                         .font(.callout)
                         .foregroundStyle(.white.opacity(0.75))
                         .fixedSize(horizontal: false, vertical: true)
-                } else if !parentMode {
-                    // Brass is for people whose key was tapped in front of
-                    // somebody. A linked friend's phrase is the same fact
-                    // rendered in silver — still worth saying out loud, still
-                    // not a claim that you have met.
-                    //
-                    // `!parentMode` because a linked friend gets no plainLine
-                    // (this phone cannot say "this is really them"), and
-                    // without this guard that nil would drop the raw phrase
-                    // into the top-level row — the exact thing UI.md §6.5 moves
-                    // behind Details. The provenance and vouch lines above are
-                    // the plain words in that mode; the phrase is one
-                    // disclosure away, as it is for everyone else.
-                    Text(FingerprintPhrase.phrase(for: publicKey))
-                        .font(.callout)
-                        .foregroundStyle(linked ? SealTheme.silver : SealTheme.brass)
                 }
+                // A member with no plain line (a linked friend, where this
+                // phone cannot say "this is really them") shows no raw
+                // fingerprint phrase here. Every member's phrase is in the
+                // Details disclosure, which is where UI.md 6.5 put it and
+                // where it now stays for everyone.
                 // Founder EDITION line (never a tier change): only rendered
                 // after the full grant+claim chain verified (PerkAuthority).
                 ForEach(perks, id: \.grant.codeHashHex) { perk in

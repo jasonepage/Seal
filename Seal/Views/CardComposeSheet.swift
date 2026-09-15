@@ -356,7 +356,7 @@ struct CardComposeSheet: View {
     @ViewBuilder
     private var ttlWarning: some View {
         if let ttl = engine.chats.first(where: { $0.id == chat.id })?.ttl {
-            Label("Disappearing messages are on in this chat — this card will be deleted after \(ttlLabel(ttl)), like every other message.",
+            Label("Disappearing messages are on in this chat, so this card will be deleted after \(ttlLabel(ttl)) like every other message. Your record keeps the title and the time. The value goes.",
                   systemImage: "hourglass")
                 .font(.caption)
                 .foregroundStyle(.orange.opacity(0.85))

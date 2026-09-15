@@ -44,7 +44,7 @@ struct ForgeLogView: View {
             VStack(spacing: 16) {
                 // Stats header
                 HStack(spacing: 12) {
-                    stat("\(forged.count)", "forged")
+                    stat("\(forged.count)", "in person")
                     stat("\(verifiedCount)", "verified")
                     stat("\(monthsActive)", monthsActive == 1 ? "month" : "months")
                 }
@@ -54,8 +54,8 @@ struct ForgeLogView: View {
                 if sorted.isEmpty {
                     Spacer()
                     SealMascot(size: 52,
-                               line: "Your forge log is empty.",
-                               sub: "Every friendship you forge is recorded here —\nsigned proof that you met.")
+                               line: "Your history is empty.",
+                               sub: "Everyone you add in person is recorded here,\nsigned proof that you met.")
                     Spacer()
                 } else {
                     List {
@@ -94,8 +94,8 @@ struct ForgeLogView: View {
                 }
                 if linkedCount > 0 {
                     Text(linkedCount == 1
-                         ? "1 linked friend isn't shown here — the forge log is only what you forged in person."
-                         : "\(linkedCount) linked friends aren't shown here — the forge log is only what you forged in person.")
+                         ? "1 linked friend isn't shown here. History only holds people you added in person."
+                         : "\(linkedCount) linked friends aren't shown here. History only holds people you added in person.")
                         .font(.caption2)
                         .foregroundStyle(SealTheme.silver.opacity(0.8))
                         .multilineTextAlignment(.center)
@@ -105,7 +105,7 @@ struct ForgeLogView: View {
                 }
             }
         }
-        .navigationTitle("Forge log")
+        .navigationTitle("History")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .preferredColorScheme(.dark)
@@ -114,7 +114,7 @@ struct ForgeLogView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     ShareLink(
                         item: shareCard,
-                        preview: SharePreview("My forge log", image: shareCard)
+                        preview: SharePreview("My Seal history", image: shareCard)
                     ) {
                         Image(systemName: "square.and.arrow.up")
                             .foregroundStyle(SealTheme.brass)
@@ -181,7 +181,7 @@ struct ForgeShareCard: View {
                 .font(.system(size: 88, weight: .bold, design: .rounded))
                 .foregroundStyle(SealTheme.brass)
                 .padding(.top, 12)
-            Text(forged == 1 ? "human forged" : "humans forged")
+            Text(forged == 1 ? "person met" : "people met")
                 .font(.system(.title3, design: .rounded, weight: .medium))
                 .foregroundStyle(.white)
 
@@ -198,10 +198,10 @@ struct ForgeShareCard: View {
             Spacer()
 
             VStack(spacing: 3) {
-                Text("\(name)'s forge log")
+                Text("\(name)'s Seal history")
                     .font(.system(.footnote, design: .rounded, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.8))
-                Text("Every friendship forged in person · sealmessenger.com")
+                Text("Everyone added in person · sealmessenger.com")
                     .font(.caption2)
                     .foregroundStyle(.white.opacity(0.4))
             }

@@ -189,6 +189,6 @@ struct ColonyBar: View {
 #Preview {
     ZStack {
         SealTheme.ink.ignoresSafeArea()
-        SealMascot(size: 72, line: "No colonies yet.", sub: "Forge a friend in Circle.")
+        SealMascot(size: 72, line: "No chats yet.", sub: "Add someone in person.")
     }
 }

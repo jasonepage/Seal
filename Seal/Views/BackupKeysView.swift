@@ -32,16 +32,18 @@ enum BackupKeyCopy {
     /// to leave it — so the copy gives the instruction, not just the fact.
     static let recoveredBody = "You signed in with your backup key, so you are still you — same name, same seal, and your family can check it's really you. Your chats and your friend list are not here: they were on the phone you lost. Your family will need to add you again, in person.\n\nYour main key is gone too, and this phone can't add another backup key or replace the one you used — both need the main key. So one more loss would take this identity for good."
 
+    /// Same reasoning as promptTitle: the flag no longer knows whether
+    /// anyone else is involved, so the copy stops assuming one.
     static func recoveredAction(parentMode: Bool) -> String {
-        parentMode
-            ? "Ask whoever set up this phone to help you start fresh when they can."
-            : "Start fresh when you can — this identity can't be made safe again."
+        "Start fresh when you can. This identity can't be made safe again."
     }
 
-    /// Parent Mode aims the prompt at the person setting the phone up, not at
-    /// the person holding it (UI.md §Parent Mode). Never names a category.
+    /// One string. This used to aim at "the family helper" whenever Parent
+    /// Mode was on, which made sense while that flag meant "somebody else set
+    /// this phone up". It now means "bigger text", and naming a helper to
+    /// anyone who turned up the type size would be guessing about their life.
     static func promptTitle(parentMode: Bool) -> String {
-        parentMode ? "Add the family helper's key as backup." : "Add a backup key."
+        "Add a backup key."
     }
 }
 
@@ -97,10 +99,6 @@ struct BackupKeysSection: View {
             Button { showAdd = true } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "key.radiowaves.forward")
-                    // In Simplified mode the phone is usually being set up
-                    // BY the helper, so name the thing they're being asked for
-                    // (UI.md §Parent Mode). Still never names a category of
-                    // person for the phone's owner to read.
                     Text(addLabel)
                     Spacer()
                     Image(systemName: "chevron.right")
@@ -172,7 +170,7 @@ struct BackupKeysSection: View {
 
     private var addLabel: String {
         if !backups.isEmpty { return "Add another backup key" }
-        return parentMode ? "Add the family helper's key" : "Add a backup key"
+        return "Add a backup key"
     }
 
     private func backupRow(_ backup: BackupCredential) -> some View {

@@ -124,7 +124,9 @@ struct ContentView: View {
         if let hash = identity.rootIdentity?.credentialIDHash {
             FriendStore.wipe(ownerHash: hash)
             ChatEngine.wipe(ownerHash: hash)
-            ReceiptStore.wipe(ownerHash: hash)   // receipts are evidence — never leave them behind
+            ReceiptStore.wipe(ownerHash: hash)   // receipts are evidence, never leave them behind
+            RecordStubStore.wipe(ownerHash: hash)
+            TimestampStore.wipe(ownerHash: hash)
             AppLock.wipe(ownerHash: hash)
             PerkRedeemer.wipe(ownerHash: hash)
         }

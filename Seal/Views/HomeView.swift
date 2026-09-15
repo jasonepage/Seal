@@ -19,21 +19,16 @@ struct HomeView: View {
     /// presentation state, not an engine — see Theme/ParentMode.swift. It is
     /// per identity, so it is rebuilt whenever the signed-in identity changes.
     @State private var parentMode: ParentMode?
-    @State private var showParentProfile = false
+    @State private var showProfile = false
 
     var body: some View {
-        Group {
-            if parentMode?.isOn == true {
-                parentShell
-            } else {
-                fullShell
-            }
-        }
+        shell
         .tint(SealTheme.brass)
         .preferredColorScheme(.dark)
-        // Injected ONCE, above both shells. Everything below reads
-        // \.parentMode from the environment instead of threading a flag
-        // through five initialisers.
+        // Injected ONCE. This flag no longer chooses between two shells, since
+        // there is only one: it means bigger type and bigger tap targets, and
+        // nothing else. Everything below reads it from the environment rather
+        // than taking a flag through five initialisers.
         .environment(\.parentMode, parentMode?.isOn == true)
         .onAppear { ensureParentMode() }
         .onChange(of: myRoot.credentialIDHash) { _, _ in ensureParentMode() }
@@ -92,51 +87,33 @@ struct HomeView: View {
         }
     }
 
-    // MARK: - Shells
+    // MARK: - Shell
 
-    /// The normal four-tab shell (docs/UI.md §2).
-    private var fullShell: some View {
-        TabView {
-            Tab("Chats", systemImage: "bubble.left.and.bubble.right.fill") {
-                ChatsView(myRoot: myRoot, chatEngine: chatEngine, friendStore: friendStore)
-            }
-            Tab("Camera", systemImage: "camera.fill") {
-                CameraTab(myRoot: myRoot, chatEngine: chatEngine, friendStore: friendStore)
-            }
-            Tab("Circle", systemImage: "person.2.fill") {
-                FriendsView(myRoot: myRoot, ceremony: ceremony, sync: sync,
-                            friendStore: friendStore, chatEngine: chatEngine)
-            }
-            Tab("You", systemImage: "checkmark.seal.fill") {
-                ProfileView(myRoot: myRoot, identity: identity, sync: sync,
-                            ceremony: ceremony, appLock: appLock,
-                            perkRedeemer: perkRedeemer, parentMode: parentMode,
-                            onSignOut: onSignOut, onDelete: onDelete)
-            }
-        }
-    }
-
-    /// Parent Mode: chats and nothing else. No tab bar at all — a tab bar with
-    /// one tab is just a stripe of wasted screen — so the chat list IS the app,
-    /// and Profile is one avatar tap away in its toolbar.
+    /// ONE shell (docs/COLDSTART.md). No tab bar: a chat list is what this app
+    /// is, and everything else is one tap off its toolbar.
     ///
-    /// The Camera tab is gone but photos are not: the composer inside a chat
-    /// opens the same CameraTab in a cover, pre-aimed at that chat.
-    /// The Circle tab is gone, which means the friend ceremony is not reachable
-    /// in this mode — by design, since the helper who set the phone up is the
-    /// one who forges friendships. Profile says so in plain words and the way
-    /// back is the same toggle that got here.
-    private var parentShell: some View {
+    /// Where the four tabs went:
+    /// - Camera: the composer inside a chat opens CameraTab in a cover,
+    ///   pre-aimed at that chat, which is where a photo was always going.
+    /// - Circle: the people button in the chat list toolbar, plus "Add someone"
+    ///   in the compose menu for the case that actually starts a friendship.
+    /// - You: the identity ring in the leading toolbar slot, which opens this
+    ///   sheet.
+    /// - Chats: it is the app now.
+    private var shell: some View {
         ChatsView(myRoot: myRoot, chatEngine: chatEngine, friendStore: friendStore,
-                  onOpenProfile: { showParentProfile = true })
-            .sheet(isPresented: $showParentProfile) {
+                  ceremony: ceremony, sync: sync,
+                  onOpenProfile: { showProfile = true })
+            .sheet(isPresented: $showProfile) {
                 ProfileView(myRoot: myRoot, identity: identity, sync: sync,
                             ceremony: ceremony, appLock: appLock,
-                            perkRedeemer: perkRedeemer, parentMode: parentMode,
+                            perkRedeemer: perkRedeemer, friendStore: friendStore,
+                            chatEngine: chatEngine,
+                            parentMode: parentMode,
                             onSignOut: onSignOut, onDelete: onDelete,
-                            onClose: { showParentProfile = false })
-                    // A sheet is a separate branch of the tree, so it needs the
-                    // flag and the type bump applied again here.
+                            onClose: { showProfile = false })
+                    // A sheet is a separate branch of the tree, so the flag and
+                    // the type bump are applied again here.
                     .environment(\.parentMode, parentMode?.isOn == true)
                     .parentTypeScale()
             }

@@ -26,7 +26,7 @@ struct NewGroupView: View {
 
                     if friendStore.friends.isEmpty {
                         Spacer()
-                        Text("You need forged friends to start a group.")
+                        Text("You need people you've added in person to start a group.")
                             .foregroundStyle(.white.opacity(0.5))
                         Spacer()
                     } else {

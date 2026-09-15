@@ -1,6 +1,6 @@
 # Introductions — a mutual friend vouches, remotely
 
-**Status:** implemented 2026-08-25, UNVERIFIED ON DEVICE · **Code:** `Seal/Introductions/Introduction.swift`, `ChatEngine` (three payload kinds), `Seal/Views/IntroductionCard.swift`, `Seal/Views/IntroduceSheet.swift` · **Companions:** [SDS.md](SDS.md) §2/§5, [TRUST.md](TRUST.md) §5.1, [UI.md](UI.md) §1/§6, [CARDS.md](CARDS.md)
+**Status:** implemented 2026-08-25, UNVERIFIED ON DEVICE · **Code:** `Seal/Introductions/Introduction.swift`, `ChatEngine` (three payload kinds), `Seal/Views/IntroductionCard.swift`, `Seal/Views/IntroduceSheet.swift` · **Companions:** [SDS.md](SDS.md) §2/§5, [TRUST.md](archive/TRUST.md) §5.1, [UI.md](UI.md) §1/§6, [CARDS.md](CARDS.md)
 
 ---
 
@@ -208,7 +208,7 @@ and `kind:"card"` do. This is not only the established pattern — the
 GroupInvite and ForgeHandshake records live in the **world-readable public
 database**, and an introduction names two people plus the fact that a third
 vouched for them, which is precisely the who-knows-whom data
-[TRUST.md](TRUST.md) **D3** ("counts public, edges private") says stays private.
+[TRUST.md](archive/TRUST.md) **D3** ("counts public, edges private") says stays private.
 The chat pipeline encrypts it; a public record would publish it.
 
 The cost of that choice is stated in §5: a phone that loses its chain state

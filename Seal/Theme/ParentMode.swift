@@ -1,10 +1,13 @@
 import SwiftUI
 
-/// Parent Mode — a per-DEVICE presentation mode (docs/UI.md §Parent Mode).
+/// Text size — a per-DEVICE presentation flag (docs/COLDSTART.md).
 ///
-/// The family anti-scam story: an adult child sets Seal up on an aging
-/// parent's phone and hands it over simplified. What that means here is
-/// deliberately narrow — **presentation only**.
+/// WHAT THIS USED TO BE. It was "Parent Mode", then "Simplified mode": a
+/// second shell for a phone an adult child had set up and handed to a parent.
+/// That shell is now the ONLY shell, so this flag no longer chooses between
+/// two apps. It does exactly one thing: bigger type and bigger tap targets.
+/// The type name and the keychain key are unchanged so no one's setting is
+/// lost on upgrade; only the meaning and the label narrowed.
 ///
 /// Nothing underneath moves. Same identity, same friends, same wire format,
 /// same signatures, same directory. A Parent Mode phone and a normal phone
@@ -17,10 +20,13 @@ import SwiftUI
 /// wiped by sign-out and by delete along with every other local flag: a new
 /// identity on this phone starts normal.
 ///
-/// **Naming rule.** It is "Simplified mode" in every string a user can read.
-/// Never "elderly mode", never "parent mode" — the person holding the phone
-/// is reading these strings, and the whole point is that the phone doesn't
-/// treat them as a category.
+/// **Naming rule.** It is "Bigger text" in every string a user can read.
+/// Never "elderly mode", never "parent mode", and no longer "Simplified mode"
+/// either: the person holding the phone is reading these strings, and a switch
+/// should be named for what it does rather than for who someone assumes is
+/// pressing it. Copy must never branch on this flag. If a sentence is clearer
+/// in plain words, it is clearer for everybody, and the technical version
+/// belongs in a Details disclosure, not behind a type-size switch.
 @Observable
 final class ParentMode {
     private(set) var isOn: Bool

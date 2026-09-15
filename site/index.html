@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" type="image/png" href="/favicon.png">
 <link rel="apple-touch-icon" href="/favicon.png">
-<title>Seal — Protect your family from impersonation scams</title>
-<meta name="description" content="Seal is the sealed channel for your family. Voice clones and fake texts can imitate anyone — but they can't fake a Seal. One app, one rule: if it's about money, it arrives sealed.">
+<title>Seal: for the things you can't unsend</title>
+<meta name="description" content="A private photo. A wallet address. An account number. Send one to the wrong person and you can't take it back. In Seal there is no wrong person on the other end: you add someone by standing next to them, once.">
 <style>
   :root { --ink:#0C0E12; --ink2:#151A22; --brass:#D9A441; --brass-d:#A87428; --text:#EDE8DC; --dim:#9AA0AA; }
   * { box-sizing:border-box; }
@@ -17,7 +17,11 @@
   .logo { font-weight:700; font-size:20px; color:var(--brass); text-decoration:none; letter-spacing:.03em; }
   nav a { color:var(--dim); text-decoration:none; margin-left:20px; font-size:15px; }
   nav a:hover { color:var(--text); }
-  .hero { padding:64px 0 48px; text-align:center; }
+  .invited { background:var(--ink2); border:1px solid #232a35; border-left:3px solid var(--brass);
+             border-radius:14px; padding:16px 20px; color:var(--dim); font-size:15.5px; }
+  .invited b { color:var(--text); font-weight:600; }
+  .invited a { color:var(--brass); }
+  .hero { padding:52px 0 48px; text-align:center; }
   .hero h1 { font-size:clamp(30px,5.5vw,46px); line-height:1.12; margin:0 0 18px; letter-spacing:-.01em; }
   .hero h1 em { color:var(--brass); font-style:normal; }
   .hero p { color:var(--dim); font-size:19px; max-width:34em; margin:0 auto 30px; }
@@ -33,6 +37,7 @@
   .col h3 { font-size:17px; margin:0 0 6px; color:var(--brass); }
   .col p { margin:0; color:var(--dim); font-size:15.5px; }
   .quiet { color:var(--dim); font-size:15px; }
+  .quiet + .quiet { margin-top:14px; }
   footer { border-top:1px solid #232a35; margin-top:64px; padding:28px 0 48px; color:var(--dim); font-size:14px; }
   footer a { color:var(--dim); }
 </style>
@@ -44,17 +49,19 @@
     <nav><a href="/support.html">Support</a><a href="/privacy.html">Privacy</a></nav>
   </header>
 
+  <p class="invited"><b>Somebody invited you?</b> Install Seal now, then set it up together the next time you are actually with them. That part takes about two minutes and it only has to happen once. <a href="https://testflight.apple.com/join/cYp9JRCG">Install Seal</a></p>
+
   <div class="hero">
-    <h1>A voice clone can imitate your kid.<br>It can't fake a <em>Seal</em>.</h1>
-    <p>Scammers call your parents sounding exactly like you — in trouble, needing money, right now. Seal gives your family one sealed channel that impersonation can't touch, so one simple rule protects everyone.</p>
-    <a class="cta" href="https://testflight.apple.com/join/cYp9JRCG">Join the beta — free</a>
+    <h1>Some messages you can't unsend.<br>Those are the ones that need a <em>Seal</em>.</h1>
+    <p>A private photo. A wallet address. An account number. If it reaches the wrong person, you cannot take it back. In Seal there is no wrong person on the other end: you add someone by standing next to them, once, and after that every message from them is provably from them.</p>
+    <a class="cta" href="https://testflight.apple.com/join/cYp9JRCG">Join the beta, free</a>
     <a class="cta ghost" href="#how">How it works</a>
-    <p class="quiet" style="margin-top:14px">iPhone only for now · installs via Apple TestFlight</p>
+    <p class="quiet" style="margin-top:14px">iPhone only for now. Installs through Apple TestFlight.</p>
   </div>
 
   <div class="rule-box">
     <p class="rule">"If it's about money and it isn't sealed, it isn't me."</p>
-    <p class="quiet">That's the whole rule. Easy to remember at 8 or 80 — and it stops the scam call, the fake text, and the deepfake voicemail cold.</p>
+    <p class="quiet">That is the rule families use, and it stops the scam call, the fake text and the cloned voicemail cold. It is one example of the same idea: the messages worth protecting are the ones you cannot take back.</p>
   </div>
 
   <section id="how">
@@ -62,27 +69,33 @@
     <div class="cols">
       <div class="col">
         <h3>1 · Set up in person</h3>
-        <p>You connect with your family face to face — a quick tap between phones when you're together. That moment creates a bond a scammer on the internet can never copy. No passwords, no phone numbers, nothing to steal remotely.</p>
+        <p>You and the other person stand together and tap once. That moment is the whole security model, and it is the one thing a stranger on the internet can never copy. No usernames, no phone numbers, nothing that can be stolen remotely.</p>
       </div>
       <div class="col">
-        <h3>2 · Message privately</h3>
-        <p>Everything in Seal is end-to-end encrypted and signed by the phone that sent it. If a message shows up in Seal, it really came from your person — not someone spoofing their number.</p>
+        <h3>2 · Send it privately</h3>
+        <p>Everything is encrypted on your phone before it leaves, and signed by the phone that sent it. You can set messages to disappear on a timer, and Seal tells you when somebody takes a screenshot.</p>
       </div>
       <div class="col">
-        <h3>3 · Seal what matters</h3>
-        <p>Money requests, account details, important instructions travel as Sealed Cards — locked exactly as written, impossible to alter, clearly marked. Anything that arrives anywhere else? Hang up. It's not them.</p>
+        <h3>3 · Seal what can't be wrong</h3>
+        <p>Wallet addresses, account numbers and payment instructions travel as Sealed Cards. Locked exactly as written, copied character for character, and impossible to mistake for ordinary chat.</p>
       </div>
     </div>
   </section>
 
   <section>
-    <h2>Why not just text?</h2>
-    <p class="quiet">Phone numbers get spoofed. SIMs get swapped. Voices get cloned from ten seconds of audio. Every channel your family uses today trusts a number or a voice — the two things scammers fake best. Seal trusts neither: identity lives in the phone's secure chip, established in person. And honestly? Seal proves a message came from your person's phone. It doesn't judge whether a request is wise — that's still a family conversation. We just make sure you're having it with the real person.</p>
+    <h2>Why not just send it normally?</h2>
+    <p class="quiet">Phone numbers get spoofed. SIM cards get swapped. A voice can be cloned from ten seconds of audio. And a photo sent in an ordinary chat quietly ends up in a cloud backup neither of you controls. Every channel you already use trusts a number or a voice, which are the two things a stranger fakes best. Seal trusts neither. Your identity lives in your phone's secure chip and it was established face to face, so there is nothing to phish and nobody to impersonate.</p>
+  </section>
+
+  <section>
+    <h2>What Seal does not do</h2>
+    <p class="quiet">Seal proves a message came from that person's phone. It does not know whether what they are asking for is wise, and it cannot tell you their phone is still in their hands. If a request feels off, call them. That is still a conversation between two people, and we just make sure you are having it with the real one.</p>
+    <p class="quiet">Disappearing messages are removed from both phones on schedule. Seal tells you when somebody screenshots a chat, but it cannot stop a second camera pointed at a screen. Nothing can. Send accordingly.</p>
   </section>
 
   <section>
     <h2>Built different, on purpose</h2>
-    <p class="quiet">No servers to breach — Seal has no backend collecting your messages. No accounts to hack — there are no passwords or resets. No data to sell — we can't read anything, and we wouldn't want to. Currently on iPhone via invite. Android is on the roadmap.</p>
+    <p class="quiet">There is no server holding your messages, so there is nothing to breach. There are no passwords and no account resets, so there is nothing to phish. We cannot read anything you send, which also means we could not sell it if we wanted to. iPhone for now, Android on the roadmap.</p>
   </section>
 
   <footer>

@@ -47,7 +47,7 @@ final class CeremonyManager: NSObject {
             case .cancelled: "The ceremony was cancelled. Tap to try again."
             case .unexpectedCredential: "That wasn't the response we expected. Tap to try again."
             case .keyUnreadable: "Couldn't read the key's response. Try holding it still against the top of your phone."
-            case .verificationFailed: "That key doesn't match this person's identity. The forge was NOT completed."
+            case .verificationFailed: "That key doesn't match this person's identity. You were NOT connected."
             case .missingCredentialID: "This person registered before credential publishing — they need to update their identity."
             case .identityNotFound: "No identity in the directory matches that key. Register instead?"
             case .identityDeleted: "This identity was permanently deleted and can't be restored. Register a new one instead."

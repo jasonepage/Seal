@@ -12,9 +12,13 @@ import SwiftUI
 
 // MARK: - First-run welcome (UI.md §3.1)
 
-/// Three-panel intro shown once before the first registration. Sets the mental
-/// model — key = identity, friends are in-person, nothing is recoverable —
-/// before the user ever meets a ceremony. Gated by @AppStorage in the caller.
+/// Three-panel intro shown once before the first registration. Reason first,
+/// rule second, expectation third (docs/COLDSTART.md 3.2). It used to lead
+/// with the key, the in-person rule and "nothing is recoverable": two
+/// warnings and a threat before a single reason. The recovery honesty now
+/// lives on the registration footer and in BackupKeyPrompt, which is a
+/// better place for it because the person is holding their key at that
+/// moment. Gated by @AppStorage in the caller.
 struct WelcomeCarousel: View {
     var onDone: () -> Void
     @State private var page = 0
@@ -28,17 +32,17 @@ struct WelcomeCarousel: View {
     }
 
     private let panels: [Panel] = [
-        Panel(symbol: "key.radiowaves.forward.fill",
-              title: "Your key is your identity",
-              body: "No usernames, no phone numbers, no passwords to reset. The key in your pocket — or Face ID — is your whole account.",
+        Panel(symbol: "lock.shield.fill",
+              title: "For the things you can't send twice",
+              body: "A photo. A wallet address. An account number. Once it reaches the wrong person, you can't take it back. Seal is built for exactly those messages.",
               brass: true),
         Panel(symbol: "hand.tap.fill",
-              title: "Friends are made in person",
-              body: "To add someone you stand together and tap. Anyone can fake an account; no one can fake standing in the room with you.",
+              title: "Nobody can pretend to be your person",
+              body: "There's no username to spoof and no phone number to fake. You add someone by standing next to them, once. After that, every message from them is provably from them.",
               brass: false),
-        Panel(symbol: "lock.fill",
-              title: "Nothing is recoverable",
-              body: "By design. Lose every key and this identity is gone — not even we can bring it back. That's the cost of having no one in the middle.",
+        Panel(symbol: "person.2.fill",
+              title: "Two people, together, once",
+              body: "That's the whole setup. A couple of minutes side by side, and then it works from anywhere. If the person you want isn't with you yet, invite them and do it when you meet.",
               brass: false)
     ]
 
@@ -194,15 +198,20 @@ struct PasskeyHybridCard: View {
 struct ForgeHowToCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Forging takes one phone and two people")
+            Text("Adding someone takes two people and one phone")
                 .font(.headline)
                 .foregroundStyle(.white)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            howToRow("1", "viewfinder", "Stand together. Your friend opens Seal and shows their seal.")
-            howToRow("2", "qrcode.viewfinder", "On this phone, scan their seal.")
-            howToRow("3", "key.radiowaves.forward.fill", "They prove their key right here — a tap, or Face ID on their own phone.")
-            howToRow("4", "arrow.triangle.2.circlepath", "Then swap and do it once more on their phone, so you can both message.")
+            howToRow("1", "viewfinder", "Stand together. Open Seal on both phones.")
+            howToRow("2", "qrcode.viewfinder", "They show their seal. You scan it on this phone.")
+            howToRow("3", "key.radiowaves.forward.fill", "They prove their key right here, with a tap or with Face ID on their own phone.")
+            // Step 4 used to say "swap and do it once more on their phone".
+            // ForgeHandshake.swift removed that: the phone that ran the
+            // ceremony publishes a device-signed handshake and the other side
+            // completes with zero user actions. The copy was still charging
+            // friction the code had already paid off (docs/COLDSTART.md 2.2).
+            howToRow("4", "checkmark.seal.fill", "That's it. You're both connected. Their phone catches up on its own.")
         }
         .padding(20)
         .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 18))

@@ -8,14 +8,21 @@ import CoreImage.CIFilterBuiltins
 ///
 /// Wrapped in a live "forge coach": a one-time how-to before the first scan,
 /// a Scan→Verify→Seal step rail, role banners that say whose phone does what,
-/// a passkey nearby-device explainer, and a both-directions handoff so people
-/// remember the ceremony has to run once on each phone.
+/// and a passkey nearby-device explainer.
+///
+/// The ceremony runs ONCE, on ONE phone. ForgeHandshake.swift completes the
+/// other side automatically, so nothing here should tell anyone to swap
+/// phones and run it again (docs/COLDSTART.md 2.2).
 struct FriendsView: View {
     let myRoot: RootIdentity
     @Bindable var ceremony: CeremonyManager
     let sync: SyncEngine
     @Bindable var friendStore: FriendStore
     @Bindable var chatEngine: ChatEngine
+    /// Set when this view is presented as a sheet, which is how the chat
+    /// list's people button reaches it. nil would leave no way out, so the
+    /// caller always passes one. Same pattern as ProfileView.
+    var onClose: (() -> Void)? = nil
 
     enum Stage: Equatable {
         case list
@@ -28,6 +35,17 @@ struct FriendsView: View {
         case failed(String)
     }
     @State private var stage: Stage = .list
+
+    /// The invitation. Always points at the site, never at a TestFlight or App
+    /// Store URL: sealmessenger.com is already the WebAuthn relying party and
+    /// already serves the landing page, so an invitation sent today still works
+    /// after the distribution channel changes underneath it.
+    private static let inviteURL = URL(string: "https://sealmessenger.com")!
+    private static let inviteMessage = """
+        I'm moving the private stuff off text messages. Seal only works between \
+        people who set it up face to face, so grab it and we'll take two minutes \
+        next time we're together. sealmessenger.com
+        """
 
     /// First-timers see the how-to once; after that "Scan" goes straight to the
     /// camera. The "How forging works" link always reopens it.
@@ -46,6 +64,8 @@ struct FriendsView: View {
     /// for both people. The long-press menu remains as a shortcut that
     /// pre-fills the first one.
     @State private var introducingPair = false
+    /// One person's timeline (docs/RECORD.md). Presented from their row.
+    @State private var recordFor: FriendStore.StoredFriend?
     @Environment(\.openURL) private var openURL
     /// Circle isn't reachable in Parent Mode (HomeView renders the chat list
     /// alone), so this is belt and braces — but the rule "accepting an
@@ -68,7 +88,8 @@ struct FriendsView: View {
                 case .failed(let reason): failedView(reason)
                 }
             }
-            .navigationTitle("Circle")
+            .navigationTitle("People")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .alert(moderationTitle, isPresented: $showModerationAlert) {
                 Button("OK", role: .cancel) {}
@@ -83,27 +104,27 @@ struct FriendsView: View {
                 IntroduceSheet(myRoot: myRoot, engine: chatEngine,
                                friendStore: friendStore)
             }
+            .sheet(item: $recordFor) { friend in
+                NavigationStack {
+                    RecordView(myRoot: myRoot, friendStore: friendStore,
+                               chatEngine: chatEngine, counterpart: friend,
+                               onClose: { recordFor = nil })
+                }
+                .preferredColorScheme(.dark)
+            }
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    NavigationLink {
-                        ForgeLogView(myRoot: myRoot, friendStore: friendStore)
-                    } label: {
-                        Image(systemName: "book.closed.fill")
+                if let onClose {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("Done", action: onClose)
                             .foregroundStyle(SealTheme.brass)
                     }
                 }
-                // Handovers live beside the forge log because they're the same
-                // kind of object: signed evidence of something that happened in
-                // person. See CustodyReceipt.swift.
-                ToolbarItem(placement: .topBarTrailing) {
-                    NavigationLink {
-                        ReceiptsView(myRoot: myRoot, identity: ceremony.identity,
-                                     ceremony: ceremony, sync: sync)
-                    } label: {
-                        Image(systemName: "shippingbox.fill")
-                            .foregroundStyle(SealTheme.brass)
-                    }
-                }
+                // The history and the handovers used to hang off this
+                // toolbar as two unlabelled brass glyphs. They are evidence,
+                // opened rarely and on purpose, so they moved to Profile ->
+                // Advanced where they get a name and a sentence each
+                // (docs/COLDSTART.md). This screen is now for one job: adding
+                // and seeing the people you have actually met.
             }
         }
         .preferredColorScheme(.dark)
@@ -111,69 +132,89 @@ struct FriendsView: View {
 
     // MARK: - Stages
 
+    /// The ONE surface for adding people. It used to compete with an
+    /// "Add someone" item in the chat list's compose menu and with
+    /// AddSomeoneSheet, which was three doors to two actions. The invite path
+    /// that sheet carried moved here, the sheet is gone, and the chat list's
+    /// people button is now the single way in.
     private var listView: some View {
-        VStack(spacing: 24) {
-            // My QR — the friend scans this on their phone.
+        VStack(spacing: 20) {
+            // Your seal gets a card of its own rather than floating on the
+            // background. It is the thing the other person points a camera at.
             if let qr = Self.qrImage("seal:\(myRoot.credentialIDHash)") {
-                Image(uiImage: qr)
-                    .interpolation(.none)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 180, height: 180)
-                    .padding(12)
-                    .background(.white, in: RoundedRectangle(cornerRadius: 16))
-                Text("Your seal — have a friend scan it")
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.5))
+                VStack(spacing: 10) {
+                    Image(uiImage: qr)
+                        .interpolation(.none)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 158, height: 158)
+                        .padding(10)
+                        .background(.white, in: RoundedRectangle(cornerRadius: 14))
+                    Text("Your seal. Have them scan this.")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.5))
+                }
+                .padding(.vertical, 18)
+                .frame(maxWidth: .infinity)
+                .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 20))
+                .padding(.horizontal, 24)
             }
 
-            VStack(spacing: 8) {
+            VStack(spacing: 10) {
+                // ONE loud button. Brass, because a key is about to be tapped
+                // in front of you (UI.md §1.1).
                 Button {
                     stage = forgeGuideSeen ? .scanning : .guide
                 } label: {
-                    Label("Scan a friend's seal", systemImage: "qrcode.viewfinder")
+                    Label("Scan their seal", systemImage: "qrcode.viewfinder")
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(SealTheme.brass)
+                .parentTapTarget()
 
-                // The SECOND way people get connected, beside the first
-                // (docs/INTRODUCTIONS.md). It lived only behind a long-press,
-                // which is a gesture nobody discovers — an invisible primary
-                // entry point for a headline feature.
-                //
-                // SILVER, deliberately, right under a brass button: scanning a
-                // seal means somebody's key is about to be tapped in front of
-                // you, and introducing means precisely that nobody's is. The
-                // colours carry that difference before a word is read (UI.md §1).
-                //
-                // Shown only once there are two people to introduce. Below
-                // that the action cannot do anything, and a button that opens
-                // a sheet to explain why it can't help is a broken promise —
-                // Circle's job at that point is the brass button above it.
+                // The growth loop, and the only thing here that works when the
+                // other person has nothing installed. Not brass: sending an
+                // invitation proves nothing and taps nobody's key.
+                ShareLink(item: Self.inviteURL,
+                          subject: Text("Seal"),
+                          message: Text(Self.inviteMessage)) {
+                    Label("Invite someone who doesn't have Seal", systemImage: "square.and.arrow.up")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.bordered)
+                .tint(.white)
+                .parentTapTarget()
+
+                // Only once there are two people to introduce. Below that the
+                // action cannot do anything, and a button that opens a sheet to
+                // explain why it can't help is a broken promise.
                 if introducibleCount >= 2 {
                     Button { introducingPair = true } label: {
-                        Label("Introduce two friends", systemImage: "link")
+                        Label("Introduce two people", systemImage: "link")
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 6)
                             .foregroundStyle(SealTheme.ink)
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(SealTheme.silver)
+                    .parentTapTarget()
                 }
 
                 Button { stage = .guide } label: {
-                    Text("How forging works")
+                    Text("How adding someone works")
                         .font(.footnote)
                         .foregroundStyle(.white.opacity(0.55))
+                        .padding(.top, 2)
                 }
             }
             .padding(.horizontal, 24)
 
             if friendStore.friends.isEmpty {
                 SealMascot(size: 52,
-                           line: "No friends forged yet.",
+                           line: "Nobody added yet.",
                            sub: "Seals make friends in person. So do you.")
             } else {
                 List {
@@ -235,7 +276,7 @@ struct FriendsView: View {
     private var guideView: some View {
         ceremonyLayout {
             SealMascot(size: 48,
-                       line: "Forge a friend",
+                       line: "Add someone",
                        sub: "Two humans, one tap. Here's the whole thing.")
             ForgeHowToCard()
         } actions: {
@@ -259,7 +300,7 @@ struct FriendsView: View {
         VStack(spacing: 16) {
             ForgeStepRail(active: 1)
             RoleBanner(icon: "viewfinder",
-                       text: "This is your phone. Point it at your friend's seal — the QR on their Circle screen.")
+                       text: "This is your phone. Point it at their seal, the QR code on their People screen.")
             QRScannerView { code in
                 guard code.hasPrefix("seal:") else { return }
                 let hash = String(code.dropFirst(5))
@@ -345,7 +386,7 @@ struct FriendsView: View {
             Image(systemName: "checkmark.seal.fill")
                 .font(.system(size: 72))
                 .foregroundStyle(SealTheme.brass)
-            Text("Friendship forged")
+            Text("You're connected")
                 .font(.system(.title2, design: .rounded, weight: .bold))
                 .foregroundStyle(.white)
             Text(FingerprintPhrase.phrase(for: friend.publicKey))
@@ -441,7 +482,7 @@ struct FriendsView: View {
                                                 friendship: friendship,
                                                 identity: ceremony.identity, sync: sync)
         } catch {
-            stage = .failed((error as? LocalizedError)?.errorDescription ?? "The forge failed. Try again.")
+            stage = .failed((error as? LocalizedError)?.errorDescription ?? "That didn't finish. Try again.")
         }
     }
 
@@ -492,11 +533,17 @@ struct FriendsView: View {
         }
         .listRowBackground(Color.white.opacity(0.05))
         .contextMenu {
+            Button {
+                recordFor = friend
+            } label: {
+                Label("See the record", systemImage: "list.bullet.rectangle.portrait")
+            }
+            Divider()
             // Only an in-person friend can be introduced, and only to another
             // in-person friend. The absence of this item is the UI half of
             // "introduction does not chain"; the enforcing halves are in
             // ChatEngine.sendIntroduction and on both recipients' phones.
-            if !parentMode, !blocked, !linked {
+            if !blocked, !linked {
                 Button {
                     introducing = friend
                 } label: {

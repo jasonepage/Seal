@@ -49,17 +49,20 @@ struct RegistrationView: View {
                     .foregroundStyle(.white)
                     .padding(.horizontal, 24)
 
+                // Face ID leads, the security key follows (docs/COLDSTART.md
+                // 3.3). The hardware key is an upgrade, not a gate; putting it
+                // first told most people they were in the wrong app.
                 VStack(spacing: 12) {
-                    Button { Task { await start(.verified) } } label: {
-                        Label("I have a security key", systemImage: "key.radiowaves.forward.fill")
+                    Button { Task { await start(.passkey) } } label: {
+                        Label("Set up with Face ID", systemImage: "faceid")
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 6)
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(SealTheme.brass)
 
-                    Button { Task { await start(.passkey) } } label: {
-                        Label("Start with Face ID", systemImage: "faceid")
+                    Button { Task { await start(.verified) } } label: {
+                        Label("I have a security key", systemImage: "key.radiowaves.forward.fill")
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 6)
                     }
@@ -84,7 +87,7 @@ struct RegistrationView: View {
                     Button("Cancel", role: .cancel) {}
                 }
 
-                Text("Your key is your identity. Friends are made in person.\nNothing is recoverable — by design.")
+                Text("Your key is your identity. People are added in person.\nA backup key can bring your identity back. Your messages can't.")
                     .font(.caption2)
                     .foregroundStyle(.white.opacity(0.45))
                     .multilineTextAlignment(.center)
@@ -115,12 +118,12 @@ struct RegistrationView: View {
 
     private var statusLine: String {
         switch ceremony.phase {
-        case .idle: "Group chat for people you've actually met."
+        case .idle: "For the messages you can't afford to send to the wrong person."
         case .searching: "Hold your key flat against the top of your phone…"
         case .reading: "Reading your key…"
         case .endorsing: "One more tap — vouching for this phone…"
         case .sealed: "Sealed. Welcome, \(displayName)."
-        case .failed: "Group chat for people you've actually met."
+        case .failed: "For the messages you can't afford to send to the wrong person."
         }
     }
 

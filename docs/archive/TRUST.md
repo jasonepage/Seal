@@ -1,6 +1,6 @@
 # Seal — Trust & Proof-of-Humanity Design
 
-*How the in-person social graph becomes a score, a set of claims, and the access-control engine for the Square. Companion to [VISION.md](VISION.md), [SRS.md](SRS.md), and [SDS.md](SDS.md). The crypto that makes edges unforgeable lives in SDS; this doc is about what we **compute on top of** those edges.*
+*How the in-person social graph becomes a score, a set of claims, and the access-control engine for the Square. Companion to [VISION.md](VISION.md), [SRS.md](../SRS.md), and [SDS.md](../SDS.md). The crypto that makes edges unforgeable lives in SDS; this doc is about what we **compute on top of** those edges.*
 
 **Status:** design — not yet implemented. **Core decisions D1–D5 locked 2026-06-13** (see §7). Remaining tuning marked **[OPEN]**.
 

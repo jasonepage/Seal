@@ -539,7 +539,7 @@ final class SyncEngine {
             options: .firesOnRecordCreation)
         let info = CKSubscription.NotificationInfo()
         info.title = "Seal"
-        info.alertBody = "You've been invited to a new colony"
+        info.alertBody = "You've been added to a new group"
         info.soundName = "default"
         info.shouldBadge = true
         info.shouldSendContentAvailable = true      // pre-process the invite in the background

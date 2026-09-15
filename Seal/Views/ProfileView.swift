@@ -9,6 +9,10 @@ struct ProfileView: View {
     @Bindable var ceremony: CeremonyManager
     @Bindable var appLock: AppLock
     @Bindable var perkRedeemer: PerkRedeemer
+    /// Only the Advanced screen needs these two, for the record and the
+    /// ceremony history. Nothing else in Profile touches them.
+    @Bindable var friendStore: FriendStore
+    @Bindable var chatEngine: ChatEngine
     /// nil only in previews. Optional rather than @Bindable because the toggle
     /// uses a manual binding anyway, and @Observable tracks the reads in body.
     var parentMode: ParentMode? = nil
@@ -31,6 +35,8 @@ struct ProfileView: View {
     @State private var draftName = ""
     /// Mirrors the keychain flag; loaded in .task so the toggle renders true state.
     @State private var cardLockOn = false
+    @State private var showHowTo = false
+    @State private var timestampsOn = false
 
     /// Live name — reflects an in-session rename immediately (myRoot is a
     /// passed-in copy that only refreshes when the parent re-renders).
@@ -52,6 +58,8 @@ struct ProfileView: View {
                             Text(currentName)
                                 .font(.system(.title, design: .rounded, weight: .semibold))
                                 .foregroundStyle(.white)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.6)
                             Image(systemName: "pencil")
                                 .font(.footnote)
                                 .foregroundStyle(.white.opacity(0.4))
@@ -73,6 +81,9 @@ struct ProfileView: View {
                     Text(FingerprintPhrase.phrase(for: myRoot.publicKey))
                         .font(.title3)
                         .foregroundStyle(SealTheme.brass)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 24)
 
                     // Founder edition line — an edition of the tier, not a
                     // third tier. Brass because it's a verified trust artifact.
@@ -82,15 +93,6 @@ struct ProfileView: View {
                             .font(.system(.subheadline, design: .rounded, weight: .semibold))
                             .foregroundStyle(SealTheme.brass)
                     }
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        infoRow("Seal", String(myRoot.credentialIDHash.prefix(24)) + "…")
-                        infoRow("Directory", directoryStatus)
-                        infoRow("This device", identity.deviceEndorsement != nil ? "Endorsed" : "Not endorsed")
-                    }
-                    .padding(16)
-                    .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
-                    .padding(.horizontal, 24)
 
                     if appLock.isAvailable {
                         settingRow(icon: "faceid", tint: SealTheme.brass,
@@ -118,50 +120,98 @@ struct ProfileView: View {
                             .task { cardLockOn = AppLock.isCardLockEnabled(ownerHash: myRoot.credentialIDHash) }
                     }
 
-                    // Simplified mode (Theme/ParentMode.swift). NEVER labelled
-                    // by who it is for — the person reading this is holding the
-                    // phone. Silver, not brass: this changes how Seal looks, it
+                    // Was "Simplified mode", which used to swap the whole
+                    // shell. There is only one shell now, so this switch does
+                    // exactly one thing and is named for it. NEVER labelled by
+                    // who it is for: the person reading it is holding the
+                    // phone. Silver, not brass: it changes how Seal looks and
                     // makes no claim about trust (UI.md §1.1).
                     if let parentMode {
                         settingRow(icon: "textformat.size", tint: SealTheme.silver,
-                                   title: "Simplified mode",
-                                   subtitle: "Bigger text, and just your chats. Everything still works — you can send and open anything you could before.",
+                                   title: "Bigger text",
+                                   subtitle: "Larger type and bigger buttons everywhere in Seal. Nothing is hidden and nothing stops working.",
                                    isOn: .init(
                                        get: { parentMode.isOn },
                                        set: { parentMode.setEnabled($0) }),
                                    switchTint: SealTheme.silver)
-                        if parentMode.isOn {
-                            Text("Adding someone new needs the full app: turn this off, add them, then turn it back on.")
-                                .font(.caption2)
-                                .foregroundStyle(.white.opacity(0.4))
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal, 40)
-                        }
                     }
 
-                    if devices.count > 1 || devices.contains(where: { revokedKeys.contains($0.devicePublicKey) }) {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("Devices")
-                                .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                                .foregroundStyle(.white.opacity(0.6))
-                            ForEach(devices, id: \.devicePublicKey) { device in
-                                deviceRow(device)
+                    // The backup-keys PANEL moved to Advanced, but the
+                    // warning did not. Its old comment made the case and it
+                    // still holds: having no backup key is the state that
+                    // costs you the identity, so it is precisely the state
+                    // that must not be invisible. Burying it one tap down
+                    // would have been the whole point missed.
+                    if (identity.rootIdentity?.backupCredentials ?? []).isEmpty {
+                        NavigationLink { advancedScreen } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "exclamationmark.shield")
+                                    .foregroundStyle(.orange)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("No backup key yet")
+                                        .foregroundStyle(.white)
+                                    Text("Lose your key and this identity is gone. Nobody can reset it.")
+                                        .font(.caption)
+                                        .foregroundStyle(.white.opacity(0.5))
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.white.opacity(0.3))
                             }
+                            .font(.callout)
+                            .multilineTextAlignment(.leading)
+                            .padding(16)
+                            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
                         }
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, 24)
+                        .parentTapTarget()
+                    }
+
+                    // The tutorial, on demand. WelcomeCarousel only ever
+                    // ran once, behind an @AppStorage flag on first launch,
+                    // which meant the explanation of what Seal even is was
+                    // unreachable the moment somebody tapped through it.
+                    Button { showHowTo = true } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "questionmark.circle")
+                                .foregroundStyle(SealTheme.silver)
+                            Text("How Seal works")
+                                .foregroundStyle(.white.opacity(0.9))
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.white.opacity(0.3))
+                        }
+                        .font(.callout)
                         .padding(16)
                         .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
-                        .padding(.horizontal, 24)
                     }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 24)
+                    .parentTapTarget()
 
-                    // Backup keys (FR-3). Unlike the Devices card above this
-                    // one is ALWAYS shown, including when the list is empty:
-                    // having no backup key is the state that costs you the
-                    // identity, so it is precisely the state that must not be
-                    // invisible. It loads its own list rather than sharing
-                    // loadDevices() — a directory read the profile already
-                    // does once more is cheaper than two features sharing
-                    // mutable state across a merge.
-                    BackupKeysSection(myRoot: myRoot, ceremony: ceremony, sync: sync)
+                    // Everything that PROVES the claims, one tap down.
+                    NavigationLink { advancedScreen } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "gearshape.2")
+                                .foregroundStyle(SealTheme.silver)
+                            Text("Advanced")
+                                .foregroundStyle(.white.opacity(0.9))
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.white.opacity(0.3))
+                        }
+                        .font(.callout)
+                        .padding(16)
+                        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 24)
+                    .parentTapTarget()
 
                     if PerkAuthority.isConfigured, verifiedPerks.isEmpty {
                         Button { showRedeem = true } label: {
@@ -218,7 +268,7 @@ struct ProfileView: View {
                             .padding(.horizontal, 40)
                     }
 
-                    Text("Deleting removes your identity from the directory permanently — friends can no longer verify you, and your forge log is gone for good. There is no recovery.")
+                    Text("Deleting removes your identity from the directory permanently. Friends can no longer verify you, and your history is gone for good. There is no recovery.")
                         .font(.caption2)
                         .foregroundStyle(.white.opacity(0.4))
                         .multilineTextAlignment(.center)
@@ -229,9 +279,18 @@ struct ProfileView: View {
                 // column instead of full-bleed rows. No-op on iPhone.
                 .frame(maxWidth: 460)
                 .frame(maxWidth: .infinity)
+                // Pins the scroll content to exactly the scroll view's width.
+                // Without it, any child that demands more room than the screen
+                // (a long name, a long fingerprint phrase, a row whose text
+                // refuses to wrap, all of it likelier with Bigger text on)
+                // silently widens the content and the entire screen becomes
+                // draggable side to side. A vertical scroll view should not
+                // pan horizontally, ever.
+                .containerRelativeFrame(.horizontal)
                 }
             }
             .navigationTitle("You")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 if let onClose {
@@ -279,7 +338,13 @@ struct ProfileView: View {
                     revoking = nil
                 }
             }
-            .task { await loadDevices() }
+            .task {
+                timestampsOn = TimestampStore.isEnabled(ownerHash: myRoot.credentialIDHash)
+                await loadDevices()
+            }
+            .fullScreenCover(isPresented: $showHowTo) {
+                WelcomeCarousel { showHowTo = false }
+            }
             .sheet(isPresented: $showRedeem) {
                 RedeemPerkView(myRoot: myRoot, redeemer: perkRedeemer)
             }
@@ -291,6 +356,137 @@ struct ProfileView: View {
     /// every other signature in the app. Uses the directory device list when
     /// loaded (a claim signed on another of our devices still verifies),
     /// falling back to this device's endorsement.
+    // MARK: - Advanced
+
+    /// Everything that PROVES the claims, one tap below Profile
+    /// (docs/COLDSTART.md). These used to be scattered: the identity card, the
+    /// device list and the backup keys sat in the middle of Profile, and the
+    /// history and the handovers hung off the Circle tab's toolbar as two
+    /// unlabelled glyphs. Circle is gone and Profile is what someone opens to
+    /// change their name, so the evidence gets its own room.
+    ///
+    /// A computed property rather than its own file, on purpose: it reads this
+    /// view's device state and calls its private row builders, and moving that
+    /// state into a second type would buy nothing and cost a sync bug.
+    private var advancedScreen: some View {
+        ZStack {
+            SealTheme.ink.ignoresSafeArea()
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Off by default and asked for explicitly, because turning
+                    // it on means a hash leaves this phone. Silver: it changes
+                    // what Seal can prove about time, which is a capability,
+                    // not a trust claim about a person (UI.md §1.1).
+                    settingRow(icon: "clock.badge.checkmark", tint: SealTheme.silver,
+                               title: "Independent timestamps",
+                               subtitle: "Ask a timestamp authority to sign each record line, so its time is not just this phone's word. Only a hash is sent, never your messages, but it does tell that authority something was recorded.",
+                               isOn: .init(
+                                   get: { timestampsOn },
+                                   set: { value in
+                                       TimestampStore.setEnabled(value, ownerHash: myRoot.credentialIDHash)
+                                       timestampsOn = value
+                                   }),
+                               switchTint: SealTheme.silver)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        infoRow("Seal", String(myRoot.credentialIDHash.prefix(24)) + "…")
+                        infoRow("Directory", directoryStatus)
+                        infoRow("This device", identity.deviceEndorsement != nil ? "Endorsed" : "Not endorsed")
+                    }
+                    .padding(16)
+                    .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
+                    .padding(.horizontal, 24)
+
+                    if !devices.isEmpty { devicesCard }
+
+                    BackupKeysSection(myRoot: myRoot, ceremony: ceremony, sync: sync)
+
+                    // The Record (docs/RECORD.md). First, because it is a
+                    // superset of History and the direction of travel: once it
+                    // can export, History retires into it.
+                    NavigationLink {
+                        RecordView(myRoot: myRoot, friendStore: friendStore,
+                                   chatEngine: chatEngine)
+                    } label: {
+                        advancedRow("Record", "list.bullet.rectangle.portrait",
+                                    "Everything that has happened between you and each person, signed.")
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 24)
+                    .parentTapTarget()
+
+                    NavigationLink {
+                        ForgeLogView(myRoot: myRoot, friendStore: friendStore)
+                    } label: {
+                        advancedRow("History", "book.closed.fill",
+                                    "Every person you've added in person, with the date it happened.")
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 24)
+                    .parentTapTarget()
+
+                    NavigationLink {
+                        ReceiptsView(myRoot: myRoot, identity: identity,
+                                     ceremony: ceremony, sync: sync)
+                    } label: {
+                        advancedRow("Handovers", "shippingbox.fill",
+                                    "Signed receipts for things handed over in person.")
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 24)
+                    .parentTapTarget()
+                }
+                .padding(.vertical, 24)
+                .frame(maxWidth: 460)
+                .frame(maxWidth: .infinity)
+                .containerRelativeFrame(.horizontal)
+            }
+        }
+        .navigationTitle("Advanced")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
+    }
+
+    /// Shown whenever there is any device at all, unlike the old Profile card
+    /// which hid itself below two devices. On a screen called Advanced, "you
+    /// have exactly one phone" is an answer, not noise.
+    private var devicesCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Devices")
+                .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.6))
+            ForEach(devices, id: \.devicePublicKey) { device in
+                deviceRow(device)
+            }
+        }
+        .padding(16)
+        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
+        .padding(.horizontal, 24)
+    }
+
+    private func advancedRow(_ title: String, _ icon: String, _ subtitle: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .foregroundStyle(SealTheme.brass)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .foregroundStyle(.white)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.5))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.3))
+        }
+        .font(.callout)
+        .multilineTextAlignment(.leading)
+        .padding(16)
+        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
+    }
+
     private var verifiedPerks: [PerkAttestation] {
         var endorsements = devices
         if endorsements.isEmpty, let own = identity.deviceEndorsement {

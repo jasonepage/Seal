@@ -957,7 +957,7 @@ final class ChatEngine {
         // upgraded) while a view is alive, and the tier is the whole rule.
         guard let a = friendStore.friends.first(where: { $0.id == first.id }),
               let b = friendStore.friends.first(where: { $0.id == second.id }) else {
-            return "One of them isn't in your Circle any more."
+            return "One of them isn't in your people any more."
         }
         // Re-check what the picker already filtered. A rule enforced only by a
         // view is a rule an attacker skips — and this one is the whole point:
@@ -1036,7 +1036,7 @@ final class ChatEngine {
             await deliverOffer(statement, to: party, other: other, from: myRoot)
             sent += 1
         }
-        return sent == 2 ? nil : "One of the two isn't in your Circle any more, so Seal didn't send it again."
+        return sent == 2 ? nil : "One of the two isn't in your people any more, so Seal didn't send it again."
     }
 
     private func deliverOffer(_ statement: IntroductionStatement,
@@ -1675,17 +1675,57 @@ final class ChatEngine {
     }
 
     /// Client-enforced expiry (NFR-7: best-effort by design, disclosed in UI).
+    ///
+    /// A sealed card that burns here used to take its record line with it, so
+    /// the record quietly forgot that anything had ever been sent, which is the
+    /// exact moment somebody would reach for it (docs/RECORD.md §11). Every
+    /// card about to be dropped therefore leaves a tombstone FIRST: kind, time,
+    /// counterpart, title and digest. Never the value. The value burning is the
+    /// entire point of the TTL.
+    ///
+    /// Capturing here rather than at send or receive means one hook covers
+    /// every path, and nothing can be purged without passing through it, even
+    /// a card that arrived and expired while the app was closed.
     func purgeExpired() {
         let now = Date.now
         var changed = false
         for (chatID, messages) in messagesByChat {
             let kept = messages.filter { ($0.expiresAt ?? .distantFuture) > now }
             if kept.count != messages.count {
+                let burning = messages.filter {
+                    ($0.expiresAt ?? .distantFuture) <= now && $0.card != nil
+                }
+                if !burning.isEmpty, let chat = chats.first(where: { $0.id == chatID }) {
+                    RecordStubStore.upsert(burning.compactMap { recordStub(for: $0, in: chat) },
+                                           ownerHash: ownerHash)
+                }
                 messagesByChat[chatID] = kept
                 changed = true
             }
         }
         if changed { persist() }
+    }
+
+    /// The tombstone for one card. Mirrors what `RecordBuilder` derives from a
+    /// live card exactly, field for field, so the event's digest and therefore
+    /// its identity are IDENTICAL before and after the burn.
+    private func recordStub(for message: ChatMessage, in chat: Chat) -> RecordStub? {
+        guard let card = message.card else { return nil }
+        let mine = message.senderHash == ownerHash
+        let others = chat.memberHashes.filter { $0 != ownerHash }
+        // A 1:1 chat has one counterpart and its name IS that person's display
+        // name. A group has no single counterpart, so the line belongs to the
+        // whole record rather than to any one person's timeline.
+        let partner: String? = mine ? (others.count == 1 ? others.first : nil)
+                                    : message.senderHash
+        return RecordStub(
+            kindRaw: (mine ? RecordEvent.Kind.cardSent : RecordEvent.Kind.cardReceived).rawValue,
+            occurredAtEpoch: RecordEvent.epochSeconds(message.sentAt),
+            counterpartHash: partner,
+            counterpartName: partner == nil ? nil : chat.name,
+            title: card.title,
+            contentDigestHex: (message.proof?.cardDigest ?? card.digest)?.hexString,
+            sourceRef: message.wireID ?? message.id.uuidString)
     }
 
     // MARK: - Media decryption (in-memory cache)

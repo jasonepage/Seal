@@ -474,7 +474,7 @@ extension Introduction {
     static func introducerEligibility(_ statement: IntroductionStatement,
                                       friendStore: FriendStore) -> String? {
         guard let friend = friendStore.friends.first(where: { $0.id == statement.introducerHash }) else {
-            return "You haven't forged a friendship with this person on this phone, so Seal can't accept an introduction from them."
+            return "You haven't met this person through Seal on this phone, so Seal can't accept an introduction from them."
         }
         guard friend.friendship.isInPerson else {
             return "\(friend.identity.displayName) is a linked friend — someone vouched for them, you haven't met them in person through Seal. Introductions can only come from someone you've met in person, so this one can't be accepted."

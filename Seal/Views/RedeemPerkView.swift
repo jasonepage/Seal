@@ -34,7 +34,7 @@ struct RedeemPerkView: View {
             Text("Redeem a claim code")
                 .font(.system(.title2, design: .rounded, weight: .semibold))
                 .foregroundStyle(.white)
-            Text("Found a code in your forge pack? Enter it here. Your phone verifies it was signed by Seal — nothing is taken on faith.")
+            Text("Found a code in your Seal pack? Enter it here. Your phone verifies it was signed by Seal, so nothing is taken on faith.")
                 .font(.caption)
                 .foregroundStyle(.white.opacity(0.6))
                 .multilineTextAlignment(.center)

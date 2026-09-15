@@ -53,7 +53,7 @@ struct SealedCardBubble: View {
             verificationLine
             // Inbound only. "This came from your own phone" is not a fact
             // anybody needs, and a pause on your own card is noise.
-            if parentMode, !mine {
+            if !mine {
                 parentExplainer
                 if card.asksForMoney { scamPause }
             }
@@ -389,9 +389,14 @@ struct SealedCardDetailSheet: View {
                         verificationBanner
                         // Directly under the banner: before the value, before
                         // the Copy button, before anything actionable.
-                        if parentMode, !mine, card.asksForMoney { scamPauseNotice }
+                        if !mine, card.asksForMoney { scamPauseNotice }
                         senderBlock
-                        if parentMode { parentDetailsBlock } else { keyBlock }
+                        // parentDetailsBlock is a superset of keyBlock: it
+                        // is a collapsed "Details" disclosure holding the
+                        // fingerprint phrase AND keyBlock. Showing it
+                        // always is the whole Advanced idea in one line,
+                        // and loses nothing.
+                        parentDetailsBlock
                         valueSection
                         honestyBlock
                     }
@@ -423,7 +428,7 @@ struct SealedCardDetailSheet: View {
                 Text(bannerTitle)
                     .font(parentMode ? .headline : .subheadline.weight(.semibold))
                     .foregroundStyle(.white)
-                if parentMode, let parentLead {
+                if let parentLead {
                     Text(parentLead)
                         .font(.subheadline)
                         .foregroundStyle(.white.opacity(0.85))
@@ -477,13 +482,8 @@ struct SealedCardDetailSheet: View {
                     Text(mine ? "\(resolvedName) (you)" : resolvedName)
                         .font(.callout.weight(.medium))
                         .foregroundStyle(.white)
-                    // In Parent Mode the phrase moves into Details below —
-                    // moved, not dropped.
-                    if !parentMode, let publicKey = resolvedIdentity?.publicKey {
-                        Text(FingerprintPhrase.phrase(for: publicKey))
-                            .font(.callout)
-                            .foregroundStyle(senderLinked ? SealTheme.silver : SealTheme.brass)
-                    }
+                    // The fingerprint phrase lives in the Details
+                    // disclosure below for everyone now. Moved, not dropped.
                 }
                 Spacer(minLength: 0)
             }

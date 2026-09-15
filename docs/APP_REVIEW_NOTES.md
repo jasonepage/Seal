@@ -18,7 +18,7 @@ that reject UGC apps (1.2, 5.1.1(v), age rating, privacy labels, encryption).
 > passkey, which cannot be reproduced in a single-reviewer session. To explore
 > the full app with no hardware and no account:
 >   1. On the first screen, type  SEALDEMO  as your name.
->   2. Tap "Start with Face ID." No authentication is required — you will enter a
+>   2. Tap "Set up with Face ID." No authentication is required — you will enter a
 >      demo account immediately.
 > The demo account is entirely local (no network, no real users) and is
 > preloaded with friends and conversations so every feature can be reviewed. A

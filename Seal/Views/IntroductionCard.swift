@@ -84,7 +84,7 @@ struct IntroductionBubble: View {
             // linked now" when no confirmation was ever delivered is the one
             // wrong thing this card could say.
             if let entry, entry.abandonedAt != nil {
-                return .stopped("Seal stopped this introduction — one of them isn't in your Circle any more. Forge with them again and you can introduce them again.")
+                return .stopped("Seal stopped this introduction. One of them isn't in your people any more. Add them again and you can introduce them again.")
             }
             return entry?.bothAccepted == true ? .sentLinked : .sentWaiting
         }
@@ -253,9 +253,7 @@ struct IntroductionBubble: View {
             phraseButton("Check \(counterpartName)'s phrase")
 
         case .linked:
-            title(parentMode
-                  ? "\(counterpartName) is in your chats now."
-                  : "You and \(counterpartName) are linked.")
+            title("\(counterpartName) is in your chats now.")
             Text("Introduced by \(introducerName) · \(statement.createdAt.formatted(date: .abbreviated, time: .omitted))")
                 .font(.caption)
                 .foregroundStyle(SealTheme.silver.opacity(0.9))
@@ -305,9 +303,7 @@ struct IntroductionBubble: View {
     /// says "verified": a linked friendship is exactly as trustworthy as the
     /// introducer's judgment, and the copy says so in those words.
     private var vouchLine: some View {
-        Text(parentMode
-             ? "\(introducerName) has met \(counterpartName) in person. You haven't."
-             : "You haven't met \(counterpartName) in person through Seal. \(introducerName) has, and vouched for this connection.")
+        Text("\(introducerName) has met \(counterpartName) in person. You haven't.")
             .font(parentMode ? .callout : .caption)
             .foregroundStyle(.white.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)

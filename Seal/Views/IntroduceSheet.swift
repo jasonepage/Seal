@@ -120,7 +120,7 @@ struct IntroduceSheet: View {
 
             let people = candidates()
             if people.count < 2 {
-                notice("You need two people you've met in person to make an introduction. Forge one more friendship in Circle and this opens up.")
+                notice("You need two people you've met in person to make an introduction. Add one more and this opens up.")
             } else {
                 friendList(people) { first = $0 }
             }
@@ -145,7 +145,7 @@ struct IntroduceSheet: View {
             } else {
                 let people = candidates(excluding: a.id)
                 if people.isEmpty {
-                    notice("You need two people you've met in person to make an introduction. Forge one more friendship in Circle and this opens up.")
+                    notice("You need two people you've met in person to make an introduction. Add one more and this opens up.")
                 } else {
                     friendList(people) { picked = $0 }
                 }
@@ -215,7 +215,7 @@ struct IntroduceSheet: View {
             .padding(14)
             .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
 
-            Text("They become LINKED friends, not brass. Seal will show them that they haven't met in person and that you vouched — a linked friendship is exactly as trustworthy as your judgment, and it says so on both their phones.")
+            Text("They become LINKED friends, not Verified. Seal will show them that they haven't met in person and that you vouched. A linked friendship is exactly as trustworthy as your judgment, and it says so on both their phones.")
                 .font(.caption)
                 .foregroundStyle(.white.opacity(0.6))
                 .fixedSize(horizontal: false, vertical: true)
