@@ -81,6 +81,28 @@ Where compile errors are most likely, in order:
    (`site/*.html`, `docs/archive/STORE_COPY.md`). Not rewritten in this pass.
 4. **A timestamp authority** is still FreeTSA, chosen for being free. See
    [docs/RECORD.md](docs/RECORD.md) section 13.
+5. **The domain says "messenger", and the window to change it closes at
+   TestFlight.** Decided on 2026-09-15 to leave it and revisit after the story
+   has been walked on a phone. Written down here because "not yet" turns into
+   "too late" on its own.
+
+   Two separate things wear that name. The **relying party ID** is a
+   cryptographic identifier: every credential on every security key is scoped
+   to the exact string `sealmessenger.com`, and WebAuthn has no rename path,
+   so changing it means every identity registers again from scratch and every
+   person is met in person again to re-pin their key. Today that is three
+   people. After the first outside tester it is a migration that cannot be
+   run. The **marketing domain** is free and can be changed any time, because
+   nobody types a relying party ID.
+
+   The cost of leaving it: iOS shows the relying party ID on the system sheet
+   during the key ceremony, so somebody setting up their will reads the word
+   "messenger" at the exact moment they most need to understand what they are
+   agreeing to. It is also in the invite text (`FriendsView.inviteURL` and the
+   invite message) and printed on the shareable card footer in `ForgeLogView`.
+   Those three are ordinary copy and can be changed without touching identity.
+
+   **Decide before the first TestFlight build goes out, not after.**
 
 ## What was done on 2026-09-15, by phase
 
@@ -122,6 +144,21 @@ Listed in the final report of the conversion session and repeated here:
 - **`Message`, `SealGroup`, `SenderChain` and the message transport in
   `SyncEngine`** were left in place as dead code rather than deleted, to keep
   the phase 7 diff to what the brief listed. Safe to remove later.
+
+## Ideas that are written down, not built
+
+- **The interview that fixes the blank page.** [docs/PRODUCT.md](docs/PRODUCT.md)
+  section 11. An on-device question set, and later a model, that helps
+  somebody actually write their envelopes, because the way this product fails
+  is an empty vault that opens perfectly. Specified on 2026-09-15, to be built
+  after the story walks. The build order in that section matters: the plain
+  question list first, the model only if the list works.
+- **Not a messenger.** Raised on 2026-09-15 and declined the same day. The
+  messenger was retired in phase 7 and that is the reason the app has one
+  sentence. Adding chat back drags in App Review's user-generated-content
+  obligations and costs the kitchen-table pitch. `SealedCard` is already the
+  one-way signed statement if something needs sending before a death; grow
+  that instead of `Message`.
 
 ## Before you debug anything
 

@@ -123,3 +123,73 @@ The identity and ceremony layer, the hybrid wrapping, the signed record with
 its timestamps, custody receipts, sealed cards (now the secret fields), the
 theme and Bigger text mode. Everything else was retired in commit
 "Phase 7: the messenger is retired". `git log` keeps it.
+
+## 11. The blank page, and the interview that is meant to fix it
+
+**Not built. Specified here so it is not reinvented from scratch, and so the
+promise below is decided before anybody writes code.**
+
+### The failure this exists for
+
+The way this product fails is not cryptographic. It is a woman of sixty-eight
+who buys it, names three custodians, hands out three keys, sets the rule, taps
+Seal, and dies with an empty vault. Every ceremony worked. The release machine
+ran exactly as designed. The envelopes opened, and there was nothing in them.
+
+Writing to the people you are going to leave is the hardest writing there is,
+and the app currently hands you an empty text field and a cursor. Section 4
+lists what the owner does; step one of it is the step most people will never
+take.
+
+### What it is
+
+An interview, on the phone, that asks questions and turns the answers into a
+draft envelope the owner then edits. It is not a ghostwriter and it never
+signs, seals or sends anything. It produces a draft in the editor, and the
+owner changes every word of it if they want to.
+
+A real run of it: she opens Seal on a Sunday. It asks who is hardest for her
+to write to. She says her daughter. It asks what she has never said to her.
+She talks for two minutes. It asks whether the daughter should read this
+before or after her brother's. Half an hour later there are three envelopes
+in the vault that would otherwise not exist.
+
+### The promise, which is the part to decide first
+
+**Nothing the owner writes or says leaves the phone. Not to a server, not to
+Anthropic, not to Apple's private cloud.** On-device inference only. If the
+model cannot run on this phone there is no model on this phone, and the
+fallback below runs instead. This is not a performance choice. The whole
+product is one promise about secrets, and shipping a feature that reads every
+envelope and sends it anywhere would end that promise whatever the fine print
+said.
+
+### How it would be built
+
+Apple's Foundation Models framework, which is a system framework on iOS 26
+and therefore not a new dependency, runs on the phone, costs nothing, and
+returns structured values rather than loose text, so an answer can come back
+as a draft with a title, a recipient and a body. It touches no cryptography
+and no wire format: it writes into the same editor a thumb does.
+
+### The fallback is most of the feature
+
+Apple Intelligence only runs on recent hardware, so a good number of the
+phones this is built for cannot run any model at all. The fallback is the
+same question set as plain text with no follow-ups, and it is worth saying
+plainly that this gets most of the way. The questions are what unsticks
+somebody. The model earns its place on the follow-up question it asks next
+and on turning two minutes of rambling into a letter, not on the list.
+
+Build the fallback first. If the question list alone does not get people
+writing, a model on top of it will not either.
+
+### What it must not do
+
+**It does not help set the rule or pick the custodians.** The policy is four
+numbers and three of them have four allowed values each. A conversation that
+fills in a form is worse than a form. And the hard part of choosing custodians
+was never the numbers, it is which people, which is a judgement about a family
+that a small model running on a phone has no business having an opinion about.
+The app already says the only true thing there: pick people who will still be
+reachable in ten years.
