@@ -18,13 +18,19 @@ import SwiftUI
 //  The environment has to be read inside a nested view, not on the style
 //  itself. A ButtonStyle is not part of the view tree, so an @Environment
 //  property on the style reads the default value and never changes.
+//
+//  DO NOT name that nested view `Body`. ButtonStyle already has an
+//  associated type called Body, a nested type of that name is taken as the
+//  witness for it, and a private one is then less accessible than the style
+//  itself, which fails the conformance. It is called `StyleBody` for that
+//  reason and no other.
 
 struct SealPrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        Body(configuration: configuration)
+        StyleBody(configuration: configuration)
     }
 
-    private struct Body: View {
+    private struct StyleBody: View {
         let configuration: Configuration
         @Environment(\.isEnabled) private var isEnabled
 
@@ -50,10 +56,10 @@ struct SealPrimaryButtonStyle: ButtonStyle {
 
 struct SealSecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        Body(configuration: configuration)
+        StyleBody(configuration: configuration)
     }
 
-    private struct Body: View {
+    private struct StyleBody: View {
         let configuration: Configuration
         @Environment(\.isEnabled) private var isEnabled
 
