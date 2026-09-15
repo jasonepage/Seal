@@ -122,84 +122,101 @@ struct FriendsView: View {
     /// that sheet carried moved here, the sheet is gone, and the chat list's
     /// people button is now the single way in.
     private var listView: some View {
-        VStack(spacing: 20) {
-            // Your seal gets a card of its own rather than floating on the
-            // background. It is the thing the other person points a camera at.
-            if let qr = Self.qrImage("seal:\(myRoot.credentialIDHash)") {
+        // SCROLLS. It used to be a bare VStack holding a 158pt QR card, two
+        // full width buttons, a footnote, and then a List. Two things went
+        // wrong on a small phone and on any phone with Bigger text on. The
+        // VStack overflowed with no way to reach the bottom, and the nested
+        // List got whatever height was left over, which on an SE is close to
+        // nothing, so the people you had actually met were the part that
+        // disappeared. The List is now a plain LazyVStack inside one
+        // ScrollView, which is the only arrangement where the header and the
+        // rows scroll together as one page.
+        ScrollView {
+            VStack(spacing: 20) {
+                // Your seal gets a card of its own rather than floating on the
+                // background. It is the thing the other person points a camera at.
+                if let qr = Self.qrImage("seal:\(myRoot.credentialIDHash)") {
+                    VStack(spacing: 10) {
+                        Image(uiImage: qr)
+                            .interpolation(.none)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 158, height: 158)
+                            .padding(10)
+                            .background(.white, in: RoundedRectangle(cornerRadius: 14))
+                        Text("Your seal. Have them scan this.")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.5))
+                    }
+                    .padding(.vertical, 18)
+                    .frame(maxWidth: .infinity)
+                    .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 20))
+                    .padding(.horizontal, 24)
+                }
+
                 VStack(spacing: 10) {
-                    Image(uiImage: qr)
-                        .interpolation(.none)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 158, height: 158)
-                        .padding(10)
-                        .background(.white, in: RoundedRectangle(cornerRadius: 14))
-                    Text("Your seal. Have them scan this.")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.5))
+                    // ONE loud button. Brass, because a key is about to be tapped
+                    // in front of you (UI.md §1.1).
+                    Button {
+                        stage = forgeGuideSeen ? .scanning : .guide
+                    } label: {
+                        Label("Scan their seal", systemImage: "qrcode.viewfinder")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(SealTheme.brass)
+                    .parentTapTarget()
+
+                    // The growth loop, and the only thing here that works when the
+                    // other person has nothing installed. Not brass: sending an
+                    // invitation proves nothing and taps nobody's key.
+                    ShareLink(item: Self.inviteURL,
+                              subject: Text("Seal"),
+                              message: Text(Self.inviteMessage)) {
+                        Label("Invite someone who doesn't have Seal", systemImage: "square.and.arrow.up")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.white)
+                    .parentTapTarget()
+
+
+                    Button { stage = .guide } label: {
+                        Text("How adding someone works")
+                            .font(.footnote)
+                            .foregroundStyle(.white.opacity(0.55))
+                            .padding(.top, 2)
+                    }
                 }
-                .padding(.vertical, 18)
-                .frame(maxWidth: .infinity)
-                .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 20))
                 .padding(.horizontal, 24)
-            }
 
-            VStack(spacing: 10) {
-                // ONE loud button. Brass, because a key is about to be tapped
-                // in front of you (UI.md §1.1).
-                Button {
-                    stage = forgeGuideSeen ? .scanning : .guide
-                } label: {
-                    Label("Scan their seal", systemImage: "qrcode.viewfinder")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(SealTheme.brass)
-                .parentTapTarget()
-
-                // The growth loop, and the only thing here that works when the
-                // other person has nothing installed. Not brass: sending an
-                // invitation proves nothing and taps nobody's key.
-                ShareLink(item: Self.inviteURL,
-                          subject: Text("Seal"),
-                          message: Text(Self.inviteMessage)) {
-                    Label("Invite someone who doesn't have Seal", systemImage: "square.and.arrow.up")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
-                }
-                .buttonStyle(.bordered)
-                .tint(.white)
-                .parentTapTarget()
-
-
-                Button { stage = .guide } label: {
-                    Text("How adding someone works")
-                        .font(.footnote)
-                        .foregroundStyle(.white.opacity(0.55))
-                        .padding(.top, 2)
-                }
-            }
-            .padding(.horizontal, 24)
-
-            if friendStore.friends.isEmpty {
-                SealMascot(size: 52,
-                           line: "Nobody added yet.",
-                           sub: "Seals make friends in person. So do you.")
-            } else {
-                List {
-                    ForEach(friendStore.friends) { friend in
-                        friendRow(friend)
+                if friendStore.friends.isEmpty {
+                    SealMascot(size: 52,
+                               line: "Nobody added yet.",
+                               sub: "Seals make friends in person. So do you.")
+                } else {
+                    // Swipe to delete went with the List, and that is a fix as
+                    // much as a loss: it called friendStore.remove on its own,
+                    // which dropped the person but LEFT them a custodian on the
+                    // estate. The Remove in the row's long press menu does both
+                    // and says what it means for the envelopes.
+                    LazyVStack(spacing: 10) {
+                        ForEach(friendStore.friends) { friend in
+                            friendRow(friend)
+                        }
                     }
-                    .onDelete { idx in
-                        idx.map { friendStore.friends[$0] }.forEach { friendStore.remove($0.id) }
-                    }
+                    .padding(.horizontal, 24)
                 }
-                .scrollContentBackground(.hidden)
             }
-            Spacer()
+            .padding(.top, 24)
+            .padding(.bottom, 32)
+            // GOTCHAS: a vertical ScrollView does not constrain its content's
+            // width, so one wide child makes the whole screen drag sideways.
+            .containerRelativeFrame(.horizontal)
         }
-        .padding(.top, 24)
+        .scrollBounceBehavior(.basedOnSize)
     }
 
     /// Scrollable body + an action footer pinned above the tab bar.
@@ -489,9 +506,17 @@ struct FriendsView: View {
                 Text(friend.friendship.forgedAt, style: .date)
                     .font(.caption2)
                     .foregroundStyle(.white.opacity(0.4))
+                // Outside a List nothing draws the disclosure arrow, and
+                // without one the row does not read as something to tap.
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.3))
             }
+            .padding(16)
+            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
         }
-        .listRowBackground(Color.white.opacity(0.05))
+        .buttonStyle(.plain)
+        .parentTapTarget()
         .contextMenu {
             Button {
                 recordFor = friend
