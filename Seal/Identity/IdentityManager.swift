@@ -91,6 +91,10 @@ final class IdentityManager {
     func completeRegistration(identity: RootIdentity, endorsement: DeviceEndorsement) {
         rootIdentity = identity
         deviceEndorsement = endorsement
+        // Our own key is the one we are most certain of. Pinning it means a
+        // directory that later serves a different key under our hash is
+        // refused on this phone too (KeyPinStore.swift).
+        KeyPinStore.pin(hash: identity.credentialIDHash, publicKey: identity.publicKey)
         // Persist WITHOUT the backup credentials (FR-3). Everything else on a
         // RootIdentity is stable, but the authority set is revocable, and a
         // keychain copy is never re-filtered against the revocation list — it
@@ -227,6 +231,16 @@ final class IdentityManager {
     /// Nothing creates v2 any more. Drop this once the family is known to be
     /// on a v3 build and every directory record has been re-endorsed (a
     /// sign-in on each phone rewrites it).
+    /// The only field lengths under which a v2 (unframed) commitment has one
+    /// possible reading. Public so the self-tests can pin the numbers.
+    static let legacyV2DeviceKeyLength = 65   // x963: 0x04 ‖ x ‖ y
+    static let legacyV2KEMKeyLength = 32      // raw X25519
+
+    static func legacyV2ShapeIsCanonical(devicePublicKey: Data, kemBundlePublicKeys: Data) -> Bool {
+        devicePublicKey.count == legacyV2DeviceKeyLength
+            && kemBundlePublicKeys.count == legacyV2KEMKeyLength
+    }
+
     static func legacyEndorsementCommitmentV2(devicePublicKey: Data, kemBundlePublicKeys: Data) -> Data {
         Data(SHA256.hash(data: Data("seal.endorse.v2".utf8) + devicePublicKey + kemBundlePublicKeys))
     }
@@ -297,18 +311,10 @@ final class IdentityManager {
         let authorities = authorityKeys(for: root)
         guard !authorities.isEmpty else { return [] }
         return endorsements.filter { e in
-            // NOTE: `e.revokedAt` is deliberately NOT consulted. It is a plain
-            // field inside the directory-supplied blob, covered by no
-            // signature, and it used to be the FIRST condition here — so
-            // anyone able to write an Identity record could set it on every
-            // endorsement and un-verify every device of that identity, with no
-            // key, no revocation record and no signature. Worse, the symptom
-            // is indistinguishable from the 6/26 desync, so it would have been
-            // triaged as a regression. The only trustworthy revocation channel
-            // is `revokedDevicePublicKeys` — root-signed, domain-separated,
-            // already applied by `fetchIdentity` before anything reaches here.
-            // (The app never writes a non-nil value: both construction sites
-            // pass nil. The field only ever served an attacker.)
+            // Security fix 3: there is no unsigned revocation field on the
+            // endorsement any more (see DeviceEndorsement). The only channel
+            // that can un-verify a device is `revokedDevicePublicKeys`, which
+            // is root-signed and already applied by `fetchIdentity`.
             guard let assertion = try? JSONDecoder().decode(WebAuthnAssertion.self, from: e.assertion)
             else { return false }
             // The commitment binds signing AND KEM keys — a directory that
@@ -317,10 +323,17 @@ final class IdentityManager {
             // before the framing fix. See endorsementCommitment.
             let v3 = endorsementCommitment(devicePublicKey: e.devicePublicKey,
                                            kemBundlePublicKeys: e.kemBundlePublicKeys)
+            // Security fix 4: the unframed v2 commitment is only unambiguous
+            // when both fields have their one legitimate length (a 65 byte
+            // x963 P-256 key and a 32 byte X25519 key). Any other split of
+            // the same bytes is refused, which is what closes the re-split
+            // revocation evasion described on endorsementCommitment.
+            let v2Shape = legacyV2ShapeIsCanonical(devicePublicKey: e.devicePublicKey,
+                                                   kemBundlePublicKeys: e.kemBundlePublicKeys)
             let v2 = legacyEndorsementCommitmentV2(devicePublicKey: e.devicePublicKey,
                                                    kemBundlePublicKeys: e.kemBundlePublicKeys)
             guard CeremonyManager.clientDataChallengeMatches(assertion.clientDataJSON, expected: v3)
-                    || CeremonyManager.clientDataChallengeMatches(assertion.clientDataJSON, expected: v2)
+                    || (v2Shape && CeremonyManager.clientDataChallengeMatches(assertion.clientDataJSON, expected: v2))
             else { return false }
             // Prefer the authority the assertion actually names. Trying every
             // authority in turn would also work, but each failed attempt logs

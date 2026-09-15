@@ -46,12 +46,23 @@ struct FriendshipAttestation: Codable, Hashable {
 }
 
 /// Hardware/passkey-signed certificate binding a device key to a root identity (SDS §2).
+///
+/// Security fix 3 of 4: this struct used to carry an unsigned `revokedAt`
+/// field that `verifiedDevices` treated as authoritative, so anyone able to
+/// write an Identity record could un-verify every device on it with no key.
+/// The field is GONE from the type. Old JSON that still carries it decodes
+/// fine (unknown keys are ignored) and the value is discarded. The only
+/// revocation channel is a root-signed `DeviceRevocation`.
 struct DeviceEndorsement: Codable, Hashable {
-    let devicePublicKey: Data           // Secure Enclave P-256 signing key
-    let kemBundlePublicKeys: Data       // X25519 + ML-KEM-768 public keys, SE-signed
+    let devicePublicKey: Data           // Secure Enclave P-256 signing key, x963
+    /// KEM public material this device can be wrapped to. For endorsements
+    /// created before the estate work this is a raw 32 byte X25519 key. For
+    /// v3 endorsements it may be a `KEMBundle` encoding carrying X25519 and
+    /// ML-KEM-768 (see Crypto/KEMBundle.swift); `KEMBundle.parse` tells the
+    /// two apart by length.
+    let kemBundlePublicKeys: Data
     let assertion: Data                 // WebAuthn assertion committing to devicePublicKey
     let createdAt: Date
-    var revokedAt: Date?
 }
 
 /// Root-key-signed revocation of a device (FR-19). Clients treat the device

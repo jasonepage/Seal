@@ -28,12 +28,21 @@ final class FriendStore {
     }
 
     func add(identity: RootIdentity, friendship: Friendship) {
+        // Every path that reaches here has just verified a signature chain
+        // rooted in `identity.publicKey` (a ceremony tap, a reciprocal
+        // handshake, an introduction). That proof is what earns the pin; the
+        // pin is what stops the directory from replacing the key later
+        // (KeyPinStore.swift, security fix 1).
+        KeyPinStore.pin(hash: identity.credentialIDHash, publicKey: identity.publicKey)
         friends.removeAll { $0.identity.credentialIDHash == identity.credentialIDHash }
         friends.append(StoredFriend(identity: identity, friendship: friendship))
         save()
     }
 
     func remove(_ credentialIDHash: String) {
+        // Removing a person is the ONE sanctioned way to drop their pin, so
+        // that meeting them again after a genuine re-registration works.
+        KeyPinStore.forget(hash: credentialIDHash)
         friends.removeAll { $0.identity.credentialIDHash == credentialIDHash }
         save()
     }

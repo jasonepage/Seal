@@ -187,11 +187,17 @@ final class SyncEngine {
         } catch let error as CKError where error.code == .unknownItem {
             return nil
         }
-        // Tombstoned (deleted) identities read as "not found" — sign-in refuses
+        // Tombstoned (deleted) identities read as "not found": sign-in refuses
         // and the caller can't revive them (FR-19).
         if record["tier"] as? String == Self.deletedTier { return nil }
+        guard let publicKey = record["publicKey"] as? Data else { return nil }
+        // Security fix 1: a pinned root key must match what the directory
+        // serves, every single fetch. A mismatch THROWS rather than returning
+        // nil, so callers that distinguish "not found" from "refused" can say
+        // so, and callers that `try?` fail closed either way. See
+        // KeyPinStore.swift for why this is the fix that matters most.
+        try KeyPinStore.enforce(hash: credentialIDHash, publicKey: publicKey)
         guard
-            let publicKey = record["publicKey"] as? Data,
             let tierRaw = record["tier"] as? String,
             let tier = IdentityTier(rawValue: tierRaw),
             let displayName = record["displayName"] as? String,

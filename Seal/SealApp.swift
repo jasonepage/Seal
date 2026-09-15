@@ -53,6 +53,10 @@ struct SealApp: App {
     init() {
         // FR-22: must run before ContentView creates the stores.
         DemoFixtures.prepare()
+        // DEBUG only: the in-target test suites (Seal/SelfTest). Asserts on
+        // any failure so a broken crypto or state machine change cannot be
+        // missed by a developer running the app.
+        SelfTest.runAtLaunchIfDebug()
     }
 
     var body: some Scene {

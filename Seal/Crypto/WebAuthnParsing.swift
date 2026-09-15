@@ -262,13 +262,19 @@ struct WebAuthnAssertion: Codable, Hashable {
 
     /// Enforce the WebAuthn context checks below instead of only logging them.
     ///
-    /// **Ships `false` on purpose.** These checks have never run in this app,
-    /// so nobody knows what the family's real authenticators actually emit —
-    /// and turning them on blind would un-verify existing friendships and
-    /// endorsements with no way to tell an attack from a bad guess. Run a
-    /// build with this false, read the `webauthn` os-log for CONTEXT VIOLATION
-    /// lines over a few days, then flip it. One line, deliberately greppable.
-    static let enforceContextChecks = false
+    /// Security fix 2 of 4 (docs/SDS.md section 11). This shipped `false`
+    /// while the app was a messenger, on the theory that real authenticators
+    /// might emit something unexpected and un-verify a family. In a vault the
+    /// missing checks are disqualifying: without the relying party hash, a
+    /// signature this key made for ANY other site verifies here; without the
+    /// user presence bit, nobody had to touch the key; without the type
+    /// check, a registration signature passes as an assertion. A custodian
+    /// authorising a release must be proven to have physically tapped a key,
+    /// for Seal, in an assertion. So this is on, and stays on.
+    ///
+    /// If a real key fails these checks the answer is to read the `webauthn`
+    /// os-log line naming which check, and fix the request, not to flip this.
+    static let enforceContextChecks = true
 
     /// What a signature check alone does NOT establish.
     ///
@@ -286,7 +292,13 @@ struct WebAuthnAssertion: Codable, Hashable {
     /// User Verified is deliberately NOT required: the UV policy is
     /// `.preferred` so PIN-less keys stay tap-only (the 6/26 fix), which means
     /// a perfectly legitimate assertion can carry UV unset.
-    func contextViolations() -> [String] {
+    /// `requireUserVerification` adds the UV bit for statements where a tap
+    /// alone is not enough. It is off by default because the UV policy is
+    /// `.preferred` (PIN-less keys stay tap-only, the 6/26 fix), so a
+    /// legitimate everyday assertion can carry UV unset. Release
+    /// authorisations pass true through `verify(with:requireUserVerification:)`
+    /// when the estate policy asks for it.
+    func contextViolations(requireUserVerification: Bool = false) -> [String] {
         var problems: [String] = []
         guard authenticatorData.count >= 37 else {
             return ["authenticatorData too short (\(authenticatorData.count) bytes)"]
@@ -297,6 +309,7 @@ struct WebAuthnAssertion: Codable, Hashable {
         }
         let flags = authenticatorData[authenticatorData.startIndex + 32]
         if flags & 0x01 == 0 { problems.append("User Present flag unset") }
+        if requireUserVerification, flags & 0x04 == 0 { problems.append("User Verified flag unset") }
         if let obj = try? JSONSerialization.jsonObject(with: clientDataJSON) as? [String: Any] {
             switch obj["type"] as? String {
             case "webauthn.get": break
@@ -314,7 +327,7 @@ struct WebAuthnAssertion: Codable, Hashable {
     /// `derRepresentation` parser handles them. We log which step fails
     /// (parse vs. cryptographic check) so a model-specific failure is
     /// attributable instead of a silent `false`.
-    func verify(with publicKey: P256.Signing.PublicKey) -> Bool {
+    func verify(with publicKey: P256.Signing.PublicKey, requireUserVerification: Bool = false) -> Bool {
         let flags = authenticatorData.count > 32 ? authenticatorData[authenticatorData.startIndex + 32] : 0
         guard let sig = try? P256.Signing.ECDSASignature(derRepresentation: signature) else {
             WebAuthnDiag.log.error("""
@@ -327,10 +340,9 @@ struct WebAuthnAssertion: Codable, Hashable {
         let signed = authenticatorData + Data(SHA256.hash(data: clientDataJSON))
         let ok = publicKey.isValidSignature(sig, for: signed)
         if ok {
-            // A matching signature is necessary, not sufficient — see
-            // contextViolations. Logged now, enforced once we know what real
-            // devices actually emit.
-            let violations = contextViolations()
+            // A matching signature is necessary, not sufficient. See
+            // contextViolations. Enforced (security fix 2).
+            let violations = contextViolations(requireUserVerification: requireUserVerification)
             if !violations.isEmpty {
                 let detail = violations.joined(separator: "; ")
                 WebAuthnDiag.log.error("verify: signature OK but CONTEXT VIOLATION [\(detail, privacy: .public)] enforcing=\(Self.enforceContextChecks, privacy: .public)")

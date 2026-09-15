@@ -136,8 +136,7 @@ final class CeremonyManager: NSObject {
                 devicePublicKey: devicePub,
                 kemBundlePublicKeys: identity.kemPublicKeyData ?? Data(),
                 assertion: try JSONEncoder().encode(stored),
-                createdAt: .now,
-                revokedAt: nil
+                createdAt: .now
             )
 
             // 5. Persist locally.
@@ -324,8 +323,7 @@ final class CeremonyManager: NSObject {
                     clientDataJSON: endorseAssertion.rawClientDataJSON,
                     authenticatorData: endorseAssertion.rawAuthenticatorData,
                     signature: endorseAssertion.signature)),
-                createdAt: .now,
-                revokedAt: nil)
+                createdAt: .now)
 
             identity.completeRegistration(identity: root, endorsement: endorsement)
             // Recovered with a backup key? Remember it (FR-3). Recorded HERE,
@@ -392,6 +390,9 @@ final class CeremonyManager: NSObject {
                   Self.clientDataChallengeMatches(stored.clientDataJSON, expected: challenge) else {
                 throw CeremonyError.verificationFailed
             }
+            // The tap just proved this person controls this key. Pin it now,
+            // at the moment of proof, not later when the store is written.
+            KeyPinStore.pin(hash: friend.credentialIDHash, publicKey: friend.publicKey)
 
             let attestation = FriendshipAttestation(nonce: nonce, timestamp: .now, assertion: stored)
             let friendship = Friendship(
