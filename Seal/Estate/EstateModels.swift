@@ -200,6 +200,12 @@ struct Estate: Codable, Hashable {
     var tableKeys: [String: TableKeyRecord]
     /// True once epoch material for `epoch` has been published to the log.
     var epochPublished: Bool
+    /// The custodian set and threshold the published epoch was built for.
+    /// A difference from the current values means the next seal rotates.
+    var publishedCustodianHashes: [String] = []
+    var publishedThreshold: Int = 0
+    /// Table ids published in the last vault statement, for the record.
+    var publishedTableIDs: [String] = []
 
     struct TableKeyRecord: Codable, Hashable {
         let tableID: String
@@ -226,6 +232,18 @@ struct Estate: Codable, Hashable {
 
     var isReadyToSeal: Bool {
         !custodians.isEmpty && (try? policy.validate(custodianCount: custodians.count)) != nil
+    }
+
+    /// Custodians or threshold changed since the last published epoch, or
+    /// nothing has been published yet.
+    var needsNewEpoch: Bool {
+        !epochPublished
+            || publishedCustodianHashes != custodians.map(\.rootHash)
+            || publishedThreshold != policy.threshold
+    }
+
+    var hasUnsealedChanges: Bool {
+        needsNewEpoch || envelopes.contains { !$0.sealed }
     }
 }
 

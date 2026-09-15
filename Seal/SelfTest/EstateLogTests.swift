@@ -116,10 +116,12 @@ enum EstateLogTests {
         let openAt = claimAt.addingTimeInterval(37 * day)
         add(try wife.event(.authorization, estate: "E", prev: prev,
                            payload: try EstateEvent.encodeBody(AuthorizationBody(claimID: "c1", epoch: 1, recordHeadDigest: prev,
-                                                                                assertion: wife.root.assertion(challenge: Data(repeating: 1, count: 32)))), at: openAt))
+                                                                                assertion: wife.root.assertion(challenge: Data(repeating: 1, count: 32)),
+                                                                                shareForClaimant: [])), at: openAt))
         add(try brother.event(.authorization, estate: "E", prev: prev,
                               payload: try EstateEvent.encodeBody(AuthorizationBody(claimID: "c1", epoch: 1, recordHeadDigest: prev,
-                                                                                   assertion: brother.root.assertion(challenge: Data(repeating: 1, count: 32)))), at: openAt.addingTimeInterval(day)))
+                                                                                   assertion: brother.root.assertion(challenge: Data(repeating: 1, count: 32)),
+                                                                                   shareForClaimant: [])), at: openAt.addingTimeInterval(day)))
 
         let s = ReleaseFeed.snapshot(events: events, ownerHash: owner.hash, fallbackPolicy: ReleasePolicy(threshold: 1),
                                      estateCreatedAt: t0, timeOf: { $0.occurredAt })

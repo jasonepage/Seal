@@ -132,6 +132,11 @@ struct EpochBody: Codable, Hashable {
     let threshold: Int
     /// Custodian root hashes in share index order (index i+1 is custodians[i]).
     let custodianHashes: [String]
+    /// Their root public keys, same order, as the owner pinned them at the
+    /// ceremony. Custodians who never met each other learn each other's keys
+    /// from THIS signed statement and pin them, so the directory cannot put
+    /// a stranger between a custodian and the claimant.
+    let custodianPublicKeys: [Data]
     /// SHA-256 of each share's encoded form, same order.
     let shareCommitments: [Data]
     let estateKeyCommitment: Data
@@ -145,10 +150,13 @@ struct PolicyBody: Codable, Hashable {
 }
 
 struct VaultBody: Codable, Hashable {
-    /// SHA-256 over the sorted, newline-joined blob ids and table ids. One
-    /// number; not the list.
-    let commitment: Data
-    let tableCount: Int
+    /// SHA-256 over the sorted, newline-joined blob ids. One number; not the
+    /// list. A recipient learns their own blob ids from their key table.
+    let blobCommitment: Data
+    /// The key table blob ids. Random names, one per recipient, so the
+    /// number of recipients is visible and nothing else is. A recipient
+    /// trial-opens each one.
+    let tableIDs: [String]
 }
 
 struct ObservationBody: Codable, Hashable {
@@ -184,6 +192,10 @@ struct AuthorizationBody: Codable, Hashable {
     /// The custodian's ROOT credential assertion over
     /// `ReleaseChallenge.challenge(...)`. The physical tap.
     let assertion: WebAuthnAssertion
+    /// This custodian's Shamir share, re-wrapped to the CLAIMANT's endorsed
+    /// devices (AAD: `ReleaseChallenge.shareAAD`). The tap is the proof; the
+    /// share is the contribution. M taps put M shares on the claiming phone.
+    let shareForClaimant: [HybridWrap.Envelope]
 }
 
 struct ReleasedBody: Codable, Hashable {
@@ -191,10 +203,14 @@ struct ReleasedBody: Codable, Hashable {
     let epoch: UInt64
     /// Which shares were used, by index.
     let shareIndexes: [UInt8]
-    /// The Estate Key wrapped to every recipient device of every key table's
-    /// release wraps. A recipient trial-opens these the same way they
-    /// trial-open the tables.
-    let estateKeyDeliveries: [HybridWrap.Envelope]
+    /// THE ESTATE KEY, IN THE CLEAR. This is the moment the seal breaks and
+    /// the record shows it. It is safe to publish because the Estate Key on
+    /// its own opens nothing: every key table is also wrapped to its
+    /// recipient's own devices, and every blob is under a content key that
+    /// lives inside a table. Publishing it here is what lets each recipient
+    /// open their own table on their own phone without the claimant ever
+    /// learning who the recipients are.
+    let estateKey: Data
 }
 
 // MARK: - The release challenge
@@ -218,7 +234,10 @@ enum ReleaseChallenge {
         return Data(SHA256.hash(data: input))
     }
 
-    static let deliveryPurpose = "estatekey.delivery"
+    /// AAD for a share re-wrapped to the claimant inside an authorization.
+    static func shareAAD(estateID: String, epoch: UInt64, claimID: String) -> Data {
+        Data("seal.release.share.v1|\(estateID)|\(epoch)|\(claimID)".utf8)
+    }
 }
 
 // MARK: - Building events
@@ -305,8 +324,8 @@ enum EstateLogVerifier {
             } else {
                 return false
             }
-            guard let (root, endorsements) = directory.identities[event.actorHash] else { return false }
-            let trusted = IdentityManager.verifiedDevices(root: root, endorsements: endorsements)
+            guard let entry = directory.identities[event.actorHash] else { return false }
+            let trusted = IdentityManager.verifiedDevices(root: entry.0, endorsements: entry.1)
             return trusted.contains { $0.devicePublicKey == event.actorDevicePublicKey }
         }
     }
