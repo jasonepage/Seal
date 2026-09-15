@@ -180,7 +180,7 @@ is the entire point.
   timeline. Each row: what happened, when, and the state chip from §4.3. Card
   rows show the title only, never the value, for the same reason
   `ChatEngine.summary` never summarises a card's value.
-- **The whole record.** Replaces History in Advanced. Same rows, all
+- **The whole record.** Replaces History. Same rows, all
   counterparts.
 - **Export** sits at the top of a person's record.
 
@@ -223,7 +223,7 @@ is the entire point.
 | New `Seal/Views/RecordView.swift` | the timeline, per person and global |
 | New `tools/verify_record.py` | standalone verifier |
 | `Seal/Views/ForgeLogView.swift` | becomes a filter over the record, or retires |
-| `Seal/Views/ProfileView.swift` | Advanced points at the record |
+| `Seal/Views/ProfileView.swift` | The Your record section points at the record |
 | `site/privacy.html` | the §4.4 metadata disclosure |
 
 ---
@@ -253,16 +253,16 @@ with no signature and no time. There is nothing to place on a timeline and
 nothing to prove, and inventing a moment for it is the one kind of entry a
 record must never contain.
 
-Two entry points: Profile → Advanced → **Record** for everything, and a person's
+Two entry points: You → Your record → **Record** for everything, and a person's
 row in People → long press → **See the record** for one timeline. Record sits
-above History in Advanced because it is a superset; History retires into it once
+above History because it is a superset; History retires into it once
 the export lands.
 
 The footer states the limits on screen: signed and re-checkable, times are the
 signing phone's own clock, and a line proves credential A did something with
 credential B rather than anything about a legal identity.
 
-`ProfileView` now takes `chatEngine`, purely so Advanced can reach the record.
+`ProfileView` now takes `chatEngine`, purely so the record is reachable from You.
 
 ## 12. Question 2, decided (2026-08-28)
 
@@ -342,7 +342,8 @@ because that is the artefact somebody else reads.
 
 Timestamping tells a third party that some hash was submitted at some time from
 some address. Small, real, and not something an app should start doing quietly.
-The toggle is **Independent timestamps** in Advanced, off until asked, and the
+The toggle is **Independent timestamps** under Your record on the You screen,
+off until asked, and the
 record footer points at it.
 
 ### Behaviour

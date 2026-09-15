@@ -21,7 +21,7 @@ so read the pending list before you click the button.
 The deploy copies whatever Development has, so Development has to be right.
 
 1. Run the app from Xcode onto your phone. Xcode builds always hit Development.
-2. Go to Profile → Advanced → Backup keys → **Add a backup key**, and do it once.
+2. Go to You → Your keys → **Add a backup key**, and do it once.
    That write creates the `backupEndorsements` field on `Identity`
    automatically. If you get the "backup keys aren't switched on in this
    environment" message instead, the field was not created and you add it by

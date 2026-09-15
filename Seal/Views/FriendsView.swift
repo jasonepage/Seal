@@ -105,10 +105,10 @@ struct FriendsView: View {
                 }
                 // The history and the handovers used to hang off this
                 // toolbar as two unlabelled brass glyphs. They are evidence,
-                // opened rarely and on purpose, so they moved to Profile ->
-                // Advanced where they get a name and a sentence each
-                // (docs/COLDSTART.md). This screen is now for one job: adding
-                // and seeing the people you have actually met.
+                // opened rarely and on purpose, so they moved to the You
+                // screen under Your record, where they get a name and a
+                // sentence each (docs/COLDSTART.md). This screen is now for
+                // one job: adding and seeing the people you have actually met.
             }
         }
         .preferredColorScheme(.dark)

@@ -40,7 +40,8 @@ import os
 //  Timestamping sends a hash to a third party, which tells that party some
 //  hash was submitted at some time from some address. That is real metadata,
 //  small but real, and an app should not start doing it quietly. The toggle
-//  lives in Advanced and the record footer points at it.
+//  lives under Your record on the You screen, and the record footer points
+//  at it by that name.
 
 // MARK: - Stored token
 
@@ -164,7 +165,8 @@ enum TimestampService {
     }
 
     /// Stamp one digest, for the estate log (Estate/EstateEngine.swift).
-    /// Unlike `stampPending` this does not consult the Advanced toggle: an
+    /// Unlike `stampPending` this does not consult the Independent
+    /// timestamps toggle: an
     /// estate's heartbeats and claims are the thing the timestamps exist for,
     /// and the owner agreed to it when they created the estate. Returns nil
     /// on any failure.

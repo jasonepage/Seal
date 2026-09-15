@@ -212,7 +212,7 @@ struct RecordView: View {
                 Text("Seal asks a timestamp authority to sign each line's digest, and only the digest ever leaves this phone. It keeps the token that comes back. That token's own signature is checked when you export the record, not here.")
                 Text("A line still marked Signed has no token yet. It will get one the next time this screen opens with a connection.")
             } else {
-                Text("The times are that phone's own clock, so Seal can prove who signed something and that its contents have not changed, but not when it happened. Turn on independent timestamps in Advanced to close that.")
+                Text("The times are that phone's own clock, so Seal can prove who signed something and that its contents have not changed, but not when it happened. Turn on independent timestamps on the You screen to close that.")
             }
             Text("A line here says credential A did something with credential B. It is not proof of anyone's legal identity, and it does not say whether what they agreed to was wise.")
         }
