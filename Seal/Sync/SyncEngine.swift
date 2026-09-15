@@ -48,11 +48,19 @@ final class SyncEngine {
 
     /// True if this identity has been permanently deleted. Checked at sign-in
     /// AND before any publish, so a deleted identity can't be brought back.
-    func isTombstoned(credentialIDHash hash: String) async -> Bool {
+    ///
+    /// FAILS CLOSED. This used to return false on any error other than
+    /// "no such record", so a network blip at sign-in let a deleted identity
+    /// through to the live-record path, and a blip at publish time revived
+    /// it. Every caller needs the network anyway (a sign-in fetches the
+    /// record next, a publish writes it), so an unreachable directory is an
+    /// error here, not a "probably fine". The local graveyard is consulted
+    /// first and needs no network at all.
+    func isTombstoned(credentialIDHash hash: String) async throws -> Bool {
+        if DeletedIdentityLedger.contains(hash) { return true }
         let id = CKRecord.ID(recordName: Self.tombstoneName(hash))
         do { _ = try await publicDB.record(for: id); return true }
         catch let error as CKError where error.code == .unknownItem { return false }
-        catch { return false }   // network/unknown: fail open (don't block normal use)
     }
 
     // MARK: - Identity directory (FR-4)
@@ -86,10 +94,18 @@ final class SyncEngine {
         // being overwritten OR removed outright, so this closes the revival
         // paths the `tier` flag alone missed (sign-in republish, other-device
         // refresh, ensureSelfPublished, console deletion).
-        if await isTombstoned(credentialIDHash: root.credentialIDHash) {
-            status = .error("This identity was deleted and can't be republished.")
-            WebAuthnDiag.log.info("publishIdentity: refused to revive tombstoned identity")
-            return .refused
+        do {
+            if try await isTombstoned(credentialIDHash: root.credentialIDHash) {
+                status = .error("This identity was deleted and can't be republished.")
+                WebAuthnDiag.log.info("publishIdentity: refused to revive tombstoned identity")
+                return .refused
+            }
+        } catch {
+            // Could not check the graveyard. Publishing anyway is how a
+            // deleted identity comes back, so do not. Transient: retry later.
+            status = .error("Couldn't reach the directory. Seal tries again later.")
+            WebAuthnDiag.log.error("publishIdentity: tombstone check failed, not publishing: \(error.localizedDescription, privacy: .public)")
+            return .failed
         }
         let recordID = CKRecord.ID(recordName: root.credentialIDHash)
 
@@ -308,6 +324,10 @@ final class SyncEngine {
         } catch let error as CKError where error.code == .serverRecordChanged {
             // Marker already present (this or another account deleted before).
         }
+        // The marker is on the server. Remember it here too, so THIS phone
+        // never offers, excludes against, or signs into this identity again
+        // while CloudKit's query index catches up (DeletedIdentityLedger).
+        DeletedIdentityLedger.add(credentialIDHash)
 
         // 2. BEST-EFFORT: also flip the live Identity record to the deleted
         //    sentinel + scrub endorsements, so the fast path (fetchIdentity's
@@ -332,7 +352,25 @@ final class SyncEngine {
             record["backupEndorsements"] = Data()
         }
         try? await publicDB.save(record)
-        WebAuthnDiag.log.info("deleteIdentity: tombstoned \(credentialIDHash, privacy: .public) (marker authoritative; main-record flip best-effort)")
+        // Say whether the flip actually landed. When it did not (a record
+        // another account created), the marker still kills the identity,
+        // and the directory scan now honours markers directly.
+        let flipped = (try? await publicDB.record(for: recordID))
+            .map { $0["tier"] as? String == Self.deletedTier } ?? false
+        WebAuthnDiag.log.info("deleteIdentity: tombstoned \(credentialIDHash, privacy: .public) (marker written; live record flipped: \(flipped, privacy: .public))")
+    }
+
+    /// The public key the directory publishes under a hash, or nil when no
+    /// record exists there. No pin check, no tier check, no verification:
+    /// this is for the retire ceremony, which only needs to know what key a
+    /// tap must match before it is allowed to tombstone that name.
+    func publishedPublicKey(credentialIDHash: String) async throws -> Data? {
+        do {
+            let record = try await publicDB.record(for: CKRecord.ID(recordName: credentialIDHash))
+            return record["publicKey"] as? Data
+        } catch let error as CKError where error.code == .unknownItem {
+            return nil
+        }
     }
 
     /// Raw device list (including revoked) for the profile UI.

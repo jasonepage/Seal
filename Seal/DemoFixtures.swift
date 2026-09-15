@@ -179,7 +179,7 @@ enum DemoFixtures {
             return e
         }
         estate.envelopes = [
-            envelope(karen, "Everything you will need",
+            envelope(karen, "Everything you need",
                      "Karen, if you are reading this then the boring part of my life is now your problem, and I am sorry. Everything is in here. Start with the passwords, then the drawer in the study.",
                      [
                         try! SealedCard.validated(cardType: .password, title: "Password manager", value: "Bitwarden, user nathan@page.family, master phrase: correct horse battery staple 1967"),
@@ -187,7 +187,7 @@ enum DemoFixtures {
                         try! SealedCard.validated(cardType: .combination, title: "Gun safe", value: "38-12-77"),
                      ], order: 1),
             envelope(emma, "For Emma", "Em, you were the bravest of us and you still are. I have watched you decide things I never could. Do not let anyone talk you out of the garden.", [], order: 1),
-            envelope(jason, "For Jason", "Jay, you built things I did not understand and I was proud of every one of them. Keep building. Your mother will need you to be patient with her about the computer.", [], order: 1),
+            envelope(jason, "For Jason", "Jay, you built things I did not understand and I was proud of every one of them. Keep building. Your mother needs you to be patient with her about the computer.", [], order: 1),
             envelope(marco, "The domain and the registrar",
                      "Marco, the business is yours to wind down or keep. The domain renews in March.",
                      [try! SealedCard.validated(cardType: .password, title: "Registrar login", value: "Porkbun, user pagehardware, password Maple!Street!2214")],
@@ -205,7 +205,9 @@ enum DemoFixtures {
     }
 }
 
-/// FR-23: demo sessions are visually watermarked. Non-interactive overlay.
+/// FR-23: demo sessions are visually watermarked. Non-interactive, and it is
+/// placed in a reserved strip along the bottom edge (ContentView), never over
+/// the toolbar, so it hides no button.
 struct DemoWatermark: View {
     var body: some View {
         Text("DEMO")
@@ -215,8 +217,9 @@ struct DemoWatermark: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
             .background(.orange.opacity(0.85), in: Capsule())
+            .frame(maxWidth: .infinity)
             .padding(.top, 4)
-            .padding(.trailing, 12)
+            .padding(.bottom, 2)
             .allowsHitTesting(false)
     }
 }

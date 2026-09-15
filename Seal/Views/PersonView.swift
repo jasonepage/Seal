@@ -23,6 +23,7 @@ struct PersonView: View {
     @State private var handoverError: String?
     @State private var handoverDone = false
     @State private var showRecord = false
+    @Environment(\.parentMode) private var parentMode
 
     private var hash: String { person.identity.credentialIDHash }
     private var custodian: Custodian? { estateEngine.estate?.custodians.first { $0.rootHash == hash } }
@@ -74,10 +75,20 @@ struct PersonView: View {
         .alert("Handover", isPresented: Binding(get: { handoverError != nil }, set: { if !$0 { handoverError = nil } })) {
             Button("OK", role: .cancel) {}
         } message: { Text(handoverError ?? "") }
-        .alert("Handover signed", isPresented: $handoverDone) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("Both of you signed it. The record shows \(person.identity.displayName) took a key from you today.")
+        // The moment after the tap. The key holder is standing here holding
+        // the key and has just understood what it is for, so this is where
+        // they hear what their job is and get asked whether they have people
+        // they would do this for. It used to be a one-line alert.
+        .sheet(isPresented: $handoverDone) {
+            HandoverDoneView(
+                custodianName: person.identity.displayName,
+                ownerName: myRoot.displayName,
+                numbers: OnboardingNumbers(
+                    policy: estateEngine.estate?.policy ?? ReleasePolicy(threshold: 2),
+                    custodianCount: estateEngine.estate?.custodians.count ?? 3),
+                onDone: { handoverDone = false })
+            .environment(\.parentMode, parentMode)
+            .parentTypeScale()
         }
     }
 
@@ -106,7 +117,7 @@ struct PersonView: View {
                 .buttonStyle(.bordered).tint(.orange)
                 .parentTapTarget()
             } else {
-                Text("A custodian holds one of the keys that can open your envelopes after you are gone. Pick people who will still be reachable in ten years.")
+                Text("A custodian holds one of the keys that can open your envelopes after you are gone. Pick people who are likely to still be reachable in ten years.")
                     .font(.callout).foregroundStyle(.white.opacity(0.7)).fixedSize(horizontal: false, vertical: true)
                 Button { estateEngine.addCustodian(person.identity) } label: {
                     Text("Make \(person.identity.displayName) a custodian").frame(maxWidth: .infinity)

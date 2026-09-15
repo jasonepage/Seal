@@ -205,11 +205,31 @@ final class CeremonyManager: NSObject {
             let request: ASAuthorizationRequest
             switch tier {
             case .passkey:
-                // Passkeys are discoverable: empty allow-list → the system
-                // shows every passkey for this RP and authenticates via Face ID.
+                // Passkeys are discoverable: with an empty allow-list the
+                // system shows EVERY passkey for this RP, including the ones
+                // for identities that were deleted long ago. Seal cannot
+                // remove a passkey from iCloud Keychain, so those dead
+                // passkeys kept appearing in the Face ID picker forever. So
+                // the allow-list is the directory's LIVE credentials (the
+                // scan drops tombstoned identities and this phone's own
+                // graveyard). A dead passkey is then simply not offered.
+                //
+                // Falls back to "show everything" only when the directory
+                // cannot be read or has nothing, so an unreachable directory
+                // never makes the picker come up empty; a dead passkey picked
+                // in that state still dies at resolveSignInCredential.
                 let platform = ASAuthorizationPlatformPublicKeyCredentialProvider(
                     relyingPartyIdentifier: Self.relyingPartyID)
-                request = platform.createCredentialAssertionRequest(challenge: challenge)
+                let platformRequest = platform.createCredentialAssertionRequest(challenge: challenge)
+                if let live = try? await directory.fetchAllCredentialIDs(), !live.isEmpty {
+                    platformRequest.allowedCredentials = live.map {
+                        ASAuthorizationPlatformPublicKeyCredentialDescriptor(credentialID: $0)
+                    }
+                    WebAuthnDiag.log.info("signIn(.passkey): allow-list restricted to \(live.count, privacy: .public) live directory credential(s)")
+                } else {
+                    WebAuthnDiag.log.error("signIn(.passkey): directory unavailable or empty, offering every passkey")
+                }
+                request = platformRequest
             case .verified:
                 // Security-key credentials are NON-discoverable (registration
                 // mints them with residentKey .discouraged to dodge the CTAP2

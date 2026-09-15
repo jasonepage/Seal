@@ -3,11 +3,18 @@ import SwiftUI
 //  EstateHomeView.swift
 //  Seal
 //
-//  THE HOME SCREEN. Three things, top to bottom:
+//  THE HOME SCREEN. Three things, top to bottom, for an owner:
 //    1. Where you stand: safe, or a claim is running and here is the button
 //       that stops it.
 //    2. Your envelopes and the people who hold your keys.
 //    3. Anything you guard for somebody else.
+//
+//  For a phone that has nothing of its own and guards something for
+//  somebody else (a key holder, a recipient), the order flips: what they
+//  hold comes first, in their words (GuardedRoleCard.swift), then the
+//  question "do you have people you would do this for?", then the owner's
+//  sections under a soft heading. Same screen, same code paths underneath,
+//  different first sentence.
 //
 //  Half the people using this are over sixty. Big rows, one idea per row,
 //  the plain word for everything. No mascot near a security surface.
@@ -27,13 +34,42 @@ struct EstateHomeView: View {
     @State private var editing: Envelope?
     @State private var newEnvelopeFor: FriendStore.StoredFriend?
     @State private var showRecipientPicker = false
+    /// What the recipient picker is being used for this time: the blank
+    /// editor, as it always was, or the interview.
+    @State private var pickerMode: PickerMode = .blank
+    @State private var interviewFor: FriendStore.StoredFriend?
     @State private var sealing = false
     @State private var sealError: String?
     @State private var sealedOK = false
     @State private var showTimeTravel = false
+    @State private var explain: ExplainRequest?
     @Environment(\.parentMode) private var parentMode
 
+    /// The recipient picker is one sheet with two jobs. "Write one" opens
+    /// the blank editor, exactly as before. "Help me write it" opens the
+    /// interview instead. Nothing else about the picker changes.
+    private enum PickerMode { case blank, interview }
+
+    /// "See how it opens": the sandboxed explainer, started on the right
+    /// path with that estate's real numbers. It touches no engine and no
+    /// clock. (The DEBUG Time Travel screen is not this: it moves the real
+    /// clock.)
+    private struct ExplainRequest: Identifiable {
+        let id = UUID()
+        let role: OnboardingRole
+        let numbers: OnboardingNumbers
+    }
+
     private var estate: Estate? { estateEngine.estate }
+
+    /// True when this phone has written nothing and holds no keys of its
+    /// own, but has a part in somebody else's estate. That person is a key
+    /// holder or a recipient, and the screen should speak to them first.
+    private var guardsOnly: Bool {
+        let ownEnvelopes = estate?.envelopes.isEmpty ?? true
+        let ownCustodians = estate?.custodians.isEmpty ?? true
+        return ownEnvelopes && ownCustodians && !estateEngine.guarded.isEmpty
+    }
 
     var body: some View {
         NavigationStack {
@@ -41,10 +77,23 @@ struct EstateHomeView: View {
                 SealTheme.ink.ignoresSafeArea()
                 ScrollView {
                     VStack(spacing: 18) {
-                        statusCard
-                        envelopesSection
-                        custodiansSection
-                        guardedSection
+                        if guardsOnly {
+                            guardedSection
+                            PeopleYouWouldDoThisForCard(
+                                onWrite: {
+                                    pickerMode = .blank
+                                    showRecipientPicker = true
+                                },
+                                onExplain: { explain = ExplainRequest(role: .sealer, numbers: .defaults) })
+                            ownHeading
+                            envelopesSection
+                            custodiansSection
+                        } else {
+                            statusCard
+                            envelopesSection
+                            custodiansSection
+                            guardedSection
+                        }
                         footer
                     }
                     .padding(.vertical, 16)
@@ -101,16 +150,38 @@ struct EstateHomeView: View {
                     showRecipientPicker = false
                     guard let friend else { return }
                     estateEngine.addRecipient(friend.identity)
-                    editing = estateEngine.newEnvelope(for: friend.identity.credentialIDHash, title: "For \(friend.identity.displayName)")
+                    switch pickerMode {
+                    case .blank:
+                        editing = estateEngine.newEnvelope(for: friend.identity.credentialIDHash, title: "For \(friend.identity.displayName)")
+                    case .interview:
+                        interviewFor = friend
+                    }
                 }
                 .environment(\.parentMode, parentMode)
                 .parentTypeScale()
+            }
+            .sheet(item: $interviewFor) { friend in
+                EnvelopeInterviewView(
+                    recipientName: friend.identity.displayName,
+                    onCancel: { interviewFor = nil },
+                    onDraft: { draft in
+                        interviewFor = nil
+                        editing = envelopeFromDraft(draft, for: friend)
+                    })
+                    .environment(\.parentMode, parentMode)
+                    .parentTypeScale()
             }
             #if DEBUG
             .sheet(isPresented: $showTimeTravel) {
                 TimeTravelView(estateEngine: estateEngine, onClose: { showTimeTravel = false })
             }
             #endif
+            .fullScreenCover(item: $explain) { request in
+                SealOnboardingView(numbers: request.numbers, initialRole: request.role,
+                                   onDone: { explain = nil })
+                    .environment(\.parentMode, parentMode)
+                    .parentTypeScale()
+            }
             .alert("Could not seal", isPresented: Binding(get: { sealError != nil }, set: { if !$0 { sealError = nil } })) {
                 Button("OK", role: .cancel) {}
             } message: { Text(sealError ?? "") }
@@ -137,7 +208,7 @@ struct EstateHomeView: View {
         let drafts = estate.envelopes.filter { !$0.sealed }.count
         if drafts > 0 {
             let subject = drafts == 1 ? "1 envelope is" : "\(drafts) envelopes are"
-            return "\(subject) only on this phone. Until you seal them they will not open for anyone, ever. Tap Seal the envelopes below."
+            return "\(subject) only on this phone. Until you seal them they cannot open for anyone, ever. Tap Seal the envelopes below."
         }
         return "Your rule or your key holders changed since you last sealed. Seal again to give your key holders fresh shares. Your envelopes themselves are not touched."
     }
@@ -148,7 +219,11 @@ struct EstateHomeView: View {
         return VStack(alignment: .leading, spacing: 10) {
             switch state {
             case .none:
-                Text("Sealed envelopes").font(.system(.title2, design: .rounded, weight: .semibold))
+                HStack(alignment: .center, spacing: 14) {
+                    // Pewter: nothing is sealed yet, so no trust moment.
+                    SealMark(size: 44, trust: false, pressOnAppear: true)
+                    Text("Sealed envelopes").font(.system(.title2, design: .rounded, weight: .semibold))
+                }
                 Text("Write a few envelopes. Hand keys to people you trust. Set the rule for how they open after you are gone. Nobody, including us, can open one early.")
             case .active?, .cancelled?:
                 // This banner reads the RELEASE state, which only says whether
@@ -163,12 +238,20 @@ struct EstateHomeView: View {
                         .foregroundStyle(.orange)
                     Text(unsealedLine)
                 } else {
-                    Label("Your envelopes are closed.", systemImage: "checkmark.seal.fill")
-                        .font(.system(.title3, design: .rounded, weight: .semibold))
-                        .foregroundStyle(SealTheme.brass)
+                    // The mark in brass, because sealed and closed is the
+                    // trust moment of the whole product, with one pulse ring
+                    // on arrival. Opening the app IS the heartbeat, so the
+                    // pulse is the honest picture of what just happened. It
+                    // runs once and stops.
+                    HStack(alignment: .center, spacing: 14) {
+                        SealMark(size: 44, trust: true, pressOnAppear: false, pulseOnAppear: true)
+                        Text("Your envelopes are closed.")
+                            .font(.system(.title3, design: .rounded, weight: .semibold))
+                            .foregroundStyle(SealTheme.brass)
+                    }
                 }
                 if let last = snapshot?.lastHeartbeatAt {
-                    Text("You last checked in \(last.formatted(.relative(presentation: .named))). Opening Seal is the check-in. If you go quiet for \(estate?.policy.silenceDays ?? 90) days, your custodians can start the process, and you will be warned for weeks before anything opens.")
+                    Text("You last checked in \(last.formatted(.relative(presentation: .named))). Opening Seal is the check-in. If you go quiet for \(estate?.policy.silenceDays ?? 90) days, your custodians can start the process, and you get warned for weeks before anything opens.")
                 }
                 if state == .cancelled {
                     Text("A claim was stopped when you checked in. Your custodians can see that.")
@@ -219,12 +302,16 @@ struct EstateHomeView: View {
     private var envelopesSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             sectionHeader("Your envelopes", trailing: {
-                Button { showRecipientPicker = true } label: {
+                Button {
+                    pickerMode = .blank
+                    showRecipientPicker = true
+                } label: {
                     Label("Write one", systemImage: "plus")
                 }
                 .buttonStyle(.bordered).tint(SealTheme.brass)
                 .parentTapTarget()
             })
+            helperRow
             if let estate, !estate.envelopes.isEmpty {
                 ForEach(estate.envelopes.sorted { ($0.recipientHash, $0.revealOrder) < ($1.recipientHash, $1.revealOrder) }) { envelope in
                     Button { editing = envelope } label: { envelopeRow(envelope, estate: estate) }
@@ -233,7 +320,7 @@ struct EstateHomeView: View {
                 }
                 sealButton(estate)
             } else {
-                Text("An envelope holds a letter, a few photos, a voice message and the secrets: passwords, where the documents are, the combination, the words you never said out loud.")
+                Text("An envelope holds a letter, a few photos, a voice message and the secrets: passwords, where the documents are, the combination, the words you never said out loud. If you do not know where to start, tap Help me write it and answer a few questions.")
                     .font(.callout).foregroundStyle(.white.opacity(0.55))
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 24)
@@ -241,8 +328,66 @@ struct EstateHomeView: View {
         }
     }
 
+    /// The second way in. A blank page stops most people, and an empty
+    /// vault is how this product actually fails (docs/PRODUCT.md section
+    /// 11). No brass: this is a door, not a trust moment.
+    private var helperRow: some View {
+        Button {
+            pickerMode = .interview
+            showRecipientPicker = true
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: "text.bubble")
+                    .font(.title3)
+                    .foregroundStyle(.white.opacity(0.7))
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Help me write it")
+                        .font(.headline).foregroundStyle(.white)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("A few questions, then a draft you edit. Nothing you type leaves your phone.")
+                        .font(.caption).foregroundStyle(.white.opacity(0.55))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.white.opacity(0.3))
+            }
+            .padding(16)
+            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
+            .padding(.horizontal, 20)
+        }
+        .buttonStyle(.plain)
+        .parentTapTarget()
+    }
+
+    /// Turn an interview draft into a real envelope, using exactly the two
+    /// engine calls the editor uses: `newEnvelope(for:title:)` to create it
+    /// and `updateEnvelope(_:)` to save the letter and the secrets. Nothing
+    /// new was added to the engine for this. The envelope lands unsealed,
+    /// like every other draft, and the editor opens on it next.
+    private func envelopeFromDraft(_ draft: InterviewDraft, for friend: FriendStore.StoredFriend) -> Envelope {
+        let name = friend.identity.displayName
+        let title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "For \(name)" : draft.title
+        var envelope = estateEngine.newEnvelope(for: friend.identity.credentialIDHash, title: title)
+        envelope.letter = draft.letter
+        // Secrets go in exactly as typed, through the same validator the
+        // secret editor uses. One that cannot be built is dropped rather
+        // than altered, and the owner sees the letter and can add it by hand.
+        envelope.secrets = draft.secrets.compactMap {
+            try? SealedCard.validated(cardType: $0.kind, title: $0.label, value: $0.value)
+        }
+        estateEngine.updateEnvelope(envelope)
+        return envelope
+    }
+
     private func envelopeRow(_ envelope: Envelope, estate: Estate) -> some View {
         let recipient = estate.recipients.first { $0.rootHash == envelope.recipientHash }?.displayName ?? "Someone"
+        // "0 secrets" read like something had gone missing. A letter with no
+        // secrets is a whole envelope, so say what it is.
+        let contents = envelope.secrets.isEmpty
+            ? "letter only"
+            : "\(envelope.secrets.count) secret\(envelope.secrets.count == 1 ? "" : "s")"
         return HStack(spacing: 14) {
             Image(systemName: envelope.sealed ? "envelope.fill" : "envelope.badge")
                 .font(.title3)
@@ -250,7 +395,7 @@ struct EstateHomeView: View {
                 .frame(width: 28)
             VStack(alignment: .leading, spacing: 3) {
                 Text(envelope.title).font(.headline).foregroundStyle(.white)
-                Text("To \(recipient) · \(envelope.secrets.count) secret\(envelope.secrets.count == 1 ? "" : "s") · \(envelope.sealed ? "sealed" : "not sealed yet")")
+                Text("To \(recipient) · \(contents) · \(envelope.sealed ? "sealed" : "not sealed yet")")
                     .font(.caption).foregroundStyle(.white.opacity(0.5))
             }
             Spacer()
@@ -286,8 +431,15 @@ struct EstateHomeView: View {
             .disabled(sealing || !estate.hasUnsealedChanges || !estate.isReadyToSeal || DemoFixtures.isActive)
             .parentTapTarget(60)
             .padding(.horizontal, 20)
-            if !estate.isReadyToSeal {
-                Text("Add at least one custodian and set the rule before sealing.")
+            // The demo branch comes FIRST. The button is disabled in demo
+            // mode whatever the estate says, so any other caption would be
+            // explaining a rule that is not the one stopping the tap.
+            if DemoFixtures.isActive {
+                Text("Sealing is turned off in the demo.")
+                    .font(.caption).foregroundStyle(.white.opacity(0.5))
+                    .multilineTextAlignment(.center).padding(.horizontal, 28)
+            } else if !estate.isReadyToSeal {
+                Text("Add at least one key holder and set the rule before sealing.")
                     .font(.caption).foregroundStyle(.orange.opacity(0.85))
             } else if estate.needsNewEpoch && estate.epochPublished {
                 Text("Your custodians or your rule changed. Sealing again issues fresh key shares. Your envelopes themselves are not touched.")
@@ -312,19 +464,24 @@ struct EstateHomeView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 24)
                 ForEach(estate.custodians) { custodian in
-                    HStack(spacing: 14) {
-                        Image(systemName: custodian.handoverReceiptID == nil ? "key" : "key.fill")
-                            .foregroundStyle(SealTheme.brass).frame(width: 28)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(custodian.displayName).font(.headline).foregroundStyle(.white)
-                            Text(custodian.handoverReceiptID == nil ? "Key not yet handed over on record" : "Key handover signed by both of you")
-                                .font(.caption).foregroundStyle(.white.opacity(0.5))
+                    // The row used to be a dead HStack, so the one thing a
+                    // person comes to this section to do, record the handover,
+                    // had no way in from here. It opens that person's page now.
+                    // If no met-in-person record backs the hash (it should, a
+                    // custodian is made from one), the row stays static rather
+                    // than offering a tap that leads nowhere.
+                    if let friend = storedFriend(for: custodian) {
+                        NavigationLink {
+                            PersonView(person: friend, myRoot: myRoot, friendStore: friendStore,
+                                       estateEngine: estateEngine, ceremony: ceremony, sync: sync)
+                        } label: {
+                            custodianRow(custodian, tappable: true)
                         }
-                        Spacer()
+                        .buttonStyle(.plain)
+                        .parentTapTarget()
+                    } else {
+                        custodianRow(custodian, tappable: false)
                     }
-                    .padding(16)
-                    .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
-                    .padding(.horizontal, 20)
                 }
             } else {
                 Text("A custodian is someone you met in person and handed a security key to. Open People, long press a person, and make them a custodian.")
@@ -335,46 +492,85 @@ struct EstateHomeView: View {
         }
     }
 
+    private func storedFriend(for custodian: Custodian) -> FriendStore.StoredFriend? {
+        friendStore.friends.first { $0.identity.credentialIDHash == custodian.rootHash }
+    }
+
+    private func custodianRow(_ custodian: Custodian, tappable: Bool) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: custodian.handoverReceiptID == nil ? "key" : "key.fill")
+                .foregroundStyle(SealTheme.brass).frame(width: 28)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(custodian.displayName).font(.headline).foregroundStyle(.white)
+                // "Tap to record it" only where there is something to tap.
+                Text(custodian.handoverReceiptID == nil
+                     ? (tappable ? "Key handover not recorded yet. Tap to record it."
+                                 : "Key handover not recorded yet.")
+                     : "Key handover signed by both of you.")
+                    .font(.caption).foregroundStyle(.white.opacity(0.5))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+            if tappable {
+                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.white.opacity(0.3))
+            }
+        }
+        .padding(16)
+        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
+        .padding(.horizontal, 20)
+    }
+
     // MARK: - Guarded
 
+    /// One card per estate this phone has a part in, in the words of that
+    /// part. The old row said "Keys you hold for others" over a recipient
+    /// and "All quiet." to somebody who had asked nothing. GuardedRoleCard
+    /// says the one thing each of those people needs, with no envelope
+    /// count (the phone does not know one until release).
     private var guardedSection: some View {
         Group {
             if !estateEngine.guarded.isEmpty {
-                VStack(alignment: .leading, spacing: 10) {
-                    sectionHeader("Keys you hold for others", trailing: { EmptyView() })
+                VStack(alignment: .leading, spacing: 14) {
+                    if !guardsOnly {
+                        sectionHeader("What you hold for others", trailing: { EmptyView() })
+                    }
                     ForEach(estateEngine.guarded) { g in
-                        NavigationLink {
-                            GuardedEstateView(guarded: g, myRoot: myRoot, ceremony: ceremony,
-                                              estateEngine: estateEngine, appLock: appLock)
-                        } label: {
-                            HStack(spacing: 14) {
-                                Image(systemName: g.isCustodian ? "key.fill" : "envelope.fill")
-                                    .foregroundStyle(stateTint(estateEngine.state(of: g.estateID))).frame(width: 28)
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(g.ownerName.isEmpty ? "Someone's envelopes" : "\(g.ownerName)'s envelopes")
-                                        .font(.headline).foregroundStyle(.white)
-                                    Text(stateLine(estateEngine.state(of: g.estateID), guarded: g))
-                                        .font(.caption).foregroundStyle(.white.opacity(0.5))
-                                }
-                                Spacer()
-                                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.white.opacity(0.3))
+                        GuardedRoleCard(
+                            guarded: g,
+                            state: estateEngine.state(of: g.estateID),
+                            snapshot: estateEngine.guardedSnapshots[g.estateID],
+                            onExplain: { role, numbers in
+                                explain = ExplainRequest(role: role, numbers: numbers)
                             }
-                            .padding(16)
-                            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
-                            .padding(.horizontal, 20)
+                        ) {
+                            NavigationLink {
+                                GuardedEstateView(guarded: g, myRoot: myRoot, ceremony: ceremony,
+                                                  estateEngine: estateEngine, appLock: appLock)
+                            } label: {
+                                GuardedDetailsLabel()
+                            }
                         }
-                        .buttonStyle(.plain)
-                        .parentTapTarget()
                     }
                 }
             }
         }
     }
 
+    /// The soft heading over the owner's own sections when this phone is
+    /// mainly a key holder's or a recipient's.
+    private var ownHeading: some View {
+        Text("Your own envelopes")
+            .font(.system(.title2, design: .rounded, weight: .semibold))
+            .foregroundStyle(.white.opacity(0.9))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 24)
+            .padding(.top, 10)
+    }
+
     static func stateLine(_ state: ReleaseState?, guarded: GuardedEstate) -> String {
         switch state {
         case .none: "Waiting for the owner to seal."
-        case .active?: guarded.isCustodian ? "All quiet. You hold a key." : "All quiet."
+        case .active?: guarded.isCustodian ? "All quiet. You hold one of the keys. Nothing to do." : "All quiet. Nothing to do."
         case .overdue?: "The owner has been silent past their limit."
         case .warning?: "A claim is open. The owner is being warned."
         case .grace?: "Warnings are over. A quiet period is running."
@@ -388,14 +584,6 @@ struct EstateHomeView: View {
 
     private func stateLine(_ state: ReleaseState?, guarded: GuardedEstate) -> String {
         Self.stateLine(state, guarded: guarded)
-    }
-
-    private func stateTint(_ state: ReleaseState?) -> Color {
-        switch state {
-        case .warning?, .grace?, .claimOpen?, .authorized?, .overdue?, .objected?: .orange
-        case .released?: SealTheme.brass
-        default: SealTheme.silver
-        }
     }
 
     // MARK: - Furniture

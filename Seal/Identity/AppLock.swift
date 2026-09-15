@@ -62,15 +62,20 @@ final class AppLock {
         }
     }
 
-    // MARK: - Sealed-card confirmation
+    // MARK: - Confirmation before a secret is shown
 
-    /// "Face ID to seal a card": a second, independent per-identity flag
-    /// (`seal.cardlock.<hash>`). Static API on purpose: the envelope editor is
-    /// constructed without an AppLock instance, and the check is a
-    /// single keychain read plus one LAContext prompt at the commit moment,
-    /// not ongoing state. Protects against someone holding the UNLOCKED phone
-    /// sending a sealed money request as its owner; it is unrelated to SIM
-    /// swapping, which never touched Seal in the first place.
+    /// "Face ID to show a secret": a second, independent per-identity flag.
+    /// The key and the API keep their old `cardLock` / `confirmSeal` names
+    /// from the messenger this grew out of, because the keychain key
+    /// (`seal.cardlock.<hash>`) is live on shipped phones and renaming it
+    /// would silently turn the setting off for everyone who has it on.
+    /// What it gates today is the two moments a secret comes out in the
+    /// clear: Show in the envelope editor, and Open my envelopes after a
+    /// release. Static API on purpose: the envelope editor is constructed
+    /// without an AppLock instance, and the check is a single keychain read
+    /// plus one LAContext prompt at that moment, not ongoing state. It
+    /// protects against someone holding the UNLOCKED phone reading the
+    /// passwords in it.
     private static func cardLockKey(_ ownerHash: String) -> String { "seal.cardlock.\(ownerHash)" }
 
     static func isCardLockEnabled(ownerHash: String) -> Bool {
@@ -82,8 +87,8 @@ final class AppLock {
     /// caller's toggle snaps back on a failed or cancelled prompt.
     static func setCardLockEnabled(_ enabled: Bool, ownerHash: String) async -> Bool {
         guard await authenticate(reason: enabled
-            ? "Confirm to require Face ID when sealing a card"
-            : "Confirm to remove the sealed-card Face ID check") else {
+            ? "Confirm to require Face ID before a secret is shown"
+            : "Confirm to remove the Face ID check on secrets") else {
             return isCardLockEnabled(ownerHash: ownerHash)
         }
         if enabled {
@@ -94,11 +99,11 @@ final class AppLock {
         return enabled
     }
 
-    /// Called before an envelope's secrets are revealed or sealed. True = proceed.
+    /// Called before an envelope's secrets are shown. True = proceed.
     /// Fail-closed on a failed prompt; demo mode skips, matching the app lock.
     static func confirmSeal(ownerHash: String) async -> Bool {
         guard isCardLockEnabled(ownerHash: ownerHash), !DemoFixtures.isActive else { return true }
-        return await authenticate(reason: "Confirm it's you to seal and send")
+        return await authenticate(reason: "Confirm it's you to show what is inside")
     }
 
     private static func authenticate(reason: String) async -> Bool {

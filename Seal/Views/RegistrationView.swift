@@ -8,7 +8,10 @@ struct RegistrationView: View {
     @State private var displayName = ""
     @State private var busy = false
     @State private var showSignInOptions = false
+    @State private var showRetireOptions = false
+    @State private var retiredMessage: String?
     @AppStorage("seal.welcomeSeen") private var welcomeSeen = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
@@ -16,10 +19,12 @@ struct RegistrationView: View {
             VStack(spacing: 28) {
                 Spacer()
 
-                Image(systemName: "seal.fill")
-                    .font(.system(size: 64))
-                    .foregroundStyle(phaseIsTrust ? SealTheme.brass : SealTheme.silver)
-                    .scaleEffect(ceremony.phase == .sealed ? 1.15 : 1.0)
+                // The mark, drawn in code (SealMark.swift). Pewter until the
+                // ceremony reaches its trust phase, then brass, the same rule
+                // the stock symbol followed. It presses in once on appear
+                // and lifts a little when the seal is set.
+                SealMark(size: 92, trust: phaseIsTrust, pressOnAppear: true)
+                    .scaleEffect(ceremony.phase == .sealed && !reduceMotion ? 1.08 : 1.0)
                     .animation(.spring(duration: 0.4), value: ceremony.phase)
 
                 Text("Seal")
@@ -99,6 +104,29 @@ struct RegistrationView: View {
                     Button("Cancel", role: .cancel) {}
                 }
 
+                // The escape hatch (RetireKeyCeremony.swift). An identity
+                // that sign-in refuses cannot be deleted from the You screen,
+                // and its credential blocks "Set up with Face ID" through the
+                // exclusion list. One tap on that key retires it here.
+                Button {
+                    showRetireOptions = true
+                } label: {
+                    Text("An old key is in the way? Retire it")
+                        .font(.footnote)
+                        .foregroundStyle(.white.opacity(0.55))
+                }
+                .disabled(busy)
+                .confirmationDialog("Retire a key. Tap the key or passkey you want to retire. The identity under it is deleted for good, and nothing is signed in to.",
+                                    isPresented: $showRetireOptions, titleVisibility: .visible) {
+                    Button("Face ID (passkey)", role: .destructive) { Task { await retire(.passkey) } }
+                    Button("Security key", role: .destructive) { Task { await retire(.verified) } }
+                    Button("Cancel", role: .cancel) {}
+                }
+                .alert("Retired", isPresented: Binding(get: { retiredMessage != nil },
+                                                       set: { if !$0 { retiredMessage = nil } })) {
+                    Button("OK", role: .cancel) {}
+                } message: { Text(retiredMessage ?? "") }
+
                 Text("Your key is your identity. People are added in person.\nA backup key can bring your identity back.")
                     .font(.caption2)
                     .foregroundStyle(.white.opacity(0.6))
@@ -160,6 +188,20 @@ struct RegistrationView: View {
             displayName: name,
             directory: sync   // enables 1-key-1-identity excludedCredentials
         )
+    }
+
+    /// Tombstone an identity without signing into it (RetireKeyCeremony).
+    private func retire(_ tier: IdentityTier) async {
+        busy = true
+        defer { busy = false }
+        ceremony.resetPhase()
+        do {
+            _ = try await ceremony.retireCredential(directory: sync, tier: tier)
+            retiredMessage = "That key no longer holds a Seal identity. You can set up a new one now."
+        } catch {
+            // The ceremony already put the reason into `phase`, which the
+            // status line shows in orange.
+        }
     }
 
     private func signIn(_ tier: IdentityTier) async {

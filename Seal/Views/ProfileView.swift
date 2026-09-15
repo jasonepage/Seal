@@ -228,12 +228,16 @@ struct ProfileView: View {
                            set: { value in Task { await appLock.setEnabled(value) } }),
                        switchTint: SealTheme.brass)
 
-            // Commit-moment lock: one biometric check right at "Seal and
-            // send". Deliberately NOT a gate on ordinary use, friction
-            // belongs on the irreversible artifact.
-            SettingRow(icon: "checkmark.seal", tint: SealTheme.brass,
-                       title: "Face ID to seal a card",
-                       summary: "Check it's you before sending",
+            // What this flag gates TODAY is the two places a secret comes
+            // out in the clear: Show in the envelope editor, and Open my
+            // envelopes after a release. It is not a gate on ordinary use,
+            // and it does not touch sealing. The row used to say "Face ID to
+            // seal a card", copy left over from the messenger, about cards
+            // and sending that this app no longer has.
+            SettingRow(icon: "eye.fill", tint: SealTheme.brass,
+                       title: "Face ID to show a secret",
+                       summary: "Check it's you before a secret is shown",
+                       detail: "A password or a seed phrase stays hidden until Seal checks your face or your passcode. This happens when you tap Show on your own envelope, and when you open envelopes written for you. It does not ask on the rest of the app, and it does not ask when you seal.",
                        isOn: .init(
                            get: { cardLockOn },
                            set: { value in Task {

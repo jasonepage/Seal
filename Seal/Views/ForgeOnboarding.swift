@@ -2,111 +2,21 @@ import SwiftUI
 
 // Onboarding + friend-ceremony coaching (UI.md §3.1–3.2).
 //
-// Three goals, one file:
-//   1. WelcomeCarousel, set the mental model BEFORE the first ceremony.
-//   2. ForgeHowToCard, explain the one rule before the first scan.
-//   3. Step rail / role banners / passkey-hybrid card, coach each step live.
+// Two goals, one file (the welcome carousel moved out, see below):
+//   1. ForgeHowToCard, explain the one rule before the first scan.
+//   2. Step rail / role banners / passkey-hybrid card, coach each step live.
 //
 // Brass follows the codebase convention (primary CTAs + trust beats), per
 // RegistrationView's existing tinting.
 
-// MARK: - First-run welcome (UI.md §3.1)
+// MARK: - First-run welcome
 
-/// Three-panel intro shown once before the first registration. Reason first,
-/// rule second, expectation third (docs/COLDSTART.md 3.2). It used to lead
-/// with the key, the in-person rule and "nothing is recoverable": two
-/// warnings and a threat before a single reason. The recovery honesty now
-/// lives on the registration footer and in BackupKeyPrompt, which is a
-/// better place for it because the person is holding their key at that
-/// moment. Gated by @AppStorage in the caller.
-struct WelcomeCarousel: View {
-    var onDone: () -> Void
-    @State private var page = 0
-
-    private struct Panel: Identifiable {
-        let id = UUID()
-        let symbol: String
-        let title: String
-        let body: String
-        let brass: Bool
-    }
-
-    private let panels: [Panel] = [
-        Panel(symbol: "lock.shield.fill",
-              title: "For the things you never told anybody",
-              body: "The passwords. Where the safe deposit key is. The combination. The seed phrase. A letter to each of them. Sealed now, opened only after you are gone, by people you chose.",
-              brass: true),
-        Panel(symbol: "hand.tap.fill",
-              title: "Nobody can open one early",
-              body: "Not Apple, not us. It takes your custodians' physical keys, after a long silence from you, after weeks of warnings you can stop with one tap.",
-              brass: false),
-        Panel(symbol: "person.2.fill",
-              title: "Keys change hands in person",
-              body: "You hand a security key to each custodian, standing next to them, once. Their tap on your phone is the receipt. After that they do nothing for years.",
-              brass: false)
-    ]
-
-    var body: some View {
-        ZStack {
-            SealTheme.ink.ignoresSafeArea()
-            VStack(spacing: 0) {
-                HStack {
-                    Spacer()
-                    Button("Skip") { onDone() }
-                        .font(.footnote)
-                        .foregroundStyle(.white.opacity(0.5))
-                        .padding()
-                }
-
-                TabView(selection: $page) {
-                    ForEach(Array(panels.enumerated()), id: \.element.id) { idx, panel in
-                        panelView(panel).tag(idx)
-                    }
-                }
-                .tabViewStyle(.page(indexDisplayMode: .always))
-
-                Button {
-                    if page < panels.count - 1 {
-                        withAnimation { page += 1 }
-                    } else {
-                        onDone()
-                    }
-                } label: {
-                    Text(page < panels.count - 1 ? "Next" : "Get started")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(SealTheme.brass)
-                .padding(.horizontal, 24)
-                .padding(.bottom, 24)
-            }
-            .frame(maxWidth: 460)
-            .frame(maxWidth: .infinity)
-        }
-        .preferredColorScheme(.dark)
-    }
-
-    private func panelView(_ panel: Panel) -> some View {
-        VStack(spacing: 24) {
-            Spacer()
-            Image(systemName: panel.symbol)
-                .font(.system(size: 72))
-                .foregroundStyle(panel.brass ? SealTheme.brass : SealTheme.silver)
-            Text(panel.title)
-                .font(.system(.title, design: .rounded, weight: .bold))
-                .foregroundStyle(.white)
-                .multilineTextAlignment(.center)
-            Text(panel.body)
-                .font(.callout)
-                .foregroundStyle(.white.opacity(0.7))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 36)
-            Spacer()
-            Spacer()
-        }
-    }
-}
+// WelcomeCarousel moved to Views/Onboarding/SealOnboardingView.swift, where
+// it is a thin wrapper around SealOnboardingView: two shared screens, then
+// a fork by who is holding the phone (sealer, key holder, recipient), with
+// the figures in OnboardingFigures.swift. The three static panels that used
+// to live here stated three facts and taught nothing; the new one runs the
+// ninety days, stops it with the owner's tap, and turns two of three keys.
 
 // MARK: - Forge coach components (shared by FriendsView)
 

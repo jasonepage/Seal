@@ -83,9 +83,13 @@ extension SyncEngine {
     /// identity, or offer a credential that then fails verification. Anything
     /// that actually confers authority goes through `fetchIdentity`, which
     /// verifies.
-    func fetchDirectoryCredentials() async throws -> [DirectoryCredential] {
+    ///
+    /// `includingDead` keeps the credentials of tombstoned identities in the
+    /// list. Only the retire ceremony wants that: a security key whose
+    /// identity is dead can only be tapped if its ID is on the allow list.
+    func fetchDirectoryCredentials(includingDead: Bool = false) async throws -> [DirectoryCredential] {
         do {
-            return try await scanDirectory(includingBackups: true)
+            return try await scanDirectory(includingBackups: true, includingDead: includingDead)
         } catch let error as CKError where error.code == .invalidArguments {
             // ONLY the schema-gap signal degrades. A directory whose schema
             // predates `backupEndorsements` rejects the field in desiredKeys,
@@ -99,22 +103,40 @@ extension SyncEngine {
             // that key. Register instead?", an invitation to abandon the
             // identity, shown to someone mid-recovery because of a blip.
             WebAuthnDiag.log.error("directory scan rejected backupEndorsements (schema not deployed?), retrying without it: \(error.localizedDescription, privacy: .public)")
-            return try await scanDirectory(includingBackups: false)
+            return try await scanDirectory(includingBackups: false, includingDead: includingDead)
         }
     }
 
-    private func scanDirectory(includingBackups: Bool) async throws -> [DirectoryCredential] {
+    private func scanDirectory(includingBackups: Bool, includingDead: Bool) async throws -> [DirectoryCredential] {
         let keys = includingBackups
             ? ["credentialID", "tier", "backupEndorsements"]
             : ["credentialID", "tier"]
         let query = CKQuery(recordType: "Identity", predicate: NSPredicate(value: true))
         var found: [DirectoryCredential] = []
+        // Every identity the directory says is dead: the write-once
+        // "tomb.<hash>" markers (authoritative; they are Identity records
+        // too, so this same query returns them) plus any live record whose
+        // tier was flipped. Used at the end to drop that identity's
+        // credentials, root and backup alike. Before this, only the tier
+        // flag was honoured, and a delete whose flip failed (a record
+        // created by a different iCloud account) left the credential live
+        // in every allow list and exclusion list, so the dead identity kept
+        // showing up in the Face ID picker and blocking re-registration.
+        var dead = DeletedIdentityLedger.all()
 
         func absorb(_ results: [(CKRecord.ID, Result<CKRecord, any Error>)]) {
             for (recordID, result) in results {
-                guard let record = try? result.get(),
-                      (record["tier"] as? String) != Self.deletedTier else { continue }  // skip tombstones
-                let owner = recordID.recordName
+                guard let record = try? result.get() else { continue }
+                let name = recordID.recordName
+                if name.hasPrefix("tomb.") {
+                    dead.insert(String(name.dropFirst("tomb.".count)))
+                    continue
+                }
+                if (record["tier"] as? String) == Self.deletedTier {
+                    dead.insert(name)
+                    continue
+                }
+                let owner = name
                 if let id = record["credentialID"] as? Data {
                     found.append(DirectoryCredential(credentialID: id, ownerHash: owner, isBackup: false))
                 }
@@ -137,7 +159,19 @@ extension SyncEngine {
             (results, cursor) = try await publicDB.records(
                 continuingMatchFrom: next, desiredKeys: keys, resultsLimit: 200)
         }
-        return found
+        if includingDead { return found }
+        return found.filter { !dead.contains($0.ownerHash) }
+    }
+
+    /// The tombstone check with its failure named honestly: an unreachable
+    /// directory is `directoryUnavailable`, never "not deleted".
+    private func tombstoned(_ hash: String) async throws -> Bool {
+        do {
+            return try await isTombstoned(credentialIDHash: hash)
+        } catch {
+            WebAuthnDiag.log.error("tombstone check failed for \(hash, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            throw CeremonyManager.CeremonyError.directoryUnavailable
+        }
     }
 
     // MARK: - Sign-in resolution
@@ -163,7 +197,7 @@ extension SyncEngine {
     /// deleted identity can't be resurrected through a backup key any more
     /// than through its root key.
     func resolveSignInCredential(credentialIDHash hash: String) async throws -> SignInCredential {
-        if await isTombstoned(credentialIDHash: hash) {
+        if try await tombstoned(hash) {
             throw CeremonyManager.CeremonyError.identityDeleted
         }
 
@@ -206,7 +240,7 @@ extension SyncEngine {
             // signed by the key it publishes, that is what registration
             // does. A squatted record cannot contain one without the private
             // key it is impersonating.
-            guard await recordProvesKeyPossession(root: root) else {
+            guard try await recordProvesKeyPossession(root: root) else {
                 WebAuthnDiag.log.error("signIn: record \(hash, privacy: .public) has no endorsement signed by the key it publishes, refusing")
                 throw BackupKeyError.unprovenIdentityRecord
             }
@@ -222,7 +256,7 @@ extension SyncEngine {
         guard let entry = directory.first(where: { $0.isBackup && $0.credentialIDHash == hash }) else {
             throw CeremonyManager.CeremonyError.identityNotFound
         }
-        if await isTombstoned(credentialIDHash: entry.ownerHash) {
+        if try await tombstoned(entry.ownerHash) {
             throw CeremonyManager.CeremonyError.identityDeleted
         }
         guard let (root, _) = try await fetchIdentity(credentialIDHash: entry.ownerHash) else {
@@ -250,10 +284,21 @@ extension SyncEngine {
     /// not "is that device still valid". Filtering by revocation would deadlock
     /// an identity that revoked every device, it could never sign in again to
     /// endorse a new one.
-    private func recordProvesKeyPossession(root: RootIdentity) async -> Bool {
-        guard let rootPub = try? P256.Signing.PublicKey(rawRepresentation: root.publicKey),
-              let (endorsements, _) = try? await fetchDeviceList(credentialIDHash: root.credentialIDHash)
-        else { return false }
+    ///
+    /// Throws `directoryUnavailable` when the device list cannot be fetched.
+    /// It used to return false there, which turned an ordinary network blip
+    /// into "the directory entry for this key was never signed by the key
+    /// itself", an accusation the app had no evidence for.
+    private func recordProvesKeyPossession(root: RootIdentity) async throws -> Bool {
+        guard let rootPub = try? P256.Signing.PublicKey(rawRepresentation: root.publicKey) else { return false }
+        let endorsements: [DeviceEndorsement]
+        do {
+            let (list, _) = try await fetchDeviceList(credentialIDHash: root.credentialIDHash)
+            endorsements = list
+        } catch {
+            WebAuthnDiag.log.error("signIn: could not fetch device list for possession check: \(error.localizedDescription, privacy: .public)")
+            throw CeremonyManager.CeremonyError.directoryUnavailable
+        }
         return endorsements.contains { e in
             guard let assertion = try? JSONDecoder().decode(WebAuthnAssertion.self, from: e.assertion),
                   assertion.verify(with: rootPub) else { return false }
@@ -275,7 +320,7 @@ extension SyncEngine {
     /// change tag can go stale under us. The merge is idempotent (dedupe by
     /// credential ID), so replaying it is safe.
     func publishBackupCredential(_ backup: BackupCredential, for credentialIDHash: String) async throws {
-        if await isTombstoned(credentialIDHash: credentialIDHash) {
+        if try await tombstoned(credentialIDHash) {
             throw CeremonyManager.CeremonyError.identityDeleted
         }
         let recordID = CKRecord.ID(recordName: credentialIDHash)

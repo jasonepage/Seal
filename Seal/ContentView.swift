@@ -98,8 +98,13 @@ struct ContentView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .background { appLock?.lockIfEnabled() }
         }
-        .overlay(alignment: .topTrailing) {
-            if DemoFixtures.showWatermark { DemoWatermark() }   // FR-23
+        // FR-23: the demo watermark used to be a top-trailing overlay, which
+        // sat straight on top of the home screen's toolbar buttons and hid
+        // them. It lives in its own strip at the bottom now. safeAreaInset
+        // RESERVES that strip, so the watermark can never cover a control,
+        // and an empty content view when the watermark is off adds nothing.
+        .safeAreaInset(edge: .bottom) {
+            if DemoFixtures.showWatermark { DemoWatermark() }
         }
     }
 
