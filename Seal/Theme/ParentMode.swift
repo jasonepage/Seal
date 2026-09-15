@@ -102,7 +102,7 @@ extension DynamicTypeSize {
 /// APPLY THIS EXACTLY ONCE PER PRESENTATION TREE. It reads the current size
 /// from the environment and writes a larger one back, so a second application
 /// further down would bump twice and blow past what the user actually asked
-/// for. `ChatsView` applies it at the top of the split view, which covers the
+/// for. `HomeView` applies it at the top of the shell, which covers the
 /// chat list, the open chat, and every sheet those present; `HomeView`
 /// applies it to the profile sheet, which is a separate branch of the tree.
 struct ParentTypeScale: ViewModifier {

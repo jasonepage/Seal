@@ -18,7 +18,7 @@ struct FriendsView: View {
     @Bindable var ceremony: CeremonyManager
     let sync: SyncEngine
     @Bindable var friendStore: FriendStore
-    @Bindable var chatEngine: ChatEngine
+    let estateEngine: EstateEngine
     /// Set when this view is presented as a sheet, which is how the chat
     /// list's people button reaches it. nil would leave no way out, so the
     /// caller always passes one. Same pattern as ProfileView.
@@ -55,15 +55,6 @@ struct FriendsView: View {
     @State private var showModerationAlert = false
     @State private var moderationTitle = ""
     @State private var moderationMessage = ""
-    /// Set when "Introduce … to" is tapped on a friend's row
-    /// (docs/INTRODUCTIONS.md). Only ever set for an IN-PERSON friend — the
-    /// menu item isn't drawn for a linked one, because introduction doesn't
-    /// chain.
-    @State private var introducing: FriendStore.StoredFriend?
-    /// The Circle-level entry point: no subject chosen yet, so the sheet asks
-    /// for both people. The long-press menu remains as a shortcut that
-    /// pre-fills the first one.
-    @State private var introducingPair = false
     /// One person's timeline (docs/RECORD.md). Presented from their row.
     @State private var recordFor: FriendStore.StoredFriend?
     @Environment(\.openURL) private var openURL
@@ -96,18 +87,10 @@ struct FriendsView: View {
             } message: {
                 Text(moderationMessage)
             }
-            .sheet(item: $introducing) { friend in
-                IntroduceSheet(subject: friend, myRoot: myRoot,
-                               engine: chatEngine, friendStore: friendStore)
-            }
-            .sheet(isPresented: $introducingPair) {
-                IntroduceSheet(myRoot: myRoot, engine: chatEngine,
-                               friendStore: friendStore)
-            }
             .sheet(item: $recordFor) { friend in
                 NavigationStack {
                     RecordView(myRoot: myRoot, friendStore: friendStore,
-                               chatEngine: chatEngine, counterpart: friend,
+                               estateEngine: estateEngine, counterpart: friend,
                                onClose: { recordFor = nil })
                 }
                 .preferredColorScheme(.dark)
@@ -188,20 +171,6 @@ struct FriendsView: View {
                 .tint(.white)
                 .parentTapTarget()
 
-                // Only once there are two people to introduce. Below that the
-                // action cannot do anything, and a button that opens a sheet to
-                // explain why it can't help is a broken promise.
-                if introducibleCount >= 2 {
-                    Button { introducingPair = true } label: {
-                        Label("Introduce two people", systemImage: "link")
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 6)
-                            .foregroundStyle(SealTheme.ink)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(SealTheme.silver)
-                    .parentTapTarget()
-                }
 
                 Button { stage = .guide } label: {
                     Text("How adding someone works")
@@ -488,47 +457,37 @@ struct FriendsView: View {
 
     // MARK: - Moderation (person-level block / report from Circle)
 
-    /// People this device may introduce — in-person friendships only, since
-    /// introduction does not chain (docs/INTRODUCTIONS.md §3.1).
-    private var introducibleCount: Int {
-        friendStore.friends.filter { $0.friendship.isInPerson }.count
-    }
-
     private func friendRow(_ friend: FriendStore.StoredFriend) -> some View {
-        let blocked = chatEngine.isBlocked(friend.identity.credentialIDHash)
-        // Introduced, not forged: silver link glyph, never the brass seal
-        // check. A linked friend is a real friend — they just aren't a
-        // friend this phone watched somebody prove (docs/INTRODUCTIONS.md).
-        let linked = !friend.friendship.isInPerson
+        let role = estateEngine.estate.map { estate -> String? in
+            let custodian = estate.custodians.contains { $0.rootHash == friend.identity.credentialIDHash }
+            let recipient = estate.recipients.contains { $0.rootHash == friend.identity.credentialIDHash }
+            switch (custodian, recipient) {
+            case (true, true): return "Custodian and recipient"
+            case (true, false): return "Custodian"
+            case (false, true): return "Recipient"
+            default: return nil
+            }
+        } ?? nil
         return NavigationLink {
-            ChatView(
-                chat: chatEngine.ensureChat(with: friend.identity, myHash: myRoot.credentialIDHash),
-                myRoot: myRoot,
-                engine: chatEngine,
-                friendStore: friendStore)
+            PersonView(person: friend, myRoot: myRoot, friendStore: friendStore,
+                       estateEngine: estateEngine, ceremony: ceremony, sync: sync)
         } label: {
             HStack {
-                Image(systemName: blocked ? "hand.raised.fill"
-                                          : (linked ? "link" : "checkmark.seal.fill"))
-                    .foregroundStyle(blocked ? .orange.opacity(0.8)
-                                     : (linked ? SealTheme.silver
-                                        : (friend.identity.tier == .verified ? SealTheme.brass : SealTheme.silver)))
-                Text(friend.identity.displayName)
-                    .foregroundStyle(.white.opacity(blocked ? 0.4 : 1.0))
-                Spacer()
-                if blocked {
-                    Text("Blocked")
-                        .font(.caption2)
-                        .foregroundStyle(.orange.opacity(0.8))
-                } else if linked {
-                    Text("Linked")
-                        .font(.caption2)
-                        .foregroundStyle(SealTheme.silver.opacity(0.9))
-                } else {
-                    Text(friend.friendship.forgedAt, style: .date)
-                        .font(.caption2)
-                        .foregroundStyle(.white.opacity(0.4))
+                Image(systemName: "checkmark.seal.fill")
+                    .foregroundStyle(friend.identity.tier == .verified ? SealTheme.brass : SealTheme.silver)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(friend.identity.displayName)
+                        .foregroundStyle(.white)
+                    if let role {
+                        Text(role)
+                            .font(.caption2)
+                            .foregroundStyle(SealTheme.brass.opacity(0.9))
+                    }
                 }
+                Spacer()
+                Text(friend.friendship.forgedAt, style: .date)
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.4))
             }
         }
         .listRowBackground(Color.white.opacity(0.05))
@@ -539,48 +498,29 @@ struct FriendsView: View {
                 Label("See the record", systemImage: "list.bullet.rectangle.portrait")
             }
             Divider()
-            // Only an in-person friend can be introduced, and only to another
-            // in-person friend. The absence of this item is the UI half of
-            // "introduction does not chain"; the enforcing halves are in
-            // ChatEngine.sendIntroduction and on both recipients' phones.
-            if !blocked, !linked {
-                Button {
-                    introducing = friend
-                } label: {
-                    Label("Introduce \(friend.identity.displayName) to…", systemImage: "link")
-                }
-                Divider()
+            Button(role: .destructive) {
+                estateEngine.removeCustodian(friend.identity.credentialIDHash)
+                friendStore.remove(friend.identity.credentialIDHash)
+                moderationTitle = "Removed"
+                moderationMessage = "\(friend.identity.displayName) has been removed. If they were a custodian, your envelopes will be re-keyed the next time you seal them. Meet in person to add them again."
+                showModerationAlert = true
+            } label: {
+                Label("Remove \(friend.identity.displayName)", systemImage: "person.badge.minus")
             }
-            if blocked {
-                Button {
-                    chatEngine.unblock(friend.identity.credentialIDHash)
-                } label: {
-                    Label("Unblock \(friend.identity.displayName)", systemImage: "hand.raised.slash")
-                }
-            } else {
-                Button(role: .destructive) {
-                    chatEngine.block(friend.identity.credentialIDHash)
-                    moderationTitle = "Blocked"
-                    moderationMessage = "\(friend.identity.displayName) is blocked — hidden from your chats and unable to reach you. Long-press them here to unblock."
-                    showModerationAlert = true
-                } label: {
-                    Label("Block \(friend.identity.displayName)", systemImage: "hand.raised")
-                }
-                Button(role: .destructive) {
-                    chatEngine.block(friend.identity.credentialIDHash)
-                    if let url = reportURL(for: friend.identity) { openURL(url) }
-                    moderationTitle = "Reported"
-                    moderationMessage = "Thanks — \(friend.identity.displayName) is blocked and reported. We review reports and remove violators within 24 hours."
-                    showModerationAlert = true
-                } label: {
-                    Label("Report \(friend.identity.displayName)", systemImage: "exclamationmark.bubble")
-                }
+            Button(role: .destructive) {
+                estateEngine.removeCustodian(friend.identity.credentialIDHash)
+                friendStore.remove(friend.identity.credentialIDHash)
+                if let url = reportURL(for: friend.identity) { openURL(url) }
+                moderationTitle = "Reported"
+                moderationMessage = "Thanks. \(friend.identity.displayName) has been removed and reported. We review reports and remove violators within 24 hours."
+                showModerationAlert = true
+            } label: {
+                Label("Report \(friend.identity.displayName)", systemImage: "exclamationmark.bubble")
             }
         }
     }
 
-    /// Person-level report email (App Store 1.2) — mirrors ChatView.reportMailURL
-    /// but reports an identity rather than a single message.
+    /// Person-level report email (App Store 1.2). Reports an identity.
     private func reportURL(for identity: RootIdentity) -> URL? {
         var allowed = CharacterSet.urlQueryAllowed
         allowed.remove(charactersIn: "&=?+")

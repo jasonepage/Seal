@@ -51,6 +51,12 @@ enum SealedCardType: String, Codable, Hashable, CaseIterable {
     case cryptoAddress
     case paymentInstructions
     case statement
+    // The envelope secrets (docs/PRODUCT.md). Same struct, same rules: the
+    // value is sealed exactly as written and never summarised.
+    case password
+    case seedPhrase
+    case combination
+    case location
 
     /// Short label for the type picker and the card header.
     var label: String {
@@ -58,6 +64,10 @@ enum SealedCardType: String, Codable, Hashable, CaseIterable {
         case .cryptoAddress: "Crypto address"
         case .paymentInstructions: "Payment instructions"
         case .statement: "Statement"
+        case .password: "Password or login"
+        case .seedPhrase: "Seed phrase"
+        case .combination: "Combination or code"
+        case .location: "Where to find it"
         }
     }
 
@@ -66,6 +76,10 @@ enum SealedCardType: String, Codable, Hashable, CaseIterable {
         case .cryptoAddress: "Paste the address"
         case .paymentInstructions: "Account name, number, routing/IBAN, reference…"
         case .statement: "The exact words to seal"
+        case .password: "Site or account, user name, password"
+        case .seedPhrase: "The words, in order, with spaces"
+        case .combination: "The safe combination, the gate code"
+        case .location: "Where the key is, which drawer, which box"
         }
     }
 
@@ -82,6 +96,10 @@ enum SealedCardType: String, Codable, Hashable, CaseIterable {
         case .cryptoAddress: "Copy address"
         case .paymentInstructions: "Copy instructions"
         case .statement: "Copy statement"
+        case .password: "Copy"
+        case .seedPhrase: "Copy seed phrase"
+        case .combination: "Copy"
+        case .location: "Copy"
         }
     }
 }
@@ -101,7 +119,7 @@ struct SealedCard: Codable, Hashable {
     var asset: String?
     /// Optional context, rendered as clearly NOT part of the sealed value.
     var note: String?
-    /// What a build with no card support renders. See `ChatEngine.sendCard` —
+    /// What a build with no card support renders. Kept for wire compatibility with old sealed cards;
     /// this string is ALSO copied into `MessagePayload.text`, which is the only
     /// field an older client actually reads.
     let fallbackText: String
@@ -124,7 +142,7 @@ struct SealedCard: Codable, Hashable {
         var errorDescription: String? {
             switch self {
             case .emptyTitle:
-                return "Give the card a title so it's recognisable in the chat."
+                return "Give this a title so it is recognisable in the list."
             case .emptyValue:
                 return "There's nothing to seal yet."
             case .valueTooLong(let bytes):
@@ -200,6 +218,14 @@ struct SealedCard: Codable, Hashable {
             what = "payment instructions"
         case .statement:
             what = "statement"
+        case .password:
+            what = "password"
+        case .seedPhrase:
+            what = "seed phrase"
+        case .combination:
+            what = "combination"
+        case .location:
+            what = "location"
         }
         return "🔏 Sealed card: \(what) — update Seal to view"
     }
@@ -246,7 +272,7 @@ struct SealedCard: Codable, Hashable {
             : "Copied \(copied.prefix(6))…\(copied.suffix(6))"
     }
 
-    /// Reproducible digest of the card, recorded in `MessageProof` when the
+    /// Reproducible digest of the card, recorded beside the card when the
     /// message is decrypted so the stored copy can be checked against it later.
     ///
     /// `.sortedKeys` because `JSONEncoder`'s default key order is not a
@@ -263,83 +289,4 @@ struct SealedCard: Codable, Hashable {
         guard let data = try? encoder.encode(self) else { return nil }
         return Data(SHA256.hash(data: data))
     }
-}
-
-// MARK: - Re-checkable proof
-
-/// Everything needed to re-check an inbound message's signature later, instead
-/// of trusting the fact that we once checked it.
-///
-/// Ordinary bubbles don't carry this. They're verified on arrival by
-/// `ChatEngine.verifyInbound` and after that they're just text, which is fine
-/// for "see you saturday". A card can be a wire instruction somebody acts on
-/// days later, and there "it verified when it arrived" is a memory, not a
-/// proof. Keeping the tuple lets the detail sheet re-run
-/// `IdentityManager.verify` against a freshly fetched directory entry every
-/// time it opens — which also catches the case where the signing device was
-/// REVOKED after the card landed, something an arrival-time check can't.
-///
-/// This is not a second signature scheme (SDS §2 / docs/CARDS.md): it is the
-/// same message signature, kept instead of discarded.
-///
-/// EVERY FIELD ADDED HERE IN FUTURE MUST BE OPTIONAL. `ChatMessage.proof` is
-/// decoded as part of the single `seal.messages.<hash>` blob, so a proof that
-/// fails to decode takes the entire message store with it.
-struct MessageProof: Codable, Hashable {
-    let ciphertext: Data
-    let signature: Data
-    let signerDevicePublicKey: Data
-    /// AAD inputs. Stored explicitly rather than re-derived from the chat and
-    /// the wireID so the proof stays self-contained and survives any future
-    /// change to how those are formatted.
-    let groupID: String
-    let epoch: UInt64
-    let chainIndex: UInt64
-    /// The transcript hash bound into THIS message's AAD — the sender's
-    /// previous ciphertext hash. nil for the first message of a chain.
-    let prevMessageHash: Data?
-    /// `SealedCard.digest` of the card as it was decoded from the decrypted
-    /// payload.
-    ///
-    /// This exists because re-checking the signature proves LESS than it looks
-    /// like it proves. The message key was destroyed by the ratchet the instant
-    /// this message was decrypted (SDS §2, per-message forward secrecy), so the
-    /// plaintext can never be re-derived: the signature check confirms the
-    /// stored ciphertext is authentic, NOT that the card rendered on screen is
-    /// what that ciphertext contained. This digest closes the remaining gap on
-    /// our own side — it catches the stored card drifting from the decoded one
-    /// through a bug, a migration, or corruption.
-    ///
-    /// It does NOT defend against anything that can rewrite the keychain, which
-    /// would rewrite the digest too. The detail sheet's wording claims exactly
-    /// this much and no more.
-    ///
-    /// Optional, per the invariant above — a non-optional field added here
-    /// would fail to decode against any proof written before it existed, and
-    /// because the whole message store is one keychain blob, that single throw
-    /// would empty every chat's history and the next `persist()` would make it
-    /// permanent. This build always writes it, so nil can only mean a proof
-    /// from before the field; `verifyCard` says so rather than silently
-    /// skipping the comparison.
-    let cardDigest: Data?
-
-    /// 8 hex of SHA-256 over the signing key: the same fingerprint the
-    /// `messaging` os-log prints, so a card on screen and a log line in
-    /// Console.app can be matched by eye.
-    var signerFingerprint: String { ChatEngine.fp(signerDevicePublicKey) }
-}
-
-/// Result of re-checking a card. "The signature is bad" and "I couldn't reach
-/// the directory" are kept apart on purpose: on a card carrying a wallet
-/// address they have opposite consequences, and one grey state covering both
-/// would be a lie in whichever direction it resolved.
-enum CardVerification: Equatable {
-    case checking
-    /// `sender` is the identity the check resolved FROM THE DIRECTORY, which is
-    /// how a card from a group member you've never forged with still renders
-    /// with their real name, tier and fingerprint phrase instead of "Someone".
-    case sealed(signerFingerprint: String, sender: RootIdentity)
-    case failed(String)
-    case unavailable(String)
-    case demo
 }

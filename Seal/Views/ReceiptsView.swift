@@ -338,7 +338,6 @@ struct NewReceiptView: View {
     @State private var step: Step = .describe
     @State private var item = ""
     @State private var photo: UIImage?
-    @State private var camera = CameraController()
 
     var body: some View {
         NavigationStack {
@@ -405,10 +404,17 @@ struct NewReceiptView: View {
 
     private var captureStep: some View {
         VStack(spacing: 14) {
-            CameraPreview(session: camera.session)
-                .clipShape(RoundedRectangle(cornerRadius: 20))
-                .frame(minHeight: 200)
-                .padding(.horizontal, 20)
+            SystemCameraPicker(source: .camera) { image in
+                if let image {
+                    photo = image
+                    step = .scan
+                } else {
+                    step = .describe
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 20))
+            .frame(minHeight: 200)
+            .padding(.horizontal, 20)
             Text("Photograph the item as you hand it over. Its fingerprint is signed into the receipt.")
                 .font(.caption2)
                 .foregroundStyle(.white.opacity(0.45))
@@ -416,22 +422,6 @@ struct NewReceiptView: View {
                 .padding(.horizontal, 32)
         }
         .padding(.top, 12)
-        .task { await camera.start() }
-        .onDisappear { camera.stop() }
-        .safeAreaInset(edge: .bottom) {
-            Button {
-                Task {
-                    photo = await camera.capture()
-                    camera.stop()
-                    step = .scan
-                }
-            } label: {
-                Label("Capture", systemImage: "camera.fill")
-                    .frame(maxWidth: .infinity).padding(.vertical, 6)
-            }
-            .buttonStyle(.borderedProminent).tint(SealTheme.brass)
-            .padding(.horizontal, 24).padding(.top, 10).padding(.bottom, 6)
-        }
     }
 
     private var scanStep: some View {

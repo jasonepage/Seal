@@ -10,24 +10,19 @@ struct ContentView: View {
     @State private var ceremony: CeremonyManager?
     @State private var sync = SyncEngine()
     @State private var friendStore: FriendStore?
-    @State private var chatEngine: ChatEngine?
+    @State private var estateEngine: EstateEngine?
     @State private var appLock: AppLock?
-    @State private var perkRedeemer: PerkRedeemer?
-    @State private var showPostRegistrationRedeem = false
     @State private var showBackupPrompt = false
     @State private var showRecoveryNotice = false
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         Group {
-            if let root = identity.rootIdentity, let ceremony, let chatEngine, let friendStore, let appLock, let perkRedeemer {
+            if let root = identity.rootIdentity, let ceremony, let estateEngine, let friendStore, let appLock {
                 HomeView(myRoot: root, identity: identity, ceremony: ceremony,
-                         sync: sync, friendStore: friendStore, chatEngine: chatEngine,
-                         appLock: appLock, perkRedeemer: perkRedeemer,
+                         sync: sync, friendStore: friendStore, estateEngine: estateEngine,
+                         appLock: appLock,
                          onSignOut: performSignOut, onDelete: performDelete)
-                    .sheet(isPresented: $showPostRegistrationRedeem) {
-                        RedeemPerkView(myRoot: root, redeemer: perkRedeemer)
-                    }
                     // Blocking, by design (FR-3, UI.md §3.1): this is the one
                     // moment the person is holding their key and thinking
                     // about it, and skipping it is the one choice here that
@@ -77,16 +72,6 @@ struct ContentView: View {
             } else if new != nil, ceremony?.phase == .sealed, !DemoFixtures.isActive, !hasBackup {
                 showBackupPrompt = true
             }
-            // Fresh ceremony THIS session (not an app relaunch) → offer the
-            // claim-code prompt once; forge-pack codes ship in the box.
-            // `!showBackupPrompt`: a sheet and a full-screen cover presented
-            // from the same view in the same tick fight, and the backup-key
-            // prompt is the one that must win — a claim code can be redeemed
-            // any time, an unbacked identity can't be un-lost.
-            if new != nil, ceremony?.phase == .sealed, !DemoFixtures.isActive,
-               PerkAuthority.isConfigured, !showBackupPrompt {
-                showPostRegistrationRedeem = true
-            }
         }
         .overlay {
             if let appLock, appLock.isLocked { AppLockScreen(lock: appLock) }
@@ -107,14 +92,11 @@ struct ContentView: View {
         if friendStore?.ownerHash != hash {
             friendStore = FriendStore(ownerHash: hash)
         }
-        if chatEngine?.ownerHash != hash {
-            chatEngine = ChatEngine(identity: identity, sync: sync, ownerHash: hash)
+        if estateEngine?.ownerHash != hash {
+            estateEngine = EstateEngine(ownerHash: hash, identity: identity, sync: sync)
         }
         if appLock?.ownerHash != hash {
             appLock = AppLock(ownerHash: hash)
-        }
-        if perkRedeemer?.ownerHash != hash {
-            perkRedeemer = PerkRedeemer(ownerHash: hash, identity: identity, sync: sync)
         }
     }
 
@@ -123,17 +105,14 @@ struct ContentView: View {
     private func wipeLocalAndEngines() {
         if let hash = identity.rootIdentity?.credentialIDHash {
             FriendStore.wipe(ownerHash: hash)
-            ChatEngine.wipe(ownerHash: hash)
+            EstateEngine.wipe(ownerHash: hash)   // the estate, its logs, the guarded index and the media
             ReceiptStore.wipe(ownerHash: hash)   // receipts are evidence, never leave them behind
-            RecordStubStore.wipe(ownerHash: hash)
             TimestampStore.wipe(ownerHash: hash)
             AppLock.wipe(ownerHash: hash)
-            PerkRedeemer.wipe(ownerHash: hash)
         }
         friendStore = nil
-        chatEngine = nil
+        estateEngine = nil
         appLock = nil
-        perkRedeemer = nil
         ceremony?.resetPhase()
         sync.resetStatus()
     }

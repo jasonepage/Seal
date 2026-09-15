@@ -13,14 +13,13 @@ import SwiftUI
 struct RecordView: View {
     let myRoot: RootIdentity
     @Bindable var friendStore: FriendStore
-    @Bindable var chatEngine: ChatEngine
+    let estateEngine: EstateEngine
     /// Set for one person's timeline. nil shows everything.
     var counterpart: FriendStore.StoredFriend? = nil
     /// Set when presented as a sheet rather than pushed.
     var onClose: (() -> Void)? = nil
 
     @State private var receipts: [CustodyReceipt] = []
-    @State private var stubs: [RecordStub] = []
     @State private var tokens: [String: TimestampRecord] = [:]
     @State private var timestampsOn = false
     @State private var receiptsFailed = false
@@ -32,9 +31,8 @@ struct RecordView: View {
     private var events: [RecordEvent] {
         RecordBuilder.events(myRoot: myRoot,
                              friendStore: friendStore,
-                             chatEngine: chatEngine,
                              receipts: receipts,
-                             stubs: stubs,
+                             estateEvents: counterpart == nil ? estateEngine.ownerEvents : [],
                              timestamps: tokens,
                              timestampsEnabled: timestampsOn,
                              counterpart: counterpart?.identity.credentialIDHash)
@@ -80,7 +78,6 @@ struct RecordView: View {
             store.loadIfNeeded()
             receipts = store.receipts
             receiptsFailed = store.loadFailed
-            stubs = RecordStubStore.load(ownerHash: myRoot.credentialIDHash)
             timestampsOn = TimestampStore.isEnabled(ownerHash: myRoot.credentialIDHash)
             tokens = TimestampStore.load(ownerHash: myRoot.credentialIDHash)
             // Stamping happens where the record is read, which is the only
@@ -117,12 +114,6 @@ struct RecordView: View {
                 }
                 .font(.caption2)
                 .foregroundStyle(.white.opacity(0.4))
-                if event.contentBurned {
-                    Text("Deleted on schedule. This line and its digest remain, the card's contents do not.")
-                        .font(.caption2)
-                        .foregroundStyle(.orange.opacity(0.75))
-                        .fixedSize(horizontal: false, vertical: true)
-                }
                 stateChip(event.timeProof)
             }
             Spacer(minLength: 0)
@@ -158,10 +149,18 @@ struct RecordView: View {
         switch kind {
         case .metInPerson: "hand.tap.fill"
         case .metReciprocal: "hand.tap"
-        case .metThroughIntroduction, .introductionMade: "link"
-        case .cardSent: "seal.fill"
-        case .cardReceived: "seal"
         case .handover: "shippingbox.fill"
+        case .estateCreated: "envelope.badge.shield.half.filled"
+        case .custodiansKeyed: "key.fill"
+        case .envelopesSealed: "envelope.fill"
+        case .heartbeat: "heart.fill"
+        case .silenceObserved: "eye"
+        case .claimOpened: "exclamationmark.triangle.fill"
+        case .objection: "hand.raised.fill"
+        case .objectionWithdrawn: "hand.raised"
+        case .cancellation: "xmark.octagon.fill"
+        case .keyTapped: "key.horizontal.fill"
+        case .released: "envelope.open.fill"
         }
     }
 
@@ -170,7 +169,7 @@ struct RecordView: View {
     /// difference before a word is read (UI.md §1).
     private func tint(_ kind: RecordEvent.Kind) -> Color {
         switch kind {
-        case .metThroughIntroduction, .introductionMade: SealTheme.silver
+        case .heartbeat, .silenceObserved, .envelopesSealed, .estateCreated: SealTheme.silver
         default: SealTheme.brass
         }
     }
@@ -183,8 +182,8 @@ struct RecordView: View {
                 .font(.system(.headline, design: .rounded))
                 .foregroundStyle(.white.opacity(0.8))
             Text(counterpart == nil
-                 ? "Meeting someone, sealing a card and signing a handover all land here."
-                 : "Sealing a card or signing a handover with them lands here.")
+                 ? "Meeting someone, sealing your envelopes and signing a handover all land here."
+                 : "Signing a handover with them lands here.")
                 .font(.caption)
                 .foregroundStyle(.white.opacity(0.45))
                 .multilineTextAlignment(.center)

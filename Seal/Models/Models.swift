@@ -22,10 +22,9 @@ struct RootIdentity: Codable, Identifiable, Hashable {
     ///
     /// It lives ON the identity rather than beside it so that the AUTHORITY
     /// SET travels wherever the identity does. Every existing consumer of
-    /// `IdentityManager.verifiedDevices` — ChatEngine's receive path, the perk
-    /// verifier, the receipts view — then accepts a device endorsement signed
-    /// by a backup key without a single call site changing, and ChatEngine's
-    /// directory cache carries the backups along with the root it caches.
+    /// `IdentityManager.verifiedDevices` (the estate log verifier, the
+    /// receipts view) then accepts a device endorsement signed by a backup
+    /// key without a single call site changing.
     /// Passing them as a separate argument would have meant five call sites
     /// each remembering to thread them through, and one forgotten thread is a
     /// recovered phone whose messages silently fail to verify.
@@ -88,34 +87,10 @@ struct Friendship: Codable, Identifiable, Hashable {
     /// default so friendships already in the keychain still decode, and so the
     /// memberwise initialiser stays source-compatible with existing callers.
     var autoReciprocated: Bool? = nil
-    /// The signed remote vouch that created this friendship, if one did
-    /// (Seal/Introductions/Introduction.swift, docs/INTRODUCTIONS.md).
-    ///
-    /// **Non-nil is what MAKES a friendship LINKED.** There is deliberately no
-    /// separate tier field: a tier and its evidence stored as two values can
-    /// drift into disagreeing, and the safe direction — "no proof, no linked
-    /// tier" — is the only one this shape can express. Every friendship
-    /// already in the keychain decodes with nil, which is correct: they all
-    /// came from a ceremony.
-    ///
-    /// A linked friendship is NEVER brass and never reads "Verified". It says
-    /// exactly what it is: someone this phone met in person vouched for the
-    /// connection. See `isInPerson`.
-    var introduction: IntroductionProof? = nil
-
-    /// True when this edge came from a physical ceremony rather than a remote
-    /// vouch — the gate on introducing, on brass styling, and on ForgeRank
-    /// weight (docs/TRUST.md §5.1).
-    ///
-    /// `autoReciprocated` edges COUNT as in-person. They are weaker as proof
-    /// TO THIS DEVICE (the peer's phone witnessed the tap; ours holds their
-    /// signed word for it — ForgeHandshake.swift), but they are still the
-    /// record of a meeting that physically happened, not a remote vouch.
-    /// Excluding them would forbid introducing to exactly the person this
-    /// feature exists for: whoever taps THEIR key on somebody else's phone
-    /// ends up holding nothing but auto-reciprocal edges, and Mom introducing
-    /// her son to her sister is the entire use case.
-    var isInPerson: Bool { introduction == nil }
+    /// Every friendship is in person now: the remote "introduction" path was
+    /// retired with the messenger, and its proof field with it. Old keychain
+    /// entries that carried one still decode (the key is ignored).
+    var isInPerson: Bool { true }
 }
 
 /// Signed, append-only membership log entry (SDS §4).
@@ -136,53 +111,6 @@ struct SealGroup: Codable, Identifiable, Hashable {
     var membershipLog: [MembershipRecord]
     var verifiedOnly: Bool
     var ephemeralTTL: TimeInterval?     // nil = persistent (FR-12)
-}
-
-// MARK: - Founder perks (PerkGrant / PerkClaim, SDS §10)
-
-/// Perk editions. Founder is an EDITION of a tier, never a third tier —
-/// ring color stays tier-determined everywhere.
-enum PerkKind: String, Codable, Hashable {
-    case founder                            // numbered 1–100, hard-capped in PerkAuthority
-    case campusFounder = "campus-founder"   // unnumbered campus-ambassador edition
-
-    func displayLabel(number: Int?) -> String {
-        switch self {
-        case .founder: number.map { "Founder № \($0)" } ?? "Founder"
-        case .campusFounder: "Campus founder"
-        }
-    }
-}
-
-/// Founder-key-signed grant minted offline (tools/mint_perks.py) and placed
-/// in the public DB at record name `perk.<codeHashHex>`. The signature commits
-/// to the code hash, so a grant can't be replayed under a different code.
-/// Unix-second timestamps keep the signed message byte-identical between the
-/// Python minter and Swift verification.
-struct PerkGrant: Codable, Hashable {
-    let kind: PerkKind
-    let number: Int?                    // required 1–100 for .founder, nil otherwise
-    let codeHashHex: String             // SHA256(normalized claim code), lowercase hex
-    let issuedAtUnix: Int64
-    let signature: Data                 // founder P-256 ECDSA (DER) over PerkAuthority.grantMessage
-}
-
-/// Device-key-signed claim binding a verified grant to a root identity.
-/// Written once as record `pclaim.<codeHashHex>` (first creator wins) and
-/// appended to the claimant's Identity record so friends' clients can verify.
-struct PerkClaim: Codable, Hashable {
-    let codeHashHex: String
-    let rootID: String                  // claimant's credentialIDHash
-    let devicePublicKey: Data           // the endorsed device key that signed
-    let claimedAtUnix: Int64
-    let signature: Data                 // device-key ECDSA (DER) over PerkAuthority.claimMessage
-}
-
-/// What travels in Identity.perks: the grant + the claim, verified together
-/// (founder signature, code-hash match, claim chains to an endorsed device).
-struct PerkAttestation: Codable, Hashable {
-    let grant: PerkGrant
-    let claim: PerkClaim
 }
 
 struct Message: Codable, Identifiable, Hashable {

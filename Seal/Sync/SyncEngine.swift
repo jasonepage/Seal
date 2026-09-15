@@ -39,7 +39,7 @@ final class SyncEngine {
     /// Deletion marker lives in its OWN record, separate from the (revivable)
     /// Identity record. The `tier="deleted"` flag on the Identity record alone
     /// is not enough: the app republishes that record on sign-in, on every
-    /// device refresh, and via ChatEngine.ensureSelfPublished — and if the
+    /// device refresh, and via HomeView's launch publish — and if the
     /// record was removed outright (e.g. deleted in the CloudKit console),
     /// publishIdentity just re-creates a fresh LIVE one. A write-once tombstone
     /// record can't be revived by republishing the identity, because the
@@ -67,7 +67,7 @@ final class SyncEngine {
     }
 
     /// Why this reports three outcomes rather than a Bool: a caller that
-    /// self-heals (ChatEngine.ensureSelfPublished) has to retry a `failed`,
+    /// self-heals (HomeView's launch publish) has to retry a `failed`,
     /// but must NOT retry a `refused` — a tombstoned identity can never
     /// publish, and retrying it on every launch, foreground and silent push
     /// would hammer CloudKit forever for a result that cannot change.
@@ -354,87 +354,6 @@ final class SyncEngine {
     // Moderation (App Store 1.2): reports are emailed to the developer from
     // ChatView (mailto) — no CloudKit record / backend needed. Block is local
     // (ChatEngine). Action on a valid report = tombstone the identity (deleteIdentity).
-
-    // MARK: - Founder perks (SDS §10 — deterministic names, no queries)
-    //
-    // PerkGrant: "perk.<SHA256(code)>"   — minted offline, world-readable.
-    // PerkClaim: "pclaim.<SHA256(code)>" — created by the claimant; CloudKit
-    // record creation is atomic, so the FIRST creator wins and (creator-only
-    // write) nobody can stomp an existing claim. Honest residual: Apple could
-    // HIDE a claim record (denial), but cannot forge one — clients only honor
-    // claims whose signature chain verifies (PerkAuthority).
-
-    /// Fetch a (claimed) grant. Caller MUST verify the founder signature —
-    /// the server is untrusted for integrity.
-    func fetchPerkGrant(codeHashHex: String) async throws -> PerkGrant? {
-        let id = CKRecord.ID(recordName: PerkAuthority.grantRecordName(codeHashHex: codeHashHex))
-        do {
-            let record = try await publicDB.record(for: id)
-            guard let data = record["grant"] as? Data else { return nil }
-            return try? JSONDecoder().decode(PerkGrant.self, from: data)
-        } catch let error as CKError where error.code == .unknownItem {
-            return nil
-        }
-    }
-
-    /// First-create-wins claim. Returns nil on success; on "already claimed"
-    /// returns the existing claim (so redemption can tell "you already
-    /// redeemed this" from "someone else got here first"). The race window is
-    /// two simultaneous redeemers of the SAME code — the loser gets a clean
-    /// error here, never a silent half-claim.
-    func createPerkClaim(_ claim: PerkClaim) async throws -> PerkClaim? {
-        let id = CKRecord.ID(recordName: PerkAuthority.claimRecordName(codeHashHex: claim.codeHashHex))
-        let record = CKRecord(recordType: "PerkClaim", recordID: id)
-        record["claim"] = try JSONEncoder().encode(claim)
-        do {
-            try await publicDB.save(record)
-            return nil
-        } catch let error as CKError where error.code == .serverRecordChanged {
-            return try await fetchPerkClaim(codeHashHex: claim.codeHashHex)
-        }
-    }
-
-    func fetchPerkClaim(codeHashHex: String) async throws -> PerkClaim? {
-        let id = CKRecord.ID(recordName: PerkAuthority.claimRecordName(codeHashHex: codeHashHex))
-        do {
-            let record = try await publicDB.record(for: id)
-            guard let data = record["claim"] as? Data else { return nil }
-            return try? JSONDecoder().decode(PerkClaim.self, from: data)
-        } catch let error as CKError where error.code == .unknownItem {
-            return nil
-        }
-    }
-
-    /// Append a perk attestation to our Identity record so friends' clients
-    /// can fetch and verify it (same merge-don't-overwrite pattern as
-    /// endorsements).
-    func publishPerk(_ attestation: PerkAttestation, for credentialIDHash: String) async throws {
-        let record = try await publicDB.record(for: CKRecord.ID(recordName: credentialIDHash))
-        var perks: [PerkAttestation] = []
-        if let existing = record["perks"] as? Data,
-           let decoded = try? JSONDecoder().decode([PerkAttestation].self, from: existing) {
-            perks = decoded
-        }
-        perks.removeAll { $0.grant.codeHashHex == attestation.grant.codeHashHex }
-        perks.append(attestation)
-        record["perks"] = try JSONEncoder().encode(perks)
-        try await publicDB.save(record)
-    }
-
-    /// Raw (unverified) perk attestations from an Identity record. Callers
-    /// MUST run PerkAuthority.verifiedPerks before display.
-    func fetchPerks(credentialIDHash: String) async throws -> [PerkAttestation] {
-        let record: CKRecord
-        do {
-            record = try await publicDB.record(for: CKRecord.ID(recordName: credentialIDHash))
-        } catch let error as CKError where error.code == .unknownItem {
-            return []
-        }
-        guard let data = record["perks"] as? Data,
-              let decoded = try? JSONDecoder().decode([PerkAttestation].self, from: data)
-        else { return [] }
-        return decoded
-    }
 
     // MARK: - Message transport (deterministic record names — no queries)
     //

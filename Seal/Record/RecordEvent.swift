@@ -6,42 +6,41 @@ import CryptoKit
 //
 //  THE RECORD (docs/RECORD.md).
 //
-//  Seal is a signed record of what happened between two people who met in
-//  person, and the record is of EVENTS, not content. It can show that a sealed
-//  card carrying a payment address was sent at a given moment, and prove the
-//  exact bytes of that card have not changed, without ever being able to read
-//  the address. That is the design, not a workaround.
+//  A signed record of what happened: who this person met in person, what
+//  changed hands, and everything that happened to their sealed envelopes.
+//  The record is of EVENTS, not content. It can show that four envelopes
+//  were sealed on a Sunday night and that a custodian tapped a key on a
+//  Tuesday, and prove those lines have not changed, without being able to
+//  read a single envelope.
 //
-//  THIS FILE ADDS NO NEW SOURCE OF TRUTH.
-//  --------------------------------------
-//  Four features already record events and each keeps its own store: friendships
-//  in FriendStore, introductions in IntroductionStore, sealed cards inside
-//  ChatEngine's messages, handovers in ReceiptStore. `RecordEvent` is a
-//  PROJECTION over those, computed on demand, exactly the way ForgeLogView
-//  already derives its list. Materialising a second copy is how a record system
-//  quietly becomes worthless: two stores that can disagree are worse than one
-//  store, because now nobody knows which one to believe.
+//  THIS FILE ADDS NO NEW SOURCE OF TRUTH. `RecordEvent` is a PROJECTION over
+//  the stores that already exist: friendships in FriendStore, handovers in
+//  ReceiptStore, and the signed estate log in EstateLogStore. It is computed
+//  on demand and never persisted. Two stores that can disagree are worse than
+//  one, because then nobody knows which to believe.
 //
-//  WHAT PHASE 1 DELIBERATELY DOES NOT DO
-//  -------------------------------------
-//  No network, no new crypto, no trusted timestamps. Every event here carries
-//  `timeProof == .deviceClaimed`, which is the honest description of what Seal
-//  can say about time today: the moment came off the acting phone's own clock,
-//  and a modified client could have written anything there. The UI says exactly
-//  that and does not dress it up. Phase 2 (RECORD.md section 4) adds RFC 3161
-//  tokens and the other two states, which is why they already exist in the enum
-//  rather than being retrofitted through every switch later.
+//  Estate events are already signed and hash linked in their own log
+//  (Estate/EstateLog.swift) and carry their own RFC 3161 tokens; this
+//  projection renders them, it does not re-sign them.
 
 struct RecordEvent: Identifiable, Hashable {
 
     enum Kind: String {
         case metInPerson
         case metReciprocal          // their phone ran the ceremony, ours took their signed word
-        case metThroughIntroduction // a linked edge: vouched for, not witnessed
-        case introductionMade       // we vouched for two other people
-        case cardSent
-        case cardReceived
         case handover               // both parties signed one commitment
+        // The estate log, rendered.
+        case estateCreated
+        case custodiansKeyed        // an epoch: shares issued to custodians
+        case envelopesSealed        // a vault statement
+        case heartbeat
+        case silenceObserved
+        case claimOpened
+        case objection
+        case objectionWithdrawn
+        case cancellation
+        case keyTapped              // a custodian authorised the release
+        case released
     }
 
     /// What Seal can honestly say about WHEN this happened.
@@ -82,13 +81,6 @@ struct RecordEvent: Identifiable, Hashable {
     /// the fact, when a timestamp token arrives. It is deliberately not a
     /// digest field, so gaining a token does not change the event's id.
     var timeProof: TimeProof
-    /// The message this line describes has been deleted on its TTL schedule and
-    /// only the tombstone remains (RecordStub.swift). Deliberately NOT part of
-    /// the digest: an event does not become a different event when its content
-    /// goes, and a line whose id changed at the moment it burned would be
-    /// useless as evidence.
-    let contentBurned: Bool
-
     var id: String { digest.hexString }
 
     // MARK: - Canonical encoding
@@ -142,7 +134,6 @@ struct RecordEvent: Identifiable, Hashable {
          summary: String,
          sourceRef: String,
          contentDigestHex: String? = nil,
-         contentBurned: Bool = false,
          timeProof: TimeProof = .deviceClaimed) {
         self.kind = kind
         self.occurredAt = occurredAt
@@ -150,7 +141,6 @@ struct RecordEvent: Identifiable, Hashable {
         self.counterpartName = counterpartName
         self.summary = summary
         self.sourceRef = sourceRef
-        self.contentBurned = contentBurned
         self.timeProof = timeProof
         self.digest = Self.digest(kind: kind,
                                   occurredAt: occurredAt,
@@ -166,15 +156,14 @@ enum RecordBuilder {
 
     /// Every event this phone can account for, newest first.
     ///
-    /// `counterpart` filters to one person's timeline. Events with a nil
-    /// counterpart (a card into a group, an introduction between two others)
-    /// are correctly absent from a person's timeline and present in the whole
-    /// record.
+    /// `counterpart` filters to one person's timeline. Estate events are
+    /// about the owner's own estate and have no single counterpart except
+    /// where a custodian acted, in which case that custodian is the
+    /// counterpart.
     static func events(myRoot: RootIdentity,
                        friendStore: FriendStore,
-                       chatEngine: ChatEngine,
                        receipts: [CustodyReceipt],
-                       stubs: [RecordStub] = [],
+                       estateEvents: [EstateEvent] = [],
                        timestamps: [String: TimestampRecord] = [:],
                        timestampsEnabled: Bool = false,
                        counterpart: String? = nil) -> [RecordEvent] {
@@ -194,79 +183,23 @@ enum RecordBuilder {
 
         var out: [RecordEvent] = []
 
-        // 1. Meetings. `isInPerson` is derived from the presence of an
-        //    introduction proof, so these three cases are exhaustive.
+        // 1. Meetings.
         for friend in friendStore.friends {
             let f = friend.friendship
             let hash = friend.identity.credentialIDHash
-            let display = friend.identity.displayName
-            let kind: RecordEvent.Kind
-            let summary: String
-            if let proof = f.introduction {
-                kind = .metThroughIntroduction
-                let by = name(for: proof.introducerHash) ?? "someone you've met"
-                summary = "Connected through an introduction by \(by). Not met in person."
-            } else if f.autoReciprocated == true {
-                kind = .metReciprocal
-                summary = "Met in person. Their phone ran the ceremony and this one took their signed word for it."
-            } else {
-                kind = .metInPerson
-                summary = "Met in person. They tapped their key on this phone."
-            }
+            let kind: RecordEvent.Kind = f.autoReciprocated == true ? .metReciprocal : .metInPerson
+            let summary = kind == .metReciprocal
+                ? "Met in person. Their phone ran the ceremony and this one took their signed word for it."
+                : "Met in person. They tapped their key on this phone."
             out.append(RecordEvent(kind: kind,
                                    occurredAt: f.forgedAt,
                                    counterpartHash: hash,
-                                   counterpartName: display,
+                                   counterpartName: friend.identity.displayName,
                                    summary: summary,
                                    sourceRef: hash))
         }
 
-        // 2. Sealed cards. The title travels, the value never does.
-        var liveCards = Set<String>()
-        for chat in chatEngine.chats {
-            let others = chat.memberHashes.filter { $0 != myRoot.credentialIDHash }
-            for message in chatEngine.messages(for: chat) {
-                guard let card = message.card else { continue }
-                let mine = message.senderHash == myRoot.credentialIDHash
-                // A 1:1 chat has exactly one counterpart. A group has no single
-                // one, so the event belongs to the whole record and not to any
-                // person's timeline.
-                let partner: String? = mine ? (others.count == 1 ? others[0] : nil)
-                                            : message.senderHash
-                let ref = message.wireID ?? message.id.uuidString
-                liveCards.insert(ref)
-                let where_ = partner == nil ? " in \(chat.name)" : ""
-                out.append(RecordEvent(
-                    kind: mine ? .cardSent : .cardReceived,
-                    occurredAt: message.sentAt,
-                    counterpartHash: partner,
-                    counterpartName: name(for: partner),
-                    summary: (mine ? "You sealed a card: " : "Sealed card received: ")
-                             + card.title + where_,
-                    sourceRef: ref,
-                    contentDigestHex: (message.proof?.cardDigest ?? card.digest)?.hexString))
-            }
-        }
-
-        // 2b. Cards whose content has burned. The live projection wins while
-        //     the message exists; the tombstone is what is left afterwards, and
-        //     it produces the same digest, so the line keeps its identity
-        //     across the burn (RecordStub.swift).
-        for stub in stubs where !liveCards.contains(stub.sourceRef) {
-            guard let kind = stub.kind else { continue }
-            out.append(RecordEvent(
-                kind: kind,
-                occurredAt: stub.occurredAt,
-                counterpartHash: stub.counterpartHash,
-                counterpartName: stub.counterpartName ?? name(for: stub.counterpartHash),
-                summary: (kind == .cardSent ? "You sealed a card: " : "Sealed card received: ")
-                         + stub.title,
-                sourceRef: stub.sourceRef,
-                contentDigestHex: stub.contentDigestHex,
-                contentBurned: true))
-        }
-
-        // 3. Handovers. The only event type where BOTH people signed the same
+        // 2. Handovers. The only event type where BOTH people signed the same
         //    commitment, which makes it the strongest thing in here.
         for receipt in receipts {
             let mine = receipt.giverHash == myRoot.credentialIDHash
@@ -282,35 +215,62 @@ enum RecordBuilder {
                 contentDigestHex: receipt.photoSHA256?.hexString))
         }
 
-        // 4. Introductions this phone made. Emitted once per party so the event
-        //    appears on both of their timelines, and the two digests differ
-        //    because the counterpart is part of the canonical encoding.
-        for entry in chatEngine.introductions.entries
-        where entry.isIntroducer(myRoot.credentialIDHash) {
-            let s = entry.statement
-            for (party, other) in [(s.partyAHash, s.partyBHash), (s.partyBHash, s.partyAHash)] {
-                out.append(RecordEvent(
-                    kind: .introductionMade,
-                    occurredAt: s.createdAt,
-                    counterpartHash: party,
-                    counterpartName: name(for: party),
-                    summary: "You introduced them to \(name(for: other) ?? "someone else you've met").",
-                    sourceRef: s.commitmentHex))
+        // 3. The estate log. Already signed, already linked; rendered here so
+        //    the whole record reads as one thing. A line carries its own
+        //    token, so its time proof comes from the event, not the store.
+        for e in estateEvents {
+            let mine = e.actorHash == myRoot.credentialIDHash
+            let who = mine ? "You" : (name(for: e.actorHash) ?? "A custodian")
+            let kind: RecordEvent.Kind
+            let summary: String
+            switch e.kind {
+            case .estateCreated:
+                kind = .estateCreated; summary = "\(who) started sealed envelopes."
+            case .epochPublished:
+                let n = e.body(EpochBody.self)
+                kind = .custodiansKeyed
+                summary = "\(who) issued key shares to \(n?.custodianHashes.count ?? 0) custodians, any \(n?.threshold ?? 0) to open."
+            case .policyChanged:
+                kind = .custodiansKeyed; summary = "\(who) changed the release rule."
+            case .vaultUpdated:
+                kind = .envelopesSealed; summary = "\(who) sealed the envelopes."
+            case .heartbeat:
+                kind = .heartbeat; summary = "\(who) checked in."
+            case .silenceObserved:
+                kind = .silenceObserved; summary = "\(who) noted the owner had been silent past the limit."
+            case .releaseClaimed:
+                kind = .claimOpened; summary = "\(who) opened a claim to release the envelopes."
+            case .objection:
+                kind = .objection; summary = "\(who) objected to the release."
+            case .objectionWithdrawn:
+                kind = .objectionWithdrawn; summary = "\(who) withdrew an objection."
+            case .cancellation:
+                kind = .cancellation; summary = "\(who) stopped the release."
+            case .authorization:
+                kind = .keyTapped; summary = "\(who) tapped a key to authorise the release."
+            case .released:
+                kind = .released; summary = "\(who) combined the keys. The envelopes are released."
             }
+            var event = RecordEvent(kind: kind,
+                                    occurredAt: e.occurredAt,
+                                    counterpartHash: mine ? nil : e.actorHash,
+                                    counterpartName: mine ? nil : name(for: e.actorHash),
+                                    summary: summary,
+                                    sourceRef: e.id,
+                                    contentDigestHex: e.digest.hexString)
+            event.timeProof = e.timestampToken == nil ? .deviceClaimed : .timestamped
+            out.append(event)
         }
-
-        // Blocks are deliberately absent. `ChatEngine.blockedHashes` is a bare
-        // Set with no signature and no time, so there is nothing to place on a
-        // timeline and nothing to prove. Inventing a moment for it would be the
-        // one kind of entry a record must never contain.
 
         if let counterpart {
             out = out.filter { $0.counterpartHash == counterpart }
         }
-        // Resolve what Seal can honestly say about each event's time. Done here
-        // rather than in the initialiser because a token can arrive long after
-        // the event, and because the digest must not depend on it.
-        for index in out.indices {
+        // Resolve what Seal can honestly say about each non-estate event's
+        // time. Done here rather than in the initialiser because a token can
+        // arrive long after the event, and because the digest must not depend
+        // on it. Estate lines already carry their answer.
+        let stampable: Set<RecordEvent.Kind> = [.metInPerson, .metReciprocal, .handover]
+        for index in out.indices where stampable.contains(out[index].kind) {
             out[index].timeProof = TimestampStore.proof(forDigest: out[index].digest.hexString,
                                                         in: timestamps,
                                                         enabled: timestampsEnabled)

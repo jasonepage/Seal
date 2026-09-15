@@ -8,11 +8,10 @@ struct ProfileView: View {
     let sync: SyncEngine
     @Bindable var ceremony: CeremonyManager
     @Bindable var appLock: AppLock
-    @Bindable var perkRedeemer: PerkRedeemer
     /// Only the Advanced screen needs these two, for the record and the
     /// ceremony history. Nothing else in Profile touches them.
     @Bindable var friendStore: FriendStore
-    @Bindable var chatEngine: ChatEngine
+    let estateEngine: EstateEngine
     /// nil only in previews. Optional rather than @Bindable because the toggle
     /// uses a manual binding anyway, and @Observable tracks the reads in body.
     var parentMode: ParentMode? = nil
@@ -27,7 +26,6 @@ struct ProfileView: View {
     @State private var confirmDelete = false
     @State private var deleting = false
     @State private var deleteError: String?
-    @State private var showRedeem = false
     @State private var devices: [DeviceEndorsement] = []
     @State private var revokedKeys: Set<Data> = []
     @State private var revoking: DeviceEndorsement?
@@ -84,15 +82,6 @@ struct ProfileView: View {
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal, 24)
-
-                    // Founder edition line — an edition of the tier, not a
-                    // third tier. Brass because it's a verified trust artifact.
-                    ForEach(verifiedPerks, id: \.grant.codeHashHex) { perk in
-                        Label(perk.grant.kind.displayLabel(number: perk.grant.number),
-                              systemImage: "seal.fill")
-                            .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                            .foregroundStyle(SealTheme.brass)
-                    }
 
                     if appLock.isAvailable {
                         settingRow(icon: "faceid", tint: SealTheme.brass,
@@ -213,24 +202,6 @@ struct ProfileView: View {
                     .padding(.horizontal, 24)
                     .parentTapTarget()
 
-                    if PerkAuthority.isConfigured, verifiedPerks.isEmpty {
-                        Button { showRedeem = true } label: {
-                            HStack {
-                                Image(systemName: "ticket")
-                                    .foregroundStyle(SealTheme.silver)
-                                Text("Redeem a claim code")
-                                    .foregroundStyle(.white.opacity(0.9))
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .font(.caption)
-                                    .foregroundStyle(.white.opacity(0.3))
-                            }
-                            .font(.callout)
-                            .padding(16)
-                            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
-                        }
-                        .padding(.horizontal, 24)
-                    }
 
                     Button(role: .destructive) { confirmReset = true } label: {
                         Text("Sign out")
@@ -345,17 +316,10 @@ struct ProfileView: View {
             .fullScreenCover(isPresented: $showHowTo) {
                 WelcomeCarousel { showHowTo = false }
             }
-            .sheet(isPresented: $showRedeem) {
-                RedeemPerkView(myRoot: myRoot, redeemer: perkRedeemer)
-            }
         }
         .preferredColorScheme(.dark)
     }
 
-    /// Locally stored perks, re-verified before display — same discipline as
-    /// every other signature in the app. Uses the directory device list when
-    /// loaded (a claim signed on another of our devices still verifies),
-    /// falling back to this device's endorsement.
     // MARK: - Advanced
 
     /// Everything that PROVES the claims, one tap below Profile
@@ -406,7 +370,7 @@ struct ProfileView: View {
                     // can export, History retires into it.
                     NavigationLink {
                         RecordView(myRoot: myRoot, friendStore: friendStore,
-                                   chatEngine: chatEngine)
+                                   estateEngine: estateEngine)
                     } label: {
                         advancedRow("Record", "list.bullet.rectangle.portrait",
                                     "Everything that has happened between you and each person, signed.")
@@ -485,15 +449,6 @@ struct ProfileView: View {
         .multilineTextAlignment(.leading)
         .padding(16)
         .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
-    }
-
-    private var verifiedPerks: [PerkAttestation] {
-        var endorsements = devices
-        if endorsements.isEmpty, let own = identity.deviceEndorsement {
-            endorsements = [own]
-        }
-        return PerkAuthority.verifiedPerks(perkRedeemer.perks, root: myRoot,
-                                           endorsements: endorsements)
     }
 
     private func deviceRow(_ device: DeviceEndorsement) -> some View {

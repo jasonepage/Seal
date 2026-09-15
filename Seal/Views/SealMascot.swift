@@ -127,68 +127,9 @@ struct SealMascot: View {
     }
 }
 
-// MARK: - Colony bar (chat header)
-
-/// Who's hauled out in this chat, at a glance. Tapping opens the
-/// verification drawer — the playful surface is the doorway to the serious one.
-struct ColonyBar: View {
-    let chat: ChatEngine.Chat
-    let myRoot: RootIdentity
-    let friendStore: FriendStore?
-
-    private struct Member: Identifiable {
-        let id: String
-        let name: String
-        let tier: IdentityTier
-        /// Introduced rather than forged (docs/INTRODUCTIONS.md) — silver
-        /// link ring, never brass, in the chat header as everywhere else.
-        var linked: Bool = false
-    }
-
-    private var members: [Member] {
-        chat.memberHashes.map { hash in
-            if hash == myRoot.credentialIDHash {
-                return Member(id: hash, name: myRoot.displayName, tier: myRoot.tier)
-            }
-            if let friend = friendStore?.friends.first(where: { $0.id == hash }) {
-                return Member(id: hash, name: friend.identity.displayName,
-                              tier: friend.identity.tier,
-                              linked: !friend.friendship.isInPerson)
-            }
-            return Member(id: hash, name: "?", tier: .passkey)
-        }
-    }
-
-    var body: some View {
-        HStack(spacing: 6) {
-            HStack(spacing: -10) {
-                // Descending zIndex so each ring is painted OVER the next one's
-                // left edge rather than under its own right edge. The overlap
-                // is 10 of 26 points and the rings carry an opaque ink
-                // backing, so the default order would bury every linked
-                // member's trailing `link` glyph — the one cue that survives
-                // greyscale at this size (docs/INTRODUCTIONS.md).
-                ForEach(Array(members.prefix(5).enumerated()), id: \.element.id) { index, member in
-                    IdentityRing(displayName: member.name, tier: member.tier, size: 26,
-                                 linked: member.linked)
-                        .background(Circle().fill(SealTheme.ink).padding(-1.5))
-                        .zIndex(Double(5 - index))
-                }
-            }
-            HStack(spacing: 3) {
-                SealFigure(detailed: false, tint: .white.opacity(0.55))
-                    .frame(height: 11)
-                Text(members.count == 1 ? "just you" : "\(members.count)")
-                    .font(.system(.caption, design: .rounded, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.65))
-            }
-        }
-    }
-}
-
 #Preview {
     ZStack {
         SealTheme.ink.ignoresSafeArea()
-        SealMascot(size: 72, line: "No chats yet.", sub: "Add someone in person.")
+        SealMascot(size: 72, line: "No envelopes yet.", sub: "Write the first one.")
     }
 }

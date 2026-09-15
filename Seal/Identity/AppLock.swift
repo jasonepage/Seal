@@ -65,8 +65,8 @@ final class AppLock {
     // MARK: - Sealed-card confirmation
 
     /// "Face ID to seal a card": a second, independent per-identity flag
-    /// (`seal.cardlock.<hash>`). Static API on purpose — CardComposeSheet is
-    /// constructed in ChatView without an AppLock instance, and the check is a
+    /// (`seal.cardlock.<hash>`). Static API on purpose: the envelope editor is
+    /// constructed without an AppLock instance, and the check is a
     /// single keychain read plus one LAContext prompt at the commit moment,
     /// not ongoing state. Protects against someone holding the UNLOCKED phone
     /// sending a sealed money request as its owner; it is unrelated to SIM
@@ -94,7 +94,7 @@ final class AppLock {
         return enabled
     }
 
-    /// Called by CardComposeSheet at "Seal and send". True = proceed.
+    /// Called before an envelope's secrets are revealed or sealed. True = proceed.
     /// Fail-closed on a failed prompt; demo mode skips, matching the app lock.
     static func confirmSeal(ownerHash: String) async -> Bool {
         guard isCardLockEnabled(ownerHash: ownerHash), !DemoFixtures.isActive else { return true }
