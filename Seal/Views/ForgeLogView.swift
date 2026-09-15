@@ -38,6 +38,34 @@ struct ForgeLogView: View {
         return months.count
     }
 
+    /// One person. Pulled out of `body` because the perk line that used to
+    /// live here went with the messenger and the compiler gave up on the
+    /// whole expression rather than naming the missing property.
+    private func row(_ friend: FriendStore.StoredFriend) -> some View {
+        HStack(spacing: 12) {
+            IdentityRing(displayName: friend.identity.displayName,
+                         tier: friend.identity.tier, size: 40)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(friend.identity.displayName)
+                    .font(.system(.body, design: .rounded, weight: .medium))
+                    .foregroundStyle(.white)
+                Text(FingerprintPhrase.phrase(for: friend.identity.publicKey))
+                    .font(.caption)
+                    .foregroundStyle(SealTheme.brass.opacity(0.8))
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(friend.friendship.forgedAt, format: .dateTime.month(.abbreviated).day())
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.6))
+                Text(friend.friendship.forgedAt, format: .dateTime.year())
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.35))
+            }
+        }
+        .listRowBackground(Color.white.opacity(0.05))
+    }
+
     var body: some View {
         ZStack {
             SealTheme.ink.ignoresSafeArea()
@@ -60,48 +88,10 @@ struct ForgeLogView: View {
                 } else {
                     List {
                         ForEach(sorted) { friend in
-                            HStack(spacing: 12) {
-                                IdentityRing(displayName: friend.identity.displayName,
-                                             tier: friend.identity.tier, size: 40)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(friend.identity.displayName)
-                                        .font(.system(.body, design: .rounded, weight: .medium))
-                                        .foregroundStyle(.white)
-                                    Text(FingerprintPhrase.phrase(for: friend.identity.publicKey))
-                                        .font(.caption)
-                                        .foregroundStyle(SealTheme.brass.opacity(0.8))
-                                    // Founder edition (verified before caching).
-                                    ForEach(friend.perks ?? [], id: \.grant.codeHashHex) { perk in
-                                        Text(perk.grant.kind.displayLabel(number: perk.grant.number))
-                                            .font(.caption2.weight(.semibold))
-                                            .foregroundStyle(SealTheme.brass.opacity(0.85))
-                                    }
-                                }
-                                Spacer()
-                                VStack(alignment: .trailing, spacing: 2) {
-                                    Text(friend.friendship.forgedAt, format: .dateTime.month(.abbreviated).day())
-                                        .font(.caption)
-                                        .foregroundStyle(.white.opacity(0.6))
-                                    Text(friend.friendship.forgedAt, format: .dateTime.year())
-                                        .font(.caption2)
-                                        .foregroundStyle(.white.opacity(0.35))
-                                }
-                            }
-                            .listRowBackground(Color.white.opacity(0.05))
+                            row(friend)
                         }
                     }
                     .scrollContentBackground(.hidden)
-                }
-                if linkedCount > 0 {
-                    Text(linkedCount == 1
-                         ? "1 linked friend isn't shown here. History only holds people you added in person."
-                         : "\(linkedCount) linked friends aren't shown here. History only holds people you added in person.")
-                        .font(.caption2)
-                        .foregroundStyle(SealTheme.silver.opacity(0.8))
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.horizontal, 32)
-                        .padding(.bottom, 8)
                 }
             }
         }

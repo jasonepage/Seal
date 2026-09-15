@@ -84,7 +84,7 @@ enum SelfTest {
 
     struct Suite {
         let name: String
-        let run: (Context) throws -> Void
+        let run: @MainActor (Context) throws -> Void
     }
 
     static let log = Logger(subsystem: "io.github.jasonepage.Seal", category: "selftest")

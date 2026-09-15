@@ -121,7 +121,7 @@ enum TimestampService {
     /// the basis of terms or uptime, only that it is public and free. Decide
     /// before anyone relies on it, and consider carrying an OpenTimestamps
     /// anchor beside it so the record does not depend on one company staying up.
-    static let defaultAuthority = "https://freetsa.org/tsr"
+    nonisolated static let defaultAuthority = "https://freetsa.org/tsr"
 
     /// At most this many per pass, so a long-neglected record does not fire off
     /// a hundred requests the first time somebody opens the screen.

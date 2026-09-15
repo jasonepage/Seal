@@ -34,7 +34,8 @@ enum ReleaseFeed {
                          ownerHash: String,
                          fallbackPolicy: ReleasePolicy,
                          estateCreatedAt: Date,
-                         timeOf: (EstateEvent) -> Date = effectiveTime) -> ReleaseSnapshot {
+                         timeOf: ((EstateEvent) -> Date)? = nil) -> ReleaseSnapshot {
+        let timeOf = timeOf ?? effectiveTime
         var policy = fallbackPolicy
         var createdAt = estateCreatedAt
         var lastHeartbeat: Date? = nil
