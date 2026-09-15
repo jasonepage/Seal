@@ -120,7 +120,12 @@ enum EstateKeyTests {
             KeyTableEntry(envelopeID: "e1", contentKey: contentKey, title: "Every password", revealOrder: 1, blobIDs: ["b1"])
         ])
         let tableKey = EstateCrypto.randomKey()
-        let wrap = try EstateKeyHierarchy.wrapTable(table, tableID: "t-wife", tableKey: tableKey, estateID: estateID,
+        // A random table id, which is what EstateEngine publishes
+        // (Estate.TableKeyRecord seeds it with a UUID). The fixture used to
+        // say "t-wife", which named the recipient in the clear and failed the
+        // isolation check below, correctly.
+        let tableID = UUID().uuidString
+        let wrap = try EstateKeyHierarchy.wrapTable(table, tableID: tableID, tableKey: tableKey, estateID: estateID,
                                                     epoch: 1, estateKey: estateKey,
                                                     ownerBundles: [owner.publicBundle.encoded],
                                                     recipientBundles: [wife.publicBundle.encoded])
@@ -143,9 +148,12 @@ enum EstateKeyTests {
         } catch {
             t.fail("wrong error for isolation", "\(error)")
         }
-        // Nothing in the wrap names the recipient.
+        // Nothing in the wrap names the recipient: not their hash, not the
+        // table's own id, not anything else outside the ciphertext.
         let encoded = try JSONEncoder().encode(wrap)
-        t.check(!String(decoding: encoded, as: UTF8.self).contains("wife"), "the published table wrap never names its recipient")
+        let published = String(decoding: encoded, as: UTF8.self)
+        t.check(!published.contains(table.recipientHash), "the published table wrap never names its recipient")
+        t.check(!wrap.tableID.contains(table.recipientHash), "the table id is not derived from the recipient")
         // Content.
         let letter = Data("Dear you".utf8)
         let sealed = try EstateKeyHierarchy.sealContent(letter, contentKey: contentKey, estateID: estateID, blobID: "b1")
