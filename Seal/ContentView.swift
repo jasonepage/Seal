@@ -133,6 +133,7 @@ struct ContentView: View {
             ReceiptStore.wipe(ownerHash: hash)   // receipts are evidence, never leave them behind
             TimestampStore.wipe(ownerHash: hash)
             AppLock.wipe(ownerHash: hash)
+            CustodianNotices.wipe(ownerHash: hash)   // what this phone has already announced
         }
         friendStore = nil
         estateEngine = nil

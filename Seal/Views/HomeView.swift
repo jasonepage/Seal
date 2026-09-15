@@ -47,6 +47,10 @@ struct HomeView: View {
                 .requestAuthorization(options: [.alert, .sound, .badge])
             await MainActor.run { UIApplication.shared.registerForRemoteNotifications() }
             await sync.ensureInviteSubscription(for: myRoot.credentialIDHash)
+            // Take the retired messenger's push off this phone. It lives on
+            // the server, so an old build's "New sealed message" alert stays
+            // registered until something deletes it.
+            await sync.retireMessengerSubscriptions(for: myRoot.credentialIDHash)
             await checkInbound()
             await refreshEverything()
         }
@@ -91,6 +95,12 @@ struct HomeView: View {
     private func refreshEverything() async {
         await estateEngine.heartbeat()
         await estateEngine.refreshGuarded()
+        // The CloudKit push for a guarded estate is silent now, because it
+        // fires on the owner's heartbeat too. This is what the person
+        // actually sees, and only when the state moved (CustodianNotices).
+        await CustodianNotices.post(
+            estateEngine.guarded.map { (guarded: $0, state: estateEngine.state(of: $0.estateID)) },
+            ownerHash: myRoot.credentialIDHash)
     }
 
     // MARK: - Shell

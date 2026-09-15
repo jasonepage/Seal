@@ -459,42 +459,42 @@ final class SyncEngine {
 
     // MARK: - Push (CKQuerySubscription → APNs)
 
-    /// One subscription per identity: fire when a Message names me a recipient.
-    /// The alert is static, content is ciphertext; there is nothing to preview.
-    func ensureMessageSubscription(for myHash: String) async {
-        // v2 = badge + content-available + title. Bumped because an existing
-        // subscription is never reconfigured in place; the version forces a
-        // fresh one and we retire v1 so the two don't double-fire.
-        let subID = "seal.msgsub.v2.\(myHash)"
-        if (try? await publicDB.subscription(for: subID)) != nil { return }
-        try? await publicDB.deleteSubscription(withID: "seal.msgsub.\(myHash)")  // retire v1
-        let subscription = CKQuerySubscription(
-            recordType: "Message",
-            predicate: NSPredicate(format: "recipients CONTAINS %@", myHash),
-            subscriptionID: subID,
-            options: .firesOnRecordCreation)
-        let info = CKSubscription.NotificationInfo()
-        info.title = "Seal"
-        info.alertBody = "New sealed message"
-        info.soundName = "default"
-        info.shouldBadge = true                     // app-icon badge: "something's waiting"
-        // Also wake the app in the background to pre-fetch, so the message is
-        // decrypted and waiting the instant they open it. Requires the
-        // "remote-notification" background mode (UIBackgroundModes), without
-        // that capability the alert still fires; only the silent wake no-ops.
-        info.shouldSendContentAvailable = true
-        subscription.notificationInfo = info
-        do { _ = try await publicDB.save(subscription) }
-        catch { status = .error("Push setup failed: \(error.localizedDescription)") }
+    /// RETIRE the messenger's push. The `Message` record type went with the
+    /// messenger in phase 7 and nothing writes one any more, but the
+    /// subscription is stored SERVER SIDE per iCloud account, so every phone
+    /// that ran an older build still carries `seal.msgsub.<hash>` and its
+    /// alert, "New sealed message", for a feature that no longer exists.
+    /// Deleting the subscription is the only way to take it off those
+    /// phones. Safe to call every launch: a missing subscription is not an
+    /// error worth reporting.
+    func retireMessengerSubscriptions(for myHash: String) async {
+        for id in ["seal.msgsub.\(myHash)", "seal.msgsub.v2.\(myHash)"] {
+            try? await publicDB.deleteSubscription(withID: id)
+        }
     }
 
-    /// Same pattern for group invites: without this, an invite sits unseen
-    /// until the recipient happens to foreground the app. The push handler
-    /// path (messageArrived → refreshAll → checkInvites) already processes it.
+    /// Fires when an owner names this phone in their estate, as a key holder
+    /// or as a recipient. Without it the invite sits unseen until the person
+    /// happens to open the app, which for a key holder could be never.
+    ///
+    /// The record type is still "GroupInvite" because that is the deployed
+    /// CloudKit schema and a rename is a migration, not an edit. What it
+    /// carries is an EstateInvite (EstateDirectory.publishEstateInvite).
+    /// The ALERT, though, was still the messenger's: "You've been added to
+    /// a new group", shown to somebody who had just been handed a key and
+    /// told this app was about a will. v3 retires v2 and v1, because an
+    /// existing subscription is never reconfigured in place.
+    ///
+    /// The text cannot say which part they hold. The role is inside the
+    /// encrypted payload, and a CloudKit alert body is a fixed string
+    /// chosen before anybody is invited. So it says the true general thing
+    /// and sends them to the app, where the role card does say it.
     func ensureInviteSubscription(for myHash: String) async {
-        let subID = "seal.invsub.v2.\(myHash)"
+        let subID = "seal.invsub.v3.\(myHash)"
         if (try? await publicDB.subscription(for: subID)) != nil { return }
-        try? await publicDB.deleteSubscription(withID: "seal.invsub.\(myHash)")  // retire v1
+        for old in ["seal.invsub.\(myHash)", "seal.invsub.v2.\(myHash)"] {
+            try? await publicDB.deleteSubscription(withID: old)
+        }
         let subscription = CKQuerySubscription(
             recordType: "GroupInvite",
             predicate: NSPredicate(format: "recipient == %@", myHash),
@@ -502,7 +502,7 @@ final class SyncEngine {
             options: .firesOnRecordCreation)
         let info = CKSubscription.NotificationInfo()
         info.title = "Seal"
-        info.alertBody = "You've been added to a new group"
+        info.alertBody = "Someone has given you a part in their Seal. Open the app to see."
         info.soundName = "default"
         info.shouldBadge = true
         info.shouldSendContentAvailable = true      // pre-process the invite in the background

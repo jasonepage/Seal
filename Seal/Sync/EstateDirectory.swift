@@ -113,22 +113,44 @@ extension SyncEngine {
         return out
     }
 
-    /// Wake custodian phones when anything happens on an estate they guard.
-    /// Content-available so the state machine can advance in the background;
-    /// the alert is static because the payload is a signed blob.
+    /// Wake the phones that guard an estate when an event lands on it.
+    ///
+    /// SILENT ON PURPOSE (v2). v1 carried an alert, a sound and a badge, and
+    /// it fired on EVERY EstateEvent. The owner writes a heartbeat event on
+    /// every launch and every foreground (EstateEngine.heartbeat), with no
+    /// rate limit, because opening the app IS the check-in. So v1 pushed
+    /// "Something changed on an estate you guard." to every key holder and
+    /// every recipient several times a day, for years, to say that somebody
+    /// was alive. That is the fastest way to teach a key holder to turn Seal
+    /// off, and a key holder with notifications off is the one person this
+    /// product cannot afford to lose.
+    ///
+    /// Filtering heartbeats out of the predicate was the other option. It
+    /// needs `kind` QUERYABLE in both CloudKit environments, and an index
+    /// that is missing fails silently (docs/GOTCHAS.md, twice). So instead
+    /// this wakes the app with content-available and nothing else, the app
+    /// refreshes, and CustodianNotices posts a LOCAL notification only when
+    /// the release state actually moved, with text that names the person and
+    /// says what happened. A fixed CloudKit alert string could never do that.
+    ///
+    /// The cost, stated plainly: iOS throttles silent pushes and drops them
+    /// when the phone is in low power mode, so a claim may go unheard until
+    /// the phone next opens Seal. The release timeline runs in weeks, not
+    /// minutes, and every foreground refreshes, so that is a delay rather
+    /// than a miss. UIBackgroundModes already lists remote-notification.
     func ensureEstateSubscription(estateID: String) async {
-        let subID = "seal.estsub.v1.\(estateID)"
+        let subID = "seal.estsub.v2.\(estateID)"
         if (try? await publicDB.subscription(for: subID)) != nil { return }
+        try? await publicDB.deleteSubscription(withID: "seal.estsub.v1.\(estateID)")
         let subscription = CKQuerySubscription(
             recordType: "EstateEvent",
             predicate: NSPredicate(format: "estate == %@", estateID),
             subscriptionID: subID,
             options: .firesOnRecordCreation)
         let info = CKSubscription.NotificationInfo()
-        info.title = "Seal"
-        info.alertBody = "Something changed on an estate you guard."
-        info.soundName = "default"
-        info.shouldBadge = true
+        // No title, no alertBody, no sound, no badge. Setting only
+        // shouldSendContentAvailable is what makes APNs treat this as a
+        // background wake rather than something the person sees.
         info.shouldSendContentAvailable = true
         subscription.notificationInfo = info
         do { _ = try await publicDB.save(subscription) }
