@@ -21,7 +21,6 @@ struct ProfileView: View {
     /// Profile is not a tab and there is nothing else to dismiss it).
     var onClose: (() -> Void)? = nil
 
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var confirmReset = false
     @State private var confirmDelete = false
     @State private var deleting = false
@@ -221,9 +220,9 @@ struct ProfileView: View {
         sectionHeading("On this phone")
 
         if appLock.isAvailable {
-            settingRow(icon: "faceid", tint: SealTheme.brass,
+            SettingRow(icon: "faceid", tint: SealTheme.brass,
                        title: "Require Face ID",
-                       subtitle: "Lock Seal when you leave the app",
+                       summary: "Lock Seal when you leave it",
                        isOn: .init(
                            get: { appLock.isEnabled },
                            set: { value in Task { await appLock.setEnabled(value) } }),
@@ -232,9 +231,9 @@ struct ProfileView: View {
             // Commit-moment lock: one biometric check right at "Seal and
             // send". Deliberately NOT a gate on ordinary use, friction
             // belongs on the irreversible artifact.
-            settingRow(icon: "checkmark.seal", tint: SealTheme.brass,
+            SettingRow(icon: "checkmark.seal", tint: SealTheme.brass,
                        title: "Face ID to seal a card",
-                       subtitle: "Confirm it's you right before a sealed card is sent",
+                       summary: "Check it's you before sending",
                        isOn: .init(
                            get: { cardLockOn },
                            set: { value in Task {
@@ -250,9 +249,10 @@ struct ProfileView: View {
         // is holding the phone. Silver, not brass: it changes how Seal looks
         // and makes no claim about trust (UI.md 1.1).
         if let parentMode {
-            settingRow(icon: "textformat.size", tint: SealTheme.silver,
+            SettingRow(icon: "textformat.size", tint: SealTheme.silver,
                        title: "Bigger text",
-                       subtitle: "Larger type and bigger buttons everywhere in Seal. Nothing is hidden and nothing stops working.",
+                       summary: "Larger type and buttons",
+                       detail: "Everything in Seal gets bigger, on this phone only. Nothing is hidden and nothing stops working. If you have already made text larger in your iPhone settings, this goes one step beyond that rather than starting over.",
                        isOn: .init(
                            get: { parentMode.isOn },
                            set: { parentMode.setEnabled($0) }),
@@ -268,14 +268,20 @@ struct ProfileView: View {
 
         if !devices.isEmpty { devicesCard }
 
-        VStack(alignment: .leading, spacing: 10) {
-            infoRow("Seal", String(myRoot.credentialIDHash.prefix(24)) + "\u{2026}")
-            infoRow("Directory", directoryStatus)
-            infoRow("This device", identity.deviceEndorsement != nil ? "Endorsed" : "Not endorsed")
+        // Shut by default. Nobody reads a truncated hex hash, and the
+        // fingerprint phrase at the top of this screen is the same number in
+        // words a person can say out loud to their daughter. This is evidence
+        // for the one day somebody needs to check it, not a thing you change.
+        DisclosureCard(title: "Technical details") {
+            VStack(alignment: .leading, spacing: 10) {
+                infoRow("Seal", String(myRoot.credentialIDHash.prefix(24)) + "\u{2026}")
+                Text("The same seal as the words under your name.")
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.4))
+                infoRow("Directory", directoryStatus)
+                infoRow("This device", identity.deviceEndorsement != nil ? "Endorsed" : "Not endorsed")
+            }
         }
-        .padding(16)
-        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
-        .padding(.horizontal, 24)
     }
 
     @ViewBuilder
@@ -317,9 +323,10 @@ struct ProfileView: View {
         // means something leaves this phone. Silver: it changes what Seal can
         // prove about time, which is a capability, not a trust claim about a
         // person (UI.md 1.1).
-        settingRow(icon: "clock.badge.checkmark", tint: SealTheme.silver,
+        SettingRow(icon: "clock.badge.checkmark", tint: SealTheme.silver,
                    title: "Independent timestamps",
-                   subtitle: "Ask an outside service to sign the time on each line of your record, so the time is not just this phone's word. Only a short code is sent, never an envelope and never a name. It does tell that service that something was written down.",
+                   summary: "Prove when, not just who",
+                   detail: "The times in your record come from this phone's own clock, so Seal can prove who signed something and that it has not changed, but not when it happened. Turn this on and an outside service signs each time as well. Only a short code is sent, never an envelope and never a name. It does tell that service that something was written down, which is why it is off until you ask for it.",
                    isOn: .init(
                        get: { timestampsOn },
                        set: { value in
@@ -551,50 +558,6 @@ struct ProfileView: View {
     /// one control Parent Mode absolutely must leave reachable is the toggle
     /// that turns Parent Mode off. Above accessibility sizes the switch moves
     /// below the label instead, where it has the full width.
-    @ViewBuilder
-    private func settingRow(icon: String, tint: Color, title: String, subtitle: String,
-                            isOn: Binding<Bool>, switchTint: Color) -> some View {
-        Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: 14) {
-                    settingLabel(icon: icon, tint: tint, title: title, subtitle: subtitle)
-                    Toggle(title, isOn: isOn)
-                        .labelsHidden()
-                        .tint(switchTint)
-                }
-            } else {
-                HStack(spacing: 12) {
-                    settingLabel(icon: icon, tint: tint, title: title, subtitle: subtitle)
-                    Toggle(title, isOn: isOn)
-                        .labelsHidden()
-                        .tint(switchTint)
-                }
-            }
-        }
-        .frame(minHeight: 52)
-        .padding(16)
-        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
-        .padding(.horizontal, 24)
-    }
-
-    private func settingLabel(icon: String, tint: Color,
-                              title: String, subtitle: String) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .foregroundStyle(tint)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.callout)
-                    .foregroundStyle(.white.opacity(0.9))
-                Text(subtitle)
-                    .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.4))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: 0)
-        }
-    }
-
     private func infoRow(_ label: String, _ value: String) -> some View {
         HStack {
             Text(label).foregroundStyle(.white.opacity(0.5))

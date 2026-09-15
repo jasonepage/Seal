@@ -61,6 +61,7 @@ struct BackupKeysSection: View {
     @State private var showAdd = false
     @State private var revoking: BackupCredential?
     @State private var loadError: String?
+    @State private var showWhatItDoes = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -86,14 +87,11 @@ struct BackupKeysSection: View {
                 .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
             }
 
-            if backups.isEmpty {
-                Text(BackupKeyCopy.stakes)
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.6))
-            } else {
-                ForEach(backups) { backup in
-                    backupRow(backup)
-                }
+            // No `stakes` line when the list is empty: Profile puts the same
+            // warning in orange a few inches above this card, and saying it
+            // twice on one screen taught people to skim both.
+            ForEach(backups) { backup in
+                backupRow(backup)
             }
 
             Button { showAdd = true } label: {
@@ -118,21 +116,37 @@ struct BackupKeysSection: View {
             .disabled(DemoFixtures.isActive)
             .opacity(DemoFixtures.isActive ? 0.5 : 1)
 
-            Text(BackupKeyCopy.notMessages)
-                .font(.caption2)
-                .foregroundStyle(.white.opacity(0.4))
-                .fixedSize(horizontal: false, vertical: true)
+            // These three used to stand permanently under the button, three
+            // paragraphs of small grey text on a screen that already had
+            // several. All of it is true and none of it is urgent, so it
+            // waits behind one button for the person who wants it.
+            Button {
+                withAnimation(.easeOut(duration: 0.18)) { showWhatItDoes.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: showWhatItDoes ? "info.circle.fill" : "info.circle")
+                    Text(showWhatItDoes ? "Hide what a backup key does" : "What a backup key does")
+                    Spacer()
+                }
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.55))
+            }
+            .buttonStyle(.plain)
+            .frame(minHeight: 44)
+            .parentTapTarget(44)
 
-            Text(BackupKeyCopy.needsMainKey)
-                .font(.caption2)
-                .foregroundStyle(.white.opacity(0.4))
+            if showWhatItDoes {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(BackupKeyCopy.notMessages)
+                    Text(BackupKeyCopy.needsMainKey)
+                    if !backups.isEmpty {
+                        Text(BackupKeyCopy.stolenNotLost)
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.6))
                 .fixedSize(horizontal: false, vertical: true)
-
-            if !backups.isEmpty {
-                Text(BackupKeyCopy.stolenNotLost)
-                    .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.4))
-                    .fixedSize(horizontal: false, vertical: true)
+                .transition(.opacity)
             }
 
             if let loadError {
