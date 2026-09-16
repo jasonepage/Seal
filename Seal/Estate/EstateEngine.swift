@@ -451,7 +451,25 @@ final class EstateEngine {
         // cannot open, so it forces a fresh epoch exactly as a new person
         // would. The check is by directory record, not by the stale list, so
         // it is done again here rather than trusting what refreshOwner saw.
-        if e.needsNewEpoch || !custodiansWithNewPhones.isEmpty {
+        // The material this estate says it published must actually be
+        // there. It is not when the estate was sealed against the OTHER
+        // CloudKit environment (an Xcode build talks to Development, a
+        // TestFlight build to Production, and the keychain is shared, see
+        // GOTCHAS "Environments"), or when a blob went missing. Either way
+        // the owner still holds the working copy, so the honest repair is a
+        // fresh epoch, not an error the person cannot act on. A network
+        // failure still throws from fetchEstateBlob and is not mistaken
+        // for a missing blob.
+        var publishedMaterial: EpochKeyMaterial?
+        if !e.needsNewEpoch {
+            if let data = try await sync.fetchEstateBlob(name: EstateNames.epochBlob(e.id, e.epoch)),
+               let material = try? JSONDecoder().decode(EpochKeyMaterial.self, from: data) {
+                publishedMaterial = material
+            } else {
+                Self.log.error("seal: epoch \(e.epoch, privacy: .public) material is missing from this environment; rotating")
+            }
+        }
+        if e.needsNewEpoch || !custodiansWithNewPhones.isEmpty || publishedMaterial == nil {
             var custodians: [EstateKeyHierarchy.Custodian] = []
             var custodianKeys: [Data] = []
             var devices: [String: [String]] = [:]
@@ -490,12 +508,10 @@ final class EstateEngine {
             custodiansWithNewPhones = []
             estate = e; saveEstate()
             estateKey = newKey
-        } else {
-            guard let data = try await sync.fetchEstateBlob(name: EstateNames.epochBlob(e.id, e.epoch)),
-                  let material = try? JSONDecoder().decode(EpochKeyMaterial.self, from: data) else {
-                throw EngineError.notReady("The published key material for this estate could not be fetched.")
-            }
+        } else if let material = publishedMaterial {
             estateKey = try EstateKeyHierarchy.openEstateKeyAsOwner(material, mine: mine)
+        } else {
+            throw EngineError.notReady("The published key material for this estate could not be fetched.")
         }
 
         // 1b. The rule, whenever it changed since it was last announced. The

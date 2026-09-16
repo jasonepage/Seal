@@ -167,28 +167,42 @@ struct FirstStepsEditorSheet: View {
                 .focused($focused, equals: step.id + ".note")
             DictationButton(text: binding.note, promise: "Say it the way you would say it to \(recipientName). It stays on this phone.")
             secretPicker(index: index)
-            HStack(spacing: 8) {
-                Button { move(index, by: -1) } label: { Image(systemName: "arrow.up") }
-                    .disabled(index == 0)
-                Button { move(index, by: 1) } label: { Image(systemName: "arrow.down") }
-                    .disabled(index == steps.count - 1)
-                Spacer()
+            // Two arrows, Remove, Close. Each control is one line at its
+            // natural width, so nothing wraps into a circle of syllables.
+            HStack(spacing: 10) {
+                Button { move(index, by: -1) } label: {
+                    Image(systemName: "arrow.up").font(.subheadline.weight(.semibold)).frame(width: 40, height: 36)
+                }
+                .disabled(index == 0)
+                .accessibilityLabel("Move this step up")
+                Button { move(index, by: 1) } label: {
+                    Image(systemName: "arrow.down").font(.subheadline.weight(.semibold)).frame(width: 40, height: 36)
+                }
+                .disabled(index == steps.count - 1)
+                .accessibilityLabel("Move this step down")
+                Spacer(minLength: 8)
                 Button(role: .destructive) {
                     withAnimation { steps.remove(at: index); openID = nil }
                 } label: {
                     Label("Remove", systemImage: "trash")
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1).fixedSize()
+                        .frame(height: 36).padding(.horizontal, 4)
                 }
-                .foregroundStyle(.orange.opacity(0.9))
+                .tint(.orange)
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) { openID = nil; focused = nil }
                 } label: {
-                    Text("Close").fontWeight(.semibold)
+                    Text("Close")
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1).fixedSize()
+                        .frame(height: 36).padding(.horizontal, 8)
                 }
-                .foregroundStyle(SealTheme.brass)
+                .tint(SealTheme.brass)
             }
             .buttonStyle(.bordered)
+            .buttonBorderShape(.roundedRectangle(radius: 10))
             .tint(.white.opacity(0.6))
-            .font(.subheadline)
         }
         .padding(.bottom, 18)
     }
