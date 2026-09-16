@@ -32,12 +32,14 @@ struct EstateHomeView: View {
     @State private var showPeople = false
     @State private var showPolicy = false
     @State private var editing: Envelope?
-    @State private var newEnvelopeFor: FriendStore.StoredFriend?
     @State private var showRecipientPicker = false
     /// What the recipient picker is being used for this time: the blank
     /// editor, as it always was, or the interview.
     @State private var pickerMode: PickerMode = .blank
-    @State private var interviewFor: FriendStore.StoredFriend?
+    @State private var interviewFor: InterviewSubject?
+    /// Set when the picker is choosing a person for an envelope that was
+    /// written to a typed name and is waiting to be bound.
+    @State private var bindingEnvelope: Envelope?
     @State private var sealing = false
     @State private var sealError: String?
     @State private var sealedOK = false
@@ -49,6 +51,14 @@ struct EstateHomeView: View {
     /// the blank editor, exactly as before. "Help me write it" opens the
     /// interview instead. Nothing else about the picker changes.
     private enum PickerMode { case blank, interview }
+
+    /// Who the interview is writing to. `friend` is nil when they have not
+    /// been met yet, in which case the draft lands on an unbound envelope.
+    private struct InterviewSubject: Identifiable {
+        let id = UUID()
+        let name: String
+        let friend: FriendStore.StoredFriend?
+    }
 
     /// "See how it opens": the sandboxed explainer, started on the right
     /// path with that estate's real numbers. It touches no engine and no
@@ -141,32 +151,63 @@ struct EstateHomeView: View {
             }
             .sheet(item: $editing) { envelope in
                 EnvelopeEditorView(envelope: envelope, estateEngine: estateEngine, friendStore: friendStore,
-                                   appLock: appLock, onClose: { editing = nil })
+                                   appLock: appLock, onClose: { editing = nil },
+                                   onChoosePerson: {
+                                       editing = nil
+                                       bindingEnvelope = envelope
+                                   })
                     .environment(\.parentMode, parentMode)
                     .parentTypeScale()
             }
             .sheet(isPresented: $showRecipientPicker) {
-                RecipientPickerSheet(friendStore: friendStore, estateEngine: estateEngine) { friend in
+                RecipientPickerSheet(friendStore: friendStore, estateEngine: estateEngine) { pick in
                     showRecipientPicker = false
-                    guard let friend else { return }
-                    estateEngine.addRecipient(friend.identity)
-                    switch pickerMode {
-                    case .blank:
-                        editing = estateEngine.newEnvelope(for: friend.identity.credentialIDHash, title: "For \(friend.identity.displayName)")
-                    case .interview:
-                        interviewFor = friend
+                    switch pick {
+                    case .cancelled:
+                        return
+                    case .met(let friend):
+                        estateEngine.addRecipient(friend.identity)
+                        switch pickerMode {
+                        case .blank:
+                            editing = estateEngine.newEnvelope(for: friend.identity.credentialIDHash,
+                                                               title: "For \(friend.identity.displayName)")
+                        case .interview:
+                            interviewFor = InterviewSubject(name: friend.identity.displayName, friend: friend)
+                        }
+                    case .notYet(let name):
+                        // No recipient is added to the estate here. A typed
+                        // name is not an identity and must never look like
+                        // one; it becomes a recipient at bindEnvelope.
+                        switch pickerMode {
+                        case .blank:
+                            editing = estateEngine.newEnvelope(forName: name)
+                        case .interview:
+                            interviewFor = InterviewSubject(name: name, friend: nil)
+                        }
                     }
                 }
                 .environment(\.parentMode, parentMode)
                 .parentTypeScale()
             }
-            .sheet(item: $interviewFor) { friend in
+            // Choosing the person for an envelope that was written to a name.
+            .sheet(item: $bindingEnvelope) { envelope in
+                RecipientPickerSheet(friendStore: friendStore, estateEngine: estateEngine,
+                                     bindingExisting: true) { pick in
+                    bindingEnvelope = nil
+                    if case .met(let friend) = pick {
+                        estateEngine.bindEnvelope(envelope.id, to: friend.identity)
+                    }
+                }
+                .environment(\.parentMode, parentMode)
+                .parentTypeScale()
+            }
+            .sheet(item: $interviewFor) { subject in
                 EnvelopeInterviewView(
-                    recipientName: friend.identity.displayName,
+                    recipientName: subject.name,
                     onCancel: { interviewFor = nil },
                     onDraft: { draft in
                         interviewFor = nil
-                        editing = envelopeFromDraft(draft, for: friend)
+                        editing = envelopeFromDraft(draft, for: subject)
                     })
                     .environment(\.parentMode, parentMode)
                     .parentTypeScale()
@@ -365,11 +406,18 @@ struct EstateHomeView: View {
     /// and `updateEnvelope(_:)` to save the letter and the secrets. Nothing
     /// new was added to the engine for this. The envelope lands unsealed,
     /// like every other draft, and the editor opens on it next.
-    private func envelopeFromDraft(_ draft: InterviewDraft, for friend: FriendStore.StoredFriend) -> Envelope {
-        let name = friend.identity.displayName
+    private func envelopeFromDraft(_ draft: InterviewDraft, for subject: InterviewSubject) -> Envelope {
+        let name = subject.name
         let title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? "For \(name)" : draft.title
-        var envelope = estateEngine.newEnvelope(for: friend.identity.credentialIDHash, title: title)
+        var envelope: Envelope
+        if let friend = subject.friend {
+            envelope = estateEngine.newEnvelope(for: friend.identity.credentialIDHash, title: title)
+        } else {
+            // Not met yet. Same draft, waiting for a person.
+            envelope = estateEngine.newEnvelope(forName: name)
+            envelope.title = title
+        }
         envelope.letter = draft.letter
         // Secrets go in exactly as typed, through the same validator the
         // secret editor uses. One that cannot be built is dropped rather
@@ -382,12 +430,20 @@ struct EstateHomeView: View {
     }
 
     private func envelopeRow(_ envelope: Envelope, estate: Estate) -> some View {
-        let recipient = estate.recipients.first { $0.rootHash == envelope.recipientHash }?.displayName ?? "Someone"
+        let recipient = envelope.isAddressed
+            ? (estate.recipients.first { $0.rootHash == envelope.recipientHash }?.displayName ?? "Someone")
+            : (envelope.draftRecipientName ?? "Someone")
         // "0 secrets" read like something had gone missing. A letter with no
         // secrets is a whole envelope, so say what it is.
         let contents = envelope.secrets.isEmpty
             ? "letter only"
             : "\(envelope.secrets.count) secret\(envelope.secrets.count == 1 ? "" : "s")"
+        // An envelope written to a typed name says what it is waiting for,
+        // rather than "not sealed yet", which would read as the owner's
+        // fault when the missing piece is a person.
+        let status = envelope.isAddressed
+            ? (envelope.sealed ? "sealed" : "not sealed yet")
+            : "waiting to meet them"
         return HStack(spacing: 14) {
             Image(systemName: envelope.sealed ? "envelope.fill" : "envelope.badge")
                 .font(.title3)
@@ -395,7 +451,7 @@ struct EstateHomeView: View {
                 .frame(width: 28)
             VStack(alignment: .leading, spacing: 3) {
                 Text(envelope.title).font(.headline).foregroundStyle(.white)
-                Text("To \(recipient) · \(contents) · \(envelope.sealed ? "sealed" : "not sealed yet")")
+                Text("To \(recipient) · \(contents) · \(status)")
                     .font(.caption).foregroundStyle(.white.opacity(0.5))
             }
             Spacer()
@@ -441,6 +497,17 @@ struct EstateHomeView: View {
             } else if !estate.isReadyToSeal {
                 Text("Add at least one key holder and set the rule before sealing.")
                     .font(.caption).foregroundStyle(.orange.opacity(0.85))
+            } else if !estate.unaddressedEnvelopes.isEmpty && estate.addressedEnvelopes.isEmpty {
+                Text("Every envelope is waiting for a person. Meet them in person, add them under People, then open the envelope and choose them.")
+                    .font(.caption).foregroundStyle(.orange.opacity(0.85))
+                    .multilineTextAlignment(.center).padding(.horizontal, 28)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if !estate.unaddressedEnvelopes.isEmpty {
+                let n = estate.unaddressedEnvelopes.count
+                Text("\(n) envelope\(n == 1 ? " is" : "s are") waiting for a person and \(n == 1 ? "is" : "are") not sealed. Everything else seals now.")
+                    .font(.caption).foregroundStyle(.white.opacity(0.55))
+                    .multilineTextAlignment(.center).padding(.horizontal, 28)
+                    .fixedSize(horizontal: false, vertical: true)
             } else if estate.needsNewEpoch && estate.epochPublished {
                 Text("Your custodians or your rule changed. Sealing again issues fresh key shares. Your envelopes themselves are not touched.")
                     .font(.caption).foregroundStyle(.white.opacity(0.5))
@@ -607,35 +674,59 @@ struct EstateHomeView: View {
 }
 
 /// Pick who an envelope is for. Anyone met in person.
+/// Who an envelope is for, as far as this sheet can tell.
+enum RecipientPick {
+    /// Someone met in person and already in Seal.
+    case met(FriendStore.StoredFriend)
+    /// A name typed by the owner. The envelope stays a draft until they meet.
+    case notYet(String)
+    case cancelled
+}
+
+/// This sheet used to be a dead end. On a fresh install it said "Nobody to
+/// write to yet. Open People and add them first", which is the app asking a
+/// new customer to go physically find somebody, install Seal on their phone
+/// too, and run a ceremony, before writing one word. That is the hardest
+/// thing this product ever asks, asked first, in exchange for nothing yet.
+///
+/// Now a name is enough to start. The envelope waits as a draft and binds to
+/// a real identity the day they meet, which is the same rule as before
+/// (PRODUCT.md section 8) arriving in the order a person can actually do it.
 struct RecipientPickerSheet: View {
     @Bindable var friendStore: FriendStore
     @Bindable var estateEngine: EstateEngine
-    let onPick: (FriendStore.StoredFriend?) -> Void
+    /// True when picking a person for an envelope that already exists. A
+    /// typed name is no help there, so that half is hidden.
+    var bindingExisting = false
+    let onPick: (RecipientPick) -> Void
+
+    @State private var typedName = ""
+
+    private var trimmedName: String {
+        typedName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     var body: some View {
         NavigationStack {
             ZStack {
                 SealTheme.ink.ignoresSafeArea()
-                if friendStore.friends.isEmpty {
-                    VStack(spacing: 12) {
-                        Text("Nobody to write to yet.").font(.headline).foregroundStyle(.white)
-                        Text("An envelope goes to someone you have met in person with Seal. Open People and add them first.")
-                            .font(.callout).foregroundStyle(.white.opacity(0.55)).multilineTextAlignment(.center)
-                    }
-                    .padding(32)
-                } else {
-                    List(friendStore.friends) { friend in
-                        Button { onPick(friend) } label: {
-                            HStack {
-                                IdentityRing(displayName: friend.identity.displayName, tier: friend.identity.tier, size: 36)
-                                Text(friend.identity.displayName).foregroundStyle(.white)
-                                Spacer()
-                            }
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 22) {
+                        if !friendStore.friends.isEmpty {
+                            metSection
                         }
-                        .listRowBackground(Color.white.opacity(0.05))
-                        .parentTapTarget()
+                        if !bindingExisting {
+                            notYetSection
+                        } else if friendStore.friends.isEmpty {
+                            Text("You have not added anybody in person yet. Open People, meet them, and then come back to this envelope.")
+                                .font(.callout).foregroundStyle(.white.opacity(0.6))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
-                    .scrollContentBackground(.hidden)
+                    .padding(24)
+                    .frame(maxWidth: 520)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .containerRelativeFrame(.horizontal)
                 }
             }
             .navigationTitle("Who is it for?")
@@ -643,10 +734,61 @@ struct RecipientPickerSheet: View {
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { onPick(nil) }.foregroundStyle(SealTheme.brass)
+                    Button("Cancel") { onPick(.cancelled) }.foregroundStyle(SealTheme.brass)
                 }
             }
         }
         .preferredColorScheme(.dark)
+    }
+
+    private var metSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("People you have met")
+                .font(.headline).foregroundStyle(.white.opacity(0.85))
+            ForEach(friendStore.friends) { friend in
+                Button { onPick(.met(friend)) } label: {
+                    HStack(spacing: 12) {
+                        IdentityRing(displayName: friend.identity.displayName, tier: friend.identity.tier, size: 36)
+                        Text(friend.identity.displayName)
+                            .font(.headline).foregroundStyle(.white)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right").font(.caption).foregroundStyle(.white.opacity(0.3))
+                    }
+                    .padding(16)
+                    .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .parentTapTarget()
+            }
+        }
+    }
+
+    private var notYetSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(friendStore.friends.isEmpty ? "Who do you want to write to?" : "Somebody not in Seal yet")
+                .font(.headline).foregroundStyle(.white.opacity(0.85))
+            Text("Type their name and write to them tonight. The envelope waits here as a draft. When you meet them in person and add them, it becomes theirs and can be sealed.")
+                .font(.callout).foregroundStyle(.white.opacity(0.6))
+                .fixedSize(horizontal: false, vertical: true)
+            TextField("Their name", text: $typedName)
+                .textFieldStyle(.plain)
+                .font(.body)
+                .foregroundStyle(.white)
+                .padding(14)
+                .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
+                .submitLabel(.done)
+                .onSubmit { if !trimmedName.isEmpty { onPick(.notYet(trimmedName)) } }
+            Button {
+                onPick(.notYet(trimmedName))
+            } label: {
+                Text(trimmedName.isEmpty ? "Write an envelope" : "Write to \(trimmedName)")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(SealPrimaryButtonStyle())
+            .disabled(trimmedName.isEmpty)
+            .parentTapTarget(60)
+        }
     }
 }

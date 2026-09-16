@@ -252,6 +252,33 @@ final class EstateEngine {
         return env
     }
 
+    /// An envelope for somebody who is not in Seal yet, addressed to a typed
+    /// name. See Envelope.draftRecipientName for why this exists.
+    func newEnvelope(forName name: String) -> Envelope {
+        var e = createEstateIfNeeded()
+        let envelope = Envelope.unbound(name: name, title: "For \(name)", now: clock.now)
+        e.envelopes.append(envelope)
+        estate = e; saveEstate()
+        return envelope
+    }
+
+    /// The day they meet. The envelope keeps its words, its photos and its
+    /// content key, and gains a real recipient, so nothing written is lost
+    /// and the next seal picks it up like any other draft.
+    func bindEnvelope(_ envelopeID: String, to friend: RootIdentity) {
+        addRecipient(friend)
+        guard var e = estate, let i = e.envelopes.firstIndex(where: { $0.id == envelopeID }) else { return }
+        let hash = friend.credentialIDHash
+        // Fall in behind anything already written for this person.
+        let order = (e.envelopes(for: hash).map(\.revealOrder).max() ?? 0) + 1
+        e.envelopes[i].recipientHash = hash
+        e.envelopes[i].draftRecipientName = nil
+        e.envelopes[i].revealOrder = order
+        e.envelopes[i].updatedAt = clock.now
+        e.envelopes[i].sealed = false
+        estate = e; saveEstate(); recomputeAll()
+    }
+
     /// Any edit un-seals the envelope so the next seal republishes it.
     func updateEnvelope(_ envelope: Envelope) {
         guard var e = estate, let i = e.envelopes.firstIndex(where: { $0.id == envelope.id }) else { return }
@@ -379,8 +406,11 @@ final class EstateEngine {
             estate = e; saveEstate()
         }
 
-        // 2. Blobs for every unsealed envelope.
-        for i in e.envelopes.indices where !e.envelopes[i].sealed {
+        // 2. Blobs for every unsealed envelope. `isAddressed` skips the ones
+        //    written for somebody who is not in Seal yet: publishing their
+        //    content would put a blob in CloudKit that no key table ever
+        //    names and nobody could ever open.
+        for i in e.envelopes.indices where !e.envelopes[i].sealed && e.envelopes[i].isAddressed {
             var env = e.envelopes[i]
             let payloadBlobID = env.payloadBlobID ?? UUID().uuidString
             let payload = try EstateEvent.encodeBody(env.payload)
@@ -398,7 +428,7 @@ final class EstateEngine {
 
         // 3. One key table per recipient with envelopes.
         var tableIDs: [String] = []
-        let recipientHashes = Set(e.envelopes.map(\.recipientHash))
+        let recipientHashes = Set(e.addressedEnvelopes.map(\.recipientHash))
         for recipientHash in recipientHashes.sorted() {
             let record = e.tableKeys[recipientHash] ?? Estate.TableKeyRecord(tableID: UUID().uuidString, tableKey: EstateCrypto.randomKey())
             e.tableKeys[recipientHash] = record
@@ -413,7 +443,7 @@ final class EstateEngine {
         estate = e; saveEstate()
 
         // 4. The vault statement.
-        let allBlobs = e.envelopes.flatMap(\.blobIDs).sorted().joined(separator: "\n")
+        let allBlobs = e.addressedEnvelopes.flatMap(\.blobIDs).sorted().joined(separator: "\n")
         let vault = VaultBody(blobCommitment: Data(SHA256.hash(data: Data(allBlobs.utf8))), tableIDs: tableIDs.sorted())
         let vaultEvent = try sign(.vaultUpdated, estateID: e.id, payload: try EstateEvent.encodeBody(vault), previous: previous)
         try await publish(vaultEvent, into: e.id, mine: true)

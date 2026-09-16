@@ -155,6 +155,35 @@ struct Envelope: Codable, Identifiable, Hashable {
     /// recipient's key table lists it.
     var sealed: Bool
 
+    /// WHO IT IS FOR, BEFORE THEY EXIST IN SEAL. A name typed by the owner,
+    /// on an envelope that has not been bound to a real identity yet.
+    ///
+    /// The whole point: a new customer used to be able to write NOTHING
+    /// until they had physically stood next to somebody who also had Seal
+    /// installed and run a two minute ceremony. The recipient picker on a
+    /// fresh install said "Nobody to write to yet." That is the hardest
+    /// possible thing to ask for first, in exchange for nothing yet, and it
+    /// is where people leave.
+    ///
+    /// So an envelope can be addressed to "Emma" and written tonight. It
+    /// stays a draft, it is skipped by every step of the seal, and it binds
+    /// to a real identity the day they meet. Meeting in person stops being
+    /// the price of entry and becomes the thing that unlocks something they
+    /// already wrote and now care about.
+    ///
+    /// Nothing about the isolation promise moves. An unbound envelope is
+    /// never published, never wrapped, never in a key table (PRODUCT.md
+    /// section 8 still holds: a recipient is a Seal identity met in person).
+    var draftRecipientName: String? = nil
+
+    /// Unbound envelopes carry a made-up recipientHash with this prefix, so
+    /// each one is still its own recipient for grouping and reveal order,
+    /// and so no real identity hash can ever collide with one.
+    static let unboundPrefix = "unbound."
+
+    /// False while this is addressed to a typed name rather than a person.
+    var isAddressed: Bool { !recipientHash.hasPrefix(Self.unboundPrefix) }
+
     /// The plaintext that goes into the payload blob. Media is referenced by
     /// blob id and hash so the recipient can check what they downloaded.
     struct Payload: Codable, Hashable {
@@ -181,6 +210,16 @@ struct Envelope: Codable, Identifiable, Hashable {
                  photos: [], voiceNote: nil, secrets: [], revealOrder: revealOrder,
                  createdAt: now, updatedAt: now, contentKey: EstateCrypto.randomKey(),
                  payloadBlobID: nil, sealed: false)
+    }
+
+    /// An envelope for somebody who is not in Seal yet. The content key is
+    /// minted now like any other, so binding it later changes who can read
+    /// it and nothing else about it.
+    static func unbound(name: String, title: String, now: Date) -> Envelope {
+        var envelope = new(recipientHash: Self.unboundPrefix + UUID().uuidString,
+                           title: title, now: now, revealOrder: 1)
+        envelope.draftRecipientName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return envelope
     }
 }
 
@@ -221,6 +260,13 @@ struct Estate: Codable, Hashable {
                createdAt: now, tableKeys: [:], epochPublished: false)
     }
 
+    /// Envelopes bound to a real identity. Everything the seal touches uses
+    /// this, never `envelopes`.
+    var addressedEnvelopes: [Envelope] { envelopes.filter(\.isAddressed) }
+
+    /// Written, but for somebody who is not in Seal yet.
+    var unaddressedEnvelopes: [Envelope] { envelopes.filter { !$0.isAddressed } }
+
     func envelopes(for recipientHash: String) -> [Envelope] {
         envelopes.filter { $0.recipientHash == recipientHash }.sorted { $0.revealOrder < $1.revealOrder }
     }
@@ -245,8 +291,11 @@ struct Estate: Codable, Hashable {
             || publishedThreshold != policy.threshold
     }
 
+    /// `addressedEnvelopes`, not `envelopes`: an envelope written to a typed
+    /// name is skipped by every step of the seal, so counting it here would
+    /// leave the Seal button lit with nothing for it to do.
     var hasUnsealedChanges: Bool {
-        needsNewEpoch || publishedPolicy != policy || envelopes.contains { !$0.sealed }
+        needsNewEpoch || publishedPolicy != policy || addressedEnvelopes.contains { !$0.sealed }
     }
 }
 

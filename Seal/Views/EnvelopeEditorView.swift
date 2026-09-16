@@ -15,6 +15,9 @@ struct EnvelopeEditorView: View {
     @Bindable var friendStore: FriendStore
     @Bindable var appLock: AppLock
     let onClose: () -> Void
+    /// Opens the person picker for an envelope written to a typed name.
+    /// Optional so nothing else that builds this view has to change.
+    var onChoosePerson: (() -> Void)? = nil
 
     @State private var showSecretEditor = false
     @State private var showPhotoPicker = false
@@ -23,8 +26,38 @@ struct EnvelopeEditorView: View {
     @State private var revealSecrets = false
     @State private var error: String?
 
+    /// The one row at the top of an envelope that has words but no person.
+    /// It states the good news first (the writing is safe here) because the
+    /// person reading it just did the hard part and should not be met with a
+    /// warning for it.
+    private var waitingForAPerson: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: "person.crop.circle.badge.questionmark")
+                    .font(.title3).foregroundStyle(.white.opacity(0.75))
+                Text("This one is for \(recipientName), who is not in Seal yet.")
+                    .font(.headline).foregroundStyle(.white)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Text("Write as much as you like. It stays on this phone as a draft. When you meet \(recipientName) in person and add them under People, choose them here and this envelope becomes theirs.")
+                .font(.callout).foregroundStyle(.white.opacity(0.65))
+                .fixedSize(horizontal: false, vertical: true)
+            if let onChoosePerson {
+                Button(action: onChoosePerson) {
+                    Text("Choose the person").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(SealSecondaryButtonStyle())
+                .parentTapTarget(60)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 18))
+    }
+
     private var recipientName: String {
-        friendStore.friends.first { $0.identity.credentialIDHash == envelope.recipientHash }?.identity.displayName ?? "them"
+        if !envelope.isAddressed { return envelope.draftRecipientName ?? "them" }
+        return friendStore.friends.first { $0.identity.credentialIDHash == envelope.recipientHash }?.identity.displayName ?? "them"
     }
 
     var body: some View {
@@ -33,6 +66,7 @@ struct EnvelopeEditorView: View {
                 SealTheme.ink.ignoresSafeArea()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
+                        if !envelope.isAddressed { waitingForAPerson }
                         field("Title") {
                             TextField("For \(recipientName)", text: $envelope.title)
                                 .textFieldStyle(.plain)
@@ -51,7 +85,9 @@ struct EnvelopeEditorView: View {
                         DictationButton(text: $envelope.letter)
                         secretsBlock
                         mediaBlock
-                        Text("Written for \(recipientName). Opens on their phone, in the order you choose, only after your custodians release it.")
+                        Text(envelope.isAddressed
+                             ? "Written for \(recipientName). Opens on their phone, in the order you choose, only after your custodians release it."
+                             : "Written for \(recipientName), who is not in Seal yet. Nothing about this envelope is published or sealed until you meet them and choose them above.")
                             .font(.caption).foregroundStyle(.white.opacity(0.45))
                             .fixedSize(horizontal: false, vertical: true)
                             .padding(.horizontal, 4)
