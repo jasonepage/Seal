@@ -148,13 +148,24 @@ Kinds and who may write them:
 | `objectionWithdrawn` | custodian | `{ claimID, withdrawn: true, note }` |
 | `authorization` | custodian | `{ claimID, epoch, recordHeadDigest, assertion, shareForClaimant[] }` |
 | `released` | custodian | `{ claimID, epoch, shareIndexes[], estateKey (base64, 32 bytes) }` |
+| `custodyConfirmed` | custodian | `{ epoch, recordHeadDigest, assertion }` (added 2026-09-16) |
 
 A "custodian" is any root hash listed in `custodianHashes` of an earlier
 `epochPublished` event by the owner. An event by anyone else, or an owner
 event of a custodian kind or the reverse, is invalid and must be ignored.
 
 `policy` is `{ silenceDays, warningDays, graceDays, threshold, objectionBehavior }`
-with `objectionBehavior` either `"pause"` or `"veto"`.
+with `objectionBehavior` either `"pause"` or `"veto"`, plus, since 2026-09-16,
+an optional `custodyConfirmMonths` (default 12) that says how often each
+custodian's phone asks them to tap their key. It is not part of the release
+rule.
+
+`custodyConfirmed` is a custodian saying "I still have my key": a WebAuthn
+assertion by their root credential over
+`SHA256(framed("seal.custody.confirm.v1", [estateID, epoch, recordHeadDigest]))`.
+It names no claim and carries no share. A verifier must never count it as
+an `authorization`; the domain string differs precisely so that it cannot
+verify as one.
 
 ## 6. Epoch material
 

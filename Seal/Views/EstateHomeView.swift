@@ -979,6 +979,15 @@ struct EstateHomeView: View {
                      : "Key handover signed by both of you.")
                     .font(.caption).foregroundStyle(.white.opacity(0.5))
                     .fixedSize(horizontal: false, vertical: true)
+                // Do they still have it? From the record: their yearly tap
+                // (CustodyConfirmation). Orange with the next step when it
+                // is overdue, quiet otherwise.
+                if let standing = estateEngine.custodyStanding(for: custodian) {
+                    Label(standing.line, systemImage: standing.overdue ? "exclamationmark.triangle.fill" : "checkmark.seal")
+                        .font(.caption)
+                        .foregroundStyle(standing.overdue ? .orange : .white.opacity(0.5))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             Spacer()
             if tappable {

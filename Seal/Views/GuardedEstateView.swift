@@ -43,6 +43,7 @@ struct GuardedEstateView: View {
             ScrollView {
                 VStack(spacing: 18) {
                     stateCard
+                    if live.isCustodian { custodyCard }
                     if live.isCustodian { custodianActions }
                     if live.isRecipient { recipientCard }
                     ruleCard
@@ -188,6 +189,54 @@ struct GuardedEstateView: View {
                 }
             }
         }
+    }
+
+    // MARK: - "I still have my key"
+
+    /// The yearly receipt (CustodyConfirmation). When it is due the card
+    /// asks plainly and the button is brass; the rest of the year it is
+    /// one quiet line saying when they last confirmed. Never counts toward
+    /// a release, and the card says so.
+    private var custodyCard: some View {
+        let last = estateEngine.myLastCustodyConfirmation(estateID: guarded.estateID)
+        let due = estateEngine.custodyConfirmationDue(estateID: guarded.estateID)
+        let months = snapshot?.policy.custodyConfirmMonths ?? ReleasePolicy.defaultCustodyConfirmMonths
+        return VStack(alignment: .leading, spacing: 10) {
+            Label(due ? "Do you still have the key \(live.ownerName) gave you?" : "Your key",
+                  systemImage: due ? "key.viewfinder" : "checkmark.seal")
+                .font(.system(.headline, design: .rounded))
+                .foregroundStyle(due ? SealTheme.brass : .white.opacity(0.85))
+            if due {
+                Text("Find it and tap it to this phone. That writes one signed line in \(live.ownerName)'s record saying you still have it. It does not open anything and it is not a vote for anything.")
+                    .font(.callout).foregroundStyle(.white.opacity(0.7))
+                    .fixedSize(horizontal: false, vertical: true)
+                Button {
+                    Task { await run { try await estateEngine.confirmCustody(estateID: guarded.estateID, ceremony: ceremony) } }
+                } label: {
+                    HStack {
+                        if working { ProgressView().tint(SealTheme.ink) }
+                        Label("Tap my key to confirm", systemImage: "key.fill").font(.system(.headline, design: .rounded))
+                    }
+                    .frame(maxWidth: .infinity).padding(.vertical, 8)
+                }
+                .buttonStyle(.borderedProminent).tint(SealTheme.brass).foregroundStyle(SealTheme.ink)
+                .disabled(working || DemoFixtures.isActive)
+                .parentTapTarget(60)
+            } else if let last {
+                Text("You confirmed you still have it \(SecretAge.ago(since: last, now: estateEngine.now)). Seal asks again every \(months == 12 ? "year" : "\(months) months").")
+                    .font(.caption).foregroundStyle(.white.opacity(0.5))
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text("Every \(months == 12 ? "year" : "\(months) months") Seal will ask you to tap your key, so \(live.ownerName) knows it is still in good hands.")
+                    .font(.caption).foregroundStyle(.white.opacity(0.5))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(18)
+        .background(.white.opacity(due ? 0.08 : 0.04), in: RoundedRectangle(cornerRadius: 20))
+        .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(due ? SealTheme.brass.opacity(0.35) : .clear, lineWidth: 1))
+        .padding(.horizontal, 20)
     }
 
     private func action(_ title: String, icon: String, tint: Color, note: String?, _ perform: @escaping () -> Void) -> some View {

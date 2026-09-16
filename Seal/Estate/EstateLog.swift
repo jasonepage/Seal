@@ -55,6 +55,11 @@ struct EstateEvent: Codable, Hashable, Identifiable {
         case authorization
         /// Claimant. Payload: ReleasedBody (Estate Key wrapped to recipients).
         case released
+        /// Custodian. Payload: CustodyConfirmedBody. "I still have my key."
+        /// A custody receipt, NOT an authorization: ReleaseFeed ignores it
+        /// and its challenge lives in a different domain
+        /// (CustodyConfirmation.swift). Added 2026-09-16.
+        case custodyConfirmed
     }
 
     let id: String
@@ -309,7 +314,7 @@ enum EstateLogVerifier {
     }
 
     static let ownerKinds: Set<EstateEvent.Kind> = [.estateCreated, .epochPublished, .policyChanged, .vaultUpdated, .heartbeat, .cancellation]
-    static let custodianKinds: Set<EstateEvent.Kind> = [.silenceObserved, .releaseClaimed, .objection, .objectionWithdrawn, .authorization, .released]
+    static let custodianKinds: Set<EstateEvent.Kind> = [.silenceObserved, .releaseClaimed, .objection, .objectionWithdrawn, .authorization, .released, .custodyConfirmed]
 
     /// Returns the events whose signature chains verify and whose actor
     /// role is permitted, in the order given. Events by unknown actors are

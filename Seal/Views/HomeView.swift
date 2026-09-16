@@ -128,6 +128,9 @@ struct HomeView: View {
                                     estateCreatedAt: estateEngine.estate?.createdAt ?? estateEngine.now,
                                     now: estateEngine.now)
         await estateEngine.refreshGuarded()
+        // "Do you still have your key?" at each estate's due date
+        // (CustodyReminders). A receipt, never a vote.
+        await CustodyReminders.schedule(engine: estateEngine, ownerHash: myRoot.credentialIDHash)
         // The CloudKit push for a guarded estate is silent now, because it
         // fires on the owner's heartbeat too. This is what the person
         // actually sees, and only when the state moved (CustodianNotices).

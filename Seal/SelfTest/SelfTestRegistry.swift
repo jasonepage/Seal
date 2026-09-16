@@ -15,5 +15,6 @@ enum SelfTestRegistry {
             + EstateLogTests.suites
             + FirstStepsTests.suites
             + SecretReviewTests.suites
+            + CustodyConfirmationTests.suites
     }
 }

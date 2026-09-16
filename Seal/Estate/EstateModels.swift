@@ -45,6 +45,8 @@ struct ReleasePolicy: Codable, Hashable {
     static let defaultSilenceDays = 90
     static let defaultWarningDays = 21
     static let defaultGraceDays = 14
+    static let allowedCustodyConfirmMonths = [6, 12, 24]
+    static let defaultCustodyConfirmMonths = 12
 
     /// How long the owner can go without opening the app before custodians
     /// may start a claim.
@@ -56,6 +58,11 @@ struct ReleasePolicy: Codable, Hashable {
     /// M custodians out of N must tap.
     var threshold: Int
     var objectionBehavior: ObjectionBehavior = .pause
+    /// How often each key holder's phone asks them to tap their key and
+    /// say they still have it (CustodyConfirmation.swift). Travels in the
+    /// policy so the key holders' phones know the interval. Not part of
+    /// the release rule; nothing in ReleaseMachine reads it.
+    var custodyConfirmMonths: Int = defaultCustodyConfirmMonths
 
     enum PolicyError: LocalizedError, Equatable {
         case silenceNotAllowed(Int)
@@ -346,6 +353,24 @@ struct Estate: Codable, Hashable {
 }
 
 // MARK: - Decoding older shapes
+
+extension ReleasePolicy {
+    private enum Keys: String, CodingKey {
+        case silenceDays, warningDays, graceDays, threshold, objectionBehavior, custodyConfirmMonths
+    }
+
+    /// `custodyConfirmMonths` was added 2026-09-16; a policy in an older
+    /// estate, event or capsule has no key for it.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: Keys.self)
+        silenceDays = try c.decode(Int.self, forKey: .silenceDays)
+        warningDays = try c.decode(Int.self, forKey: .warningDays)
+        graceDays = try c.decode(Int.self, forKey: .graceDays)
+        threshold = try c.decode(Int.self, forKey: .threshold)
+        objectionBehavior = try c.decode(ObjectionBehavior.self, forKey: .objectionBehavior)
+        custodyConfirmMonths = try c.decodeIfPresent(Int.self, forKey: .custodyConfirmMonths) ?? ReleasePolicy.defaultCustodyConfirmMonths
+    }
+}
 
 //  A DEFAULT VALUE ON A STORED PROPERTY DOES NOT MAKE A MISSING KEY DECODE.
 //  Swift's synthesized `init(from:)` calls `decode`, not `decodeIfPresent`,

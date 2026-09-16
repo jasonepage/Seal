@@ -830,6 +830,70 @@ final class EstateEngine {
         try await publish(event, into: estateID, mine: false)
     }
 
+    // MARK: - Custodian: "I still have my key"
+
+    /// The yearly tap (CustodyConfirmation.swift). Same ceremony as a
+    /// release tap, different domain, no claim, no share. Allowed in any
+    /// state: confirming custody during a claim is still just custody.
+    func confirmCustody(estateID: String, ceremony: CeremonyManager) async throws {
+        let (g, _) = try guardedEstate(estateID)
+        guard let myRoot = identity.rootIdentity else { throw EngineError.noDeviceKey }
+        guard g.isCustodian, let epoch = g.epoch else {
+            throw EngineError.notAllowed("You do not hold a key for this estate.")
+        }
+        guard !DemoFixtures.isActive else { return }
+        let events = guardedEvents[estateID] ?? []
+        let head = EstateLogStore.headDigest(events)
+        let challenge = CustodyConfirmation.challenge(estateID: estateID, epoch: epoch.epoch, recordHeadDigest: head)
+        let assertion = try await ceremony.signReleaseAuthorization(challenge: challenge, myRoot: myRoot)
+        let body = try EstateEvent.encodeBody(CustodyConfirmedBody(epoch: epoch.epoch, recordHeadDigest: head, assertion: assertion))
+        let event = try sign(.custodyConfirmed, estateID: estateID, payload: body, previous: head)
+        try await publish(event, into: estateID, mine: false)
+    }
+
+    /// When this phone's identity last confirmed custody of a key for
+    /// `estateID`, by the record.
+    func myLastCustodyConfirmation(estateID: String) -> Date? {
+        CustodyConfirmation.latest(events: guardedEvents[estateID] ?? [])[ownerHash]
+    }
+
+    /// The moment this phone became a key holder for `estateID`, as the
+    /// record tells it: the newest epoch statement's time, or the estate's
+    /// creation. The clock a first confirmation is measured from.
+    func custodySince(estateID: String) -> Date {
+        let events = guardedEvents[estateID] ?? []
+        if let g = guarded.first(where: { $0.estateID == estateID }), let digest = g.epochEventDigest,
+           let epochEvent = events.first(where: { $0.digest == digest }) {
+            return ReleaseFeed.effectiveTime(epochEvent)
+        }
+        return guardedSnapshots[estateID]?.estateCreatedAt ?? clock.now
+    }
+
+    /// True when this key holder's phone should be asking for the tap.
+    func custodyConfirmationDue(estateID: String) -> Bool {
+        guard let g = guarded.first(where: { $0.estateID == estateID }), g.isCustodian,
+              let s = guardedSnapshots[estateID], s.releasedAt == nil else { return false }
+        return CustodyConfirmation.isDue(lastConfirmed: myLastCustodyConfirmation(estateID: estateID),
+                                         since: custodySince(estateID: estateID),
+                                         months: s.policy.custodyConfirmMonths, now: clock.now)
+    }
+
+    // MARK: - Owner: each key holder's standing
+
+    /// What the home screen says under each key holder. A confirmation
+    /// counts only when its tap verifies under the key holder's PINNED
+    /// root key, so "confirmed" means a key was physically tapped.
+    func custodyStanding(for custodian: Custodian) -> CustodyConfirmation.Standing? {
+        guard let e = estate, e.epochPublished else { return nil }
+        let last = KeyPinStore.pinnedKey(for: custodian.rootHash).flatMap { key in
+            CustodyConfirmation.latestVerified(events: ownerEvents, estateID: e.id,
+                                               custodianHash: custodian.rootHash, rootPublicKey: key)
+        }
+        return CustodyConfirmation.standing(name: custodian.displayName, lastConfirmed: last,
+                                            handedOverAt: custodian.addedAt,
+                                            months: e.policy.custodyConfirmMonths, now: clock.now)
+    }
+
     /// Which authorizations on the current claim carry a real tap: the
     /// assertion verifies under the custodian's pinned root key over the
     /// challenge it claims. The machine counted them by time; this is the

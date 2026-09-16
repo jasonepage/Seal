@@ -100,6 +100,12 @@ enum ReleaseFeed {
                 if let body = e.body(EpochBody.self) { policy.threshold = body.threshold }
             case .vaultUpdated, .silenceObserved:
                 break
+            case .custodyConfirmed:
+                // A key holder saying "I still have my key". Evidence for
+                // the owner's screen (CustodyConfirmation.swift), never a
+                // tap toward a release. Listed here on purpose so the
+                // compiler makes the next person read this line.
+                break
             }
         }
 

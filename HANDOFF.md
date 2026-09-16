@@ -65,7 +65,38 @@ to the matching `init(from:)`, or it silently breaks loading.**
 
 Built and ran clean on the phone on 2026-09-16 (evening). Phase 1 is done.
 
-### Second pass on the envelope (UNCOMPILED, after Phase 2 built clean)
+### Phase 3: key holders confirm they still have their key (UNCOMPILED)
+
+- `Seal/Estate/CustodyConfirmation.swift`: the `custodyConfirmed` event
+  body, the challenge in its own domain (`seal.custody.confirm.v1`, no
+  claim id, no share), the pure readers (`latest`, `latestVerified`
+  against the pinned root key), `standing` for the owner's screen, `isDue`.
+- `ReleasePolicy.custodyConfirmMonths` (6, 12, 24; default 12) with a hand
+  written decoder so older policies load. Shown in `PolicyView`. Changing
+  it is a policy change, so it is announced with `policyChanged` and the
+  key holders' phones learn the interval from the record.
+- `ReleaseFeed` lists the kind under the ones it ignores. `ReleaseMachine`
+  is untouched. `custody.neverCountsTowardRelease` proves three
+  confirmations during an open claim leave the snapshot identical.
+- Engine: `confirmCustody` (custodian, reuses the release tap ceremony
+  with the custody challenge), `myLastCustodyConfirmation`,
+  `custodySince`, `custodyConfirmationDue`, `custodyStanding(for:)`.
+- `GuardedEstateView.custodyCard`: asks when due, brass button "Tap my
+  key to confirm"; otherwise one quiet line. `EstateHomeView.custodianRow`
+  shows each key holder's standing, orange with "Ask Karen if she still
+  has it" when overdue.
+- `Seal/Estate/CustodyReminders.swift`: the local notification at the
+  due date, per estate, replaced on each refresh; posted at once if the
+  date already passed and this anchor was never announced.
+- `tools/verify_capsule.py` admits the kind for custodians. `docs/CAPSULE.md`
+  and `docs/RELEASE.md` section 8 say what it is and is not. No CloudKit
+  change: `kind` is a String field already.
+
+Tests: `Seal/SelfTest/CustodyConfirmationTests.swift`. Most likely to fail
+to compile: `EstateLogTests.Actor` used from another file (it is
+internal, should be fine); `KeyPinStore.pinnedKey(for:)` spelling.
+
+### Second pass on the envelope (built clean 2026-09-16, evening)
 
 Jason looked at Phase 1 on the phone and called it a form with a popup
 menu, which it was. Rebuilt on 2026-09-16 evening (`bda513c`):

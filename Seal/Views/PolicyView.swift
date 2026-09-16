@@ -65,6 +65,16 @@ struct PolicyView: View {
                             .pickerStyle(.segmented)
                         }
 
+                        block("How often key holders confirm their key",
+                              "Each key holder's phone asks them to tap their key this often, to show they still have it. It is a receipt, not a vote: it can never open anything.") {
+                            Picker("Confirm", selection: $policy.custodyConfirmMonths) {
+                                ForEach(ReleasePolicy.allowedCustodyConfirmMonths, id: \.self) {
+                                    Text($0 == 12 ? "Every year" : ($0 == 24 ? "Every 2 years" : "Every \($0) months")).tag($0)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                        }
+
                         if let problem { Text(problem).font(.callout).foregroundStyle(.orange) }
 
                         Text("Changing who must agree issues fresh key shares the next time you seal. Your envelopes are not touched.")

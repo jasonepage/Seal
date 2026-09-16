@@ -110,7 +110,20 @@ against an old epoch is still valid against that epoch's material, so
 rotating during a claim does not make the claim disappear. The owner's
 heartbeat does that.
 
-## 8. Known judgement calls, for review
+## 8. Custody confirmations are not taps
+
+Since 2026-09-16 a custodian's phone asks them, once per
+`custodyConfirmMonths` (default 12, set by the owner in the rule), to tap
+their key and say they still have it. That writes a `custodyConfirmed`
+event: an assertion over `seal.custody.confirm.v1` naming the estate, the
+epoch and the record head, and nothing else. It is a receipt. The feed
+ignores it, the machine never sees it, the challenge domain is different
+from `seal.release.authorize.v1`, and it carries no share. Three custody
+confirmations during an open claim leave the state exactly where it was
+(`custody.neverCountsTowardRelease`). The owner's home screen reads them to
+say when each key holder last confirmed, and to name the one to ask.
+
+## 9. Known judgement calls, for review
 
 - After a **veto**, a new claim may open immediately if the owner is still
   overdue; the objecting custodian must veto again. An alternative (the
