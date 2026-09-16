@@ -15,12 +15,12 @@ import CryptoKit
 
 enum EstateKeyTests {
 
-    static let suites: [SelfTest.Suite] = [
+    static var suites: [SelfTest.Suite] { [
         .init(name: "estatekeys.hybridWrap", run: hybridWrap),
         .init(name: "estatekeys.epoch", run: epoch),
         .init(name: "estatekeys.tables", run: tables),
         .init(name: "estatekeys.rotation", run: rotation),
-    ]
+    ] }
 
     /// A device with both KEM halves, like a phone that signed in after the
     /// hybrid bundle landed.

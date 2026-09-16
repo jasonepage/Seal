@@ -13,12 +13,12 @@ import CryptoKit
 
 enum EstateLogTests {
 
-    static let suites: [SelfTest.Suite] = [
+    static var suites: [SelfTest.Suite] { [
         .init(name: "estatelog.signing", run: signing),
         .init(name: "estatelog.admission", run: admission),
         .init(name: "estatelog.feed", run: feed),
         .init(name: "estatelog.genTime", run: genTime),
-    ]
+    ] }
 
     static let t0 = Date(timeIntervalSince1970: 1_800_000_000)
 

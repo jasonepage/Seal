@@ -14,7 +14,7 @@ import Foundation
 
 enum ReleaseMachineTests {
 
-    static let suites: [SelfTest.Suite] = [
+    static var suites: [SelfTest.Suite] { [
         .init(name: "release.silence", run: silence),
         .init(name: "release.happyPath", run: happyPath),
         .init(name: "release.heartbeatBeatsEverything", run: heartbeatBeatsEverything),
@@ -25,7 +25,7 @@ enum ReleaseMachineTests {
         .init(name: "release.earlyClaim", run: earlyClaim),
         .init(name: "release.policy", run: policy),
         .init(name: "release.ninetySecondRun", run: ninetySecondRun),
-    ]
+    ] }
 
     static let day: TimeInterval = 86_400
     static let t0 = Date(timeIntervalSince1970: 1_800_000_000)

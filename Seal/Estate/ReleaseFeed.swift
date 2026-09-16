@@ -25,7 +25,9 @@ import Foundation
 
 enum ReleaseFeed {
 
-    static func effectiveTime(_ event: EstateEvent) -> Date {
+    /// Pure, so it can be handed around as a plain function value (the
+    /// `timeOf` parameter below) without an actor hop.
+    nonisolated static func effectiveTime(_ event: EstateEvent) -> Date {
         if let token = event.timestampToken,
            let stamped = TimestampDER.genTime(of: token, digest: event.digest) {
             return stamped

@@ -5,9 +5,9 @@
 import Foundation
 
 enum ClockTests {
-    static let suites: [SelfTest.Suite] = [
+    static var suites: [SelfTest.Suite] { [
         .init(name: "clock.simulated", run: simulated),
-    ]
+    ] }
 
     static func simulated(_ t: SelfTest.Context) throws {
         let start = Date(timeIntervalSince1970: 1_800_000_000)

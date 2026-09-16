@@ -398,7 +398,7 @@ final class SyncEngine {
         if record["backupEndorsements"] != nil {
             record["backupEndorsements"] = Data()
         }
-        try? await publicDB.save(record)
+        _ = try? await publicDB.save(record)
         // Say whether the flip actually landed. When it did not (a record
         // another account created), the marker still kills the identity,
         // and the directory scan now honours markers directly.
@@ -448,7 +448,7 @@ final class SyncEngine {
     /// error worth reporting.
     func retireMessengerSubscriptions(for myHash: String) async {
         for id in ["seal.msgsub.\(myHash)", "seal.msgsub.v2.\(myHash)"] {
-            try? await publicDB.deleteSubscription(withID: id)
+            _ = try? await publicDB.deleteSubscription(withID: id)
         }
     }
 
@@ -472,7 +472,7 @@ final class SyncEngine {
         let subID = "seal.invsub.v3.\(myHash)"
         if (try? await publicDB.subscription(for: subID)) != nil { return }
         for old in ["seal.invsub.\(myHash)", "seal.invsub.v2.\(myHash)"] {
-            try? await publicDB.deleteSubscription(withID: old)
+            _ = try? await publicDB.deleteSubscription(withID: old)
         }
         let subscription = CKQuerySubscription(
             recordType: "GroupInvite",

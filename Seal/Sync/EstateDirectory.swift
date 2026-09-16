@@ -145,7 +145,7 @@ extension SyncEngine {
     func ensureEstateSubscription(estateID: String) async {
         let subID = "seal.estsub.v2.\(estateID)"
         if (try? await publicDB.subscription(for: subID)) != nil { return }
-        try? await publicDB.deleteSubscription(withID: "seal.estsub.v1.\(estateID)")
+        _ = try? await publicDB.deleteSubscription(withID: "seal.estsub.v1.\(estateID)")
         let subscription = CKQuerySubscription(
             recordType: "EstateEvent",
             predicate: NSPredicate(format: "estate == %@", estateID),

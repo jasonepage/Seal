@@ -13,12 +13,12 @@ import CryptoKit
 
 enum SecurityFixTests {
 
-    static let suites: [SelfTest.Suite] = [
+    static var suites: [SelfTest.Suite] { [
         .init(name: "fix1.keyPinning", run: keyPinning),
         .init(name: "fix2.webauthnContext", run: webAuthnContext),
         .init(name: "fix3.unsignedRevokedAt", run: unsignedRevokedAt),
         .init(name: "fix4.endorsementFraming", run: endorsementFraming),
-    ]
+    ] }
 
     // MARK: fix 1
 

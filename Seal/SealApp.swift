@@ -20,17 +20,21 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         return true
     }
 
+    // The completion handler form, not the async one: the async variant
+    // carries the non-Sendable userInfo dictionary across an isolation
+    // boundary and the compiler said so on every build. Nothing here reads
+    // the payload; the push only wakes the phone (EstateDirectory).
     func application(_ application: UIApplication,
-                     didReceiveRemoteNotification userInfo: [AnyHashable: Any]) async -> UIBackgroundFetchResult {
+                     didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+                     fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
         NotificationCenter.default.post(name: Self.messageArrived, object: nil)
-        return .newData
+        completionHandler(.newData)
     }
 
-    /// Foreground pushes: refresh the open chat live AND surface a banner, so
-    /// activity in OTHER chats is noticeable while the app is open (the single
-    /// most-requested gap, previously all foreground banners were suppressed).
-    /// TODO: suppress the banner when the user is actively viewing that chat
-    /// (needs the group id in the push payload via desiredKeys).
+    /// A notification arriving while the app is open: refresh, and still
+    /// show the banner. The only notifications Seal posts are the ones a
+    /// person must not miss (CustodianNotices, OwnerNotices), so there is
+    /// no case for hiding one because the app happens to be in front.
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
         NotificationCenter.default.post(name: Self.messageArrived, object: nil)

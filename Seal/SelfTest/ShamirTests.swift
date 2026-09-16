@@ -15,11 +15,11 @@ import CryptoKit
 
 enum ShamirTests {
 
-    static let suites: [SelfTest.Suite] = [
+    static var suites: [SelfTest.Suite] { [
         .init(name: "shamir.field", run: field),
         .init(name: "shamir.vectors", run: vectors),
         .init(name: "shamir.random", run: randomRoundTrip),
-    ]
+    ] }
 
     static func hex(_ s: String) -> Data {
         var out = Data(); var i = s.startIndex
