@@ -27,6 +27,10 @@ struct CapsuleExportSheet: View {
         NavigationStack {
             ZStack {
                 SealTheme.ink.ignoresSafeArea()
+                // A ScrollView, because with Bigger text on the paragraphs
+                // pushed the Build button off the bottom of a small phone
+                // and there was no way to reach it.
+                ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     Text("A copy you keep").font(.system(.title3, design: .rounded, weight: .semibold)).foregroundStyle(.white)
                     Text("One file with the whole signed record, every key share as it was wrapped, the encrypted key tables, and every public key needed to check it. Nothing in it is readable without the custodians' keys. It verifies with a small script and no Seal, no Apple and no account: tools/verify_capsule.py in the Seal repository.")
@@ -60,9 +64,11 @@ struct CapsuleExportSheet: View {
                         Text(fileURL.lastPathComponent).font(.caption2).foregroundStyle(.white.opacity(0.4))
                     }
                     if let error { Text(error).font(.callout).foregroundStyle(.orange) }
-                    Spacer()
                 }
                 .padding(20)
+                .frame(maxWidth: 520).frame(maxWidth: .infinity)
+                .containerRelativeFrame(.horizontal)
+                }
             }
             .navigationTitle("Capsule")
             .navigationBarTitleDisplayMode(.inline)

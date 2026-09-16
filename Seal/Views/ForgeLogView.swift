@@ -85,9 +85,8 @@ struct ForgeLogView: View {
 
                 if sorted.isEmpty {
                     Spacer()
-                    SealMascot(size: 52,
-                               line: "Your history is empty.",
-                               sub: "Everyone you add in person is recorded here,\nsigned proof that you met.")
+                    PlainEmptyState(line: "Your history is empty.",
+                                    sub: "Everyone you add in person is recorded here, signed proof that you met.")
                     Spacer()
                 } else {
                     List {

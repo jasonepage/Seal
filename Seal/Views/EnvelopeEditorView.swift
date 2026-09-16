@@ -553,6 +553,10 @@ struct VoiceRecorderSheet: View {
                         .font(.callout).foregroundStyle(.white.opacity(0.55)).multilineTextAlignment(.center).padding(.horizontal, 32)
                     if let problem { Text(problem).foregroundStyle(.orange).font(.callout) }
                 }
+                .padding(.vertical, 32)
+                .frame(maxWidth: .infinity)
+                .containerRelativeFrame(.horizontal)
+                }
             }
             .navigationTitle("Voice message")
             .navigationBarTitleDisplayMode(.inline)

@@ -197,9 +197,10 @@ struct FriendsView: View {
                 .padding(.horizontal, 24)
 
                 if friendStore.friends.isEmpty {
-                    SealMascot(size: 52,
-                               line: "Nobody added yet.",
-                               sub: "Seals make friends in person. So do you.")
+                    // No mascot here: this is where a person's root key gets
+                    // pinned, which makes it a security surface (GOTCHAS).
+                    PlainEmptyState(line: "Nobody added yet.",
+                                    sub: "People are added in person, two phones side by side.")
                 } else {
                     // Swipe to delete went with the List, and that is a fix as
                     // much as a loss: it called friendStore.remove on its own,
@@ -266,9 +267,8 @@ struct FriendsView: View {
     /// One-time (and re-openable) how-to before the first scan.
     private var guideView: some View {
         ceremonyLayout {
-            SealMascot(size: 48,
-                       line: "Add someone",
-                       sub: "Two humans, one tap. Here's the whole thing.")
+            PlainEmptyState(line: "Add someone",
+                            sub: "Two people, one tap. Here is the whole thing.")
             ForgeHowToCard()
         } actions: {
             Button {

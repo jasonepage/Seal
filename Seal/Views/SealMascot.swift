@@ -137,3 +137,29 @@ struct SealMascot: View {
         SealMascot(size: 72, line: "No envelopes yet.", sub: "Write the first one.")
     }
 }
+
+/// The empty state for a SECURITY surface: the People screen, where root
+/// keys are pinned, and the history of who was met in person. GOTCHAS says
+/// the mascot appears on social surfaces only, and both of these are where
+/// trust is decided, so they get words and no animal.
+struct PlainEmptyState: View {
+    let line: String
+    var sub: String? = nil
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Text(line)
+                .font(.system(.callout, design: .rounded, weight: .medium))
+                .foregroundStyle(.white.opacity(0.7))
+            if let sub {
+                Text(sub)
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.45))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.horizontal, 32)
+        .padding(.vertical, 24)
+    }
+}
