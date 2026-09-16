@@ -88,13 +88,20 @@ first when something reads oddly.
 - Profile told people to leave Simplified mode to add someone, hours after
   "Add someone" landed in the chat list.
 
-Still outstanding: **`README.md` and `SDS.md` claim hybrid post-quantum wrapping
-with ML-KEM-768. `HybridKEM.swift` implements X25519, HKDF and AES-256-GCM, with
-ML-KEM as a TODO.** That sentence must not reach the App Store listing or a
-pitch deck while it is untrue.
+- The reveal screen showed a recipient the secrets in the clear while
+  `site/limits.html` said "secrets are shown only after a Face ID check".
+  Fixed 2026-09-16: `RevealPager` hides them behind "Show the secrets", which
+  always runs `AppLock.confirmReveal`. The owner's preview uses the same view.
+- The handoff of 2026-09-16 said a secret typed into the letter was caught by
+  a BIP39 check, and it was, for English only. A Trezor Shamir share
+  ("academic ...") sailed through. `Seal/Cards/Wordlists` now holds every
+  BIP39 language, SLIP39, and Monero's lists; `LetterSecretScan.wordlists` is
+  the one table.
 
-There are also about 130 em dashes inside user-visible strings, which is against
-the house style. The site pages are clean; the app is not.
+ML-KEM-768 IS implemented (`Seal/Crypto/KEMBundle.swift`, behind an iOS 26
+check). An older version of this section said it was a TODO; that was true
+once and is not now. The em dashes inside user-visible strings are gone too
+(grep for the character in `Seal/` before believing otherwise).
 
 ## Demo mode
 
