@@ -46,7 +46,7 @@ enum MediaSaving {
         try await ensureAddPermission()
         guard let image = UIImage(data: data) else { throw SaveError.badData }
         try await PHPhotoLibrary.shared().performChanges {
-            PHAssetChangeRequest.creationRequestForImage(from: image)
+            PHAssetChangeRequest.creationRequestForAsset(from: image)
         }
     }
 
