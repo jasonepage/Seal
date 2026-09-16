@@ -100,19 +100,26 @@ struct PersonView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("A key holder").font(.headline).foregroundStyle(.white)
             if let custodian {
-                Text("\(person.identity.displayName) is one of your custodians. \(custodian.handoverReceiptID == nil ? "The key handover has not been recorded yet." : "The key handover is signed by both of you.")")
+                Text("\(person.identity.displayName) is one of your custodians. \(custodian.handoverReceiptID == nil ? "\(person.identity.displayName) has not yet confirmed it on this phone." : "\(person.identity.displayName) confirmed it on this phone, and both of you signed the record.")")
                     .font(.callout).foregroundStyle(.white.opacity(0.7)).fixedSize(horizontal: false, vertical: true)
                 if custodian.handoverReceiptID == nil {
                     Button { Task { await handOverKey() } } label: {
                         HStack {
                             if handingOver { ProgressView().tint(SealTheme.ink) }
-                            Text("Hand over the key").frame(maxWidth: .infinity)
+                            Text("\(person.identity.displayName) confirms on this phone").frame(maxWidth: .infinity)
                         }
                     }
                     .buttonStyle(.borderedProminent).tint(SealTheme.brass)
                     .disabled(handingOver || DemoFixtures.isActive)
                     .parentTapTarget()
-                    Text("Give them the security key, then have them tap it on this phone. That one tap is the receipt.")
+                    // What actually happens (ReceiptService.issue and
+                    // CeremonyManager.signReceipt): the counterparty signs a
+                    // commitment with THEIR credential, on THIS phone, and
+                    // this phone's device key signs the same commitment.
+                    // Nothing physical changes hands. iOS decides the path:
+                    // a security key is tapped on this phone; a passkey goes
+                    // through the cross-device QR code that iOS shows.
+                    Text("Do this with \(person.identity.displayName) next to you. Tap the button, then hand \(person.identity.displayName) this phone. If they use a security key, they tap it on this phone. If they use Face ID, this phone shows a square code: they scan it with their own phone and confirm with their face. That confirmation, plus this phone's signature, is the record that they agreed to hold a key. Nothing else changes hands.")
                         .font(.caption).foregroundStyle(.white.opacity(0.45)).fixedSize(horizontal: false, vertical: true)
                 }
                 Button(role: .destructive) { estateEngine.removeCustodian(hash) } label: {
@@ -142,12 +149,15 @@ struct PersonView: View {
                 Text("None yet. Write one from the home screen.")
                     .font(.callout).foregroundStyle(.white.opacity(0.55))
             } else {
-                ForEach(envelopes) { e in
+                // Position in the list, not the stored revealOrder: that
+                // number starts at zero and can have gaps after a delete or
+                // a reorder, and "opens 0th" was on a real screen.
+                ForEach(Array(envelopes.enumerated()), id: \.element.id) { position, e in
                     HStack {
                         Image(systemName: e.sealed ? "envelope.fill" : "envelope.badge").foregroundStyle(SealTheme.brass)
                         Text(e.title).foregroundStyle(.white)
                         Spacer()
-                        Text("opens \(ordinal(e.revealOrder))").font(.caption).foregroundStyle(.white.opacity(0.4))
+                        Text("opens \(ordinal(position + 1))").font(.caption).foregroundStyle(.white.opacity(0.4))
                     }
                 }
                 Text("They open on \(person.identity.displayName)'s phone, in this order, only after release. Nobody else, including the custodians, learns these exist.")
@@ -164,6 +174,8 @@ struct PersonView: View {
         case 1: "first"
         case 2: "second"
         case 3: "third"
+        case 4: "fourth"
+        case 5: "fifth"
         default: "\(n)th"
         }
     }
