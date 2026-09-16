@@ -436,74 +436,6 @@ final class SyncEngine {
         return (endorsements, revocations)
     }
 
-    // Moderation (App Store 1.2): reports are emailed to the developer from
-    // ChatView (mailto), no CloudKit record / backend needed. Block is local
-    // (ChatEngine). Action on a valid report = tombstone the identity (deleteIdentity).
-
-    // MARK: - Message transport (deterministic record names, no queries)
-    //
-    // KeyEnvelope: "kenv.<groupID>[.e<epoch>].<senderHash>.<recipientHash>"
-    // Message:     "msg.<groupID>[.e<epoch>].<senderHash>.<chainIndex>"
-    // Epoch 0 keeps the legacy (no-epoch) names for compatibility; rotation
-    // (FR-13) bumps the epoch, giving every sender fresh chains that removed
-    // members never receive envelopes for.
-
-    private static func envelopeName(_ g: String, _ e: UInt64, _ s: String, _ r: String) -> String {
-        e == 0 ? "kenv.\(g).\(s).\(r)" : "kenv.\(g).e\(e).\(s).\(r)"
-    }
-    private static func messageName(_ g: String, _ e: UInt64, _ s: String, _ i: UInt64) -> String {
-        e == 0 ? "msg.\(g).\(s).\(i)" : "msg.\(g).e\(e).\(s).\(i)"
-    }
-
-    func saveKeyEnvelope(groupID: String, epoch: UInt64, senderHash: String, recipientHash: String, envelope: Data) async throws {
-        let id = CKRecord.ID(recordName: Self.envelopeName(groupID, epoch, senderHash, recipientHash))
-        // Fetch-then-update so we OVERWRITE an existing envelope instead of
-        // failing on its change tag. The envelope for (group, epoch, sender,
-        // recipient) must carry the sender's CURRENT chain key. If the sender
-        // re-keyed, a new session after a sign-out/reinstall wiped the local
-        // send chain, a plain create would collide with the old record and
-        // leave the recipient holding an envelope wrapped to stale keys
-        // ("Couldn't unlock messages"). Replacing it is the fix.
-        let record = (try? await publicDB.record(for: id))
-            ?? CKRecord(recordType: "KeyEnvelope", recordID: id)
-        record["envelope"] = envelope
-        try await publicDB.save(record)
-    }
-
-    func fetchKeyEnvelope(groupID: String, epoch: UInt64, senderHash: String, recipientHash: String) async throws -> Data? {
-        let id = CKRecord.ID(recordName: Self.envelopeName(groupID, epoch, senderHash, recipientHash))
-        do {
-            let record = try await publicDB.record(for: id)
-            return record["envelope"] as? Data
-        } catch let error as CKError where error.code == .unknownItem {
-            return nil
-        }
-    }
-
-    struct WireMessage {
-        let ciphertext: Data
-        let senderDevicePublicKey: Data
-        let signature: Data
-        let sentAt: Date
-    }
-
-    func saveMessage(groupID: String, epoch: UInt64, senderHash: String, chainIndex: UInt64,
-                     message: WireMessage, recipients: [String]) async throws {
-        let record = CKRecord(
-            recordType: "Message",
-            recordID: CKRecord.ID(recordName: Self.messageName(groupID, epoch, senderHash, chainIndex)))
-        record["ciphertext"] = message.ciphertext
-        record["devicePub"] = message.senderDevicePublicKey
-        record["signature"] = message.signature
-        record["sentAt"] = message.sentAt
-        // Drives the push subscription. CloudKit can't type an empty list
-        // (Note to self has no recipients), so only set it when non-empty.
-        if !recipients.isEmpty {
-            record["recipients"] = recipients
-        }
-        try await publicDB.save(record)
-    }
-
     // MARK: - Push (CKQuerySubscription → APNs)
 
     /// RETIRE the messenger's push. The `Message` record type went with the
@@ -668,20 +600,6 @@ final class SyncEngine {
             }
         }
         return payloads
-    }
-
-    func fetchMessage(groupID: String, epoch: UInt64, senderHash: String, chainIndex: UInt64) async throws -> WireMessage? {
-        let id = CKRecord.ID(recordName: Self.messageName(groupID, epoch, senderHash, chainIndex))
-        do {
-            let record = try await publicDB.record(for: id)
-            guard let ct = record["ciphertext"] as? Data,
-                  let dp = record["devicePub"] as? Data,
-                  let sig = record["signature"] as? Data,
-                  let at = record["sentAt"] as? Date else { return nil }
-            return WireMessage(ciphertext: ct, senderDevicePublicKey: dp, signature: sig, sentAt: at)
-        } catch let error as CKError where error.code == .unknownItem {
-            return nil
-        }
     }
 
     private static func friendly(_ error: Error) -> String {

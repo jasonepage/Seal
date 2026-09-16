@@ -96,36 +96,3 @@ struct Friendship: Codable, Identifiable, Hashable {
     /// entries that carried one still decode (the key is ignored).
     var isInPerson: Bool { true }
 }
-
-/// Signed, append-only membership log entry (SDS §4).
-struct MembershipRecord: Codable, Hashable {
-    enum Action: String, Codable { case add, remove, promote }
-    let action: Action
-    let subjectRootID: String
-    let actorDeviceKey: Data
-    let epoch: UInt64
-    let signature: Data
-    let timestamp: Date
-}
-
-struct SealGroup: Codable, Identifiable, Hashable {
-    let id: UUID
-    var name: String
-    var epoch: UInt64
-    var membershipLog: [MembershipRecord]
-    var verifiedOnly: Bool
-    var ephemeralTTL: TimeInterval?     // nil = persistent (FR-12)
-}
-
-struct Message: Codable, Identifiable, Hashable {
-    let id: UUID
-    let groupID: UUID
-    let senderRootID: String
-    let epoch: UInt64
-    let chainIndex: UInt64
-    let ciphertext: Data
-    let previousMessageHash: Data       // per-sender transcript chain (SDS §2)
-    let signature: Data
-    let sentAt: Date
-    var expiresAt: Date?
-}
