@@ -35,6 +35,7 @@ struct RevealView: View {
                 }
             },
             ownerName: ownerName,
+            emptyTitle: "Nothing addressed to you.",
             emptyLine: "The release went through, and none of the envelopes were written for this identity.",
             banner: nil,
             onClose: onClose)
@@ -57,6 +58,7 @@ struct RevealPager: View {
     let pages: [RevealPage]
     let ownerName: String
     /// Shown when there is nothing to page through.
+    let emptyTitle: String
     let emptyLine: String
     /// An optional line pinned above the first page. The preview uses it
     /// to say "this is a preview"; the real reveal passes nil.
@@ -83,7 +85,7 @@ struct RevealPager: View {
                 SealTheme.ink.ignoresSafeArea()
                 if pages.isEmpty {
                     VStack(spacing: 10) {
-                        Text("Nothing addressed to you.").font(.headline).foregroundStyle(.white)
+                        Text(emptyTitle).font(.headline).foregroundStyle(.white)
                         Text(emptyLine)
                             .font(.callout).foregroundStyle(.white.opacity(0.55)).multilineTextAlignment(.center)
                     }

@@ -57,6 +57,7 @@ struct FamilyPreviewView: View {
                 }
             },
             ownerName: ownerName,
+            emptyTitle: "Nothing for \(recipientName) yet.",
             emptyLine: "You have not written \(recipientName) an envelope yet.",
             banner: banner,
             onClose: onClose,

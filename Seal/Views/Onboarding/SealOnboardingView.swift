@@ -211,7 +211,6 @@ struct SealOnboardingView: View {
 
     @State private var role: OnboardingRole?
     @State private var index: Int
-    @AppStorage("seal.onboardingRole") private var storedRole = ""
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(numbers: OnboardingNumbers = .defaults,
@@ -389,7 +388,6 @@ struct SealOnboardingView: View {
 
     private func roleButton(_ r: OnboardingRole, title: String, sub: String) -> some View {
         Button {
-            storedRole = r.rawValue
             go(role: r, index: OnboardingScript.sharedCount)
         } label: {
             VStack(alignment: .leading, spacing: 4) {

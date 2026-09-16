@@ -368,7 +368,7 @@ struct EnvelopeEditorView: View {
             } label: {
                 HStack {
                     if reviewing { ProgressView().tint(.white) }
-                    Label(reviewGaps == nil ? "Would this help \(recipientName)?" : "Check the letter again",
+                    Label(reviewGaps == nil ? "Check the letter for gaps" : "Check the letter again",
                           systemImage: "text.magnifyingglass")
                 }
                 .frame(maxWidth: .infinity)
@@ -537,6 +537,7 @@ struct VoiceRecorderSheet: View {
         NavigationStack {
             ZStack {
                 SealTheme.ink.ignoresSafeArea()
+                ScrollView {
                 VStack(spacing: 24) {
                     Text(recording ? "Recording" : "Ready")
                         .font(.system(.title2, design: .rounded, weight: .semibold)).foregroundStyle(.white)
