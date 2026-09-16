@@ -143,7 +143,13 @@ enum OnboardingScript {
                         "Set up Seal with Face ID or a security key.",
                         "Meet each person face to face and add them.",
                         "Write an envelope for each of them.",
-                        "Hand a key to \(n.custodianCount) people and set your rule.",
+                        // One key holder is a real setting, so the sentence
+                        // has to read right at 1 as well as at 3.
+                        n.custodianCount == 1
+                            ? "Hand a key to the person you trust most, and set your rule."
+                            : (n.custodianCount == 2
+                                ? "Hand a key to two people you trust, and set your rule."
+                                : "Hand a key to \(n.custodianCount) people you trust, and set your rule."),
                         "Tap Seal.",
                     ]),
             ]
