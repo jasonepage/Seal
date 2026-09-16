@@ -177,10 +177,16 @@ reopened by accident:
   proven. Built BEFORE the first outside tester, because the first person
   who seals for free is the person you can never charge.
 
-The build, when it happens: StoreKit 2, one non-consumable product, a
-paywall on `runSeal` when the estate has never sealed, restore purchases on
-the You screen, demo mode never asks, and the App Store Connect product plus
-a review screenshot. About a day.
+Built 2026-09-16 (`51c9e83`, `2c3db1c`, and the every-seal fix after):
+StoreKit 2, one non-consumable product `io.github.jasonepage.Seal.lifetime`,
+`SealPurchase` at the app root, `SealPaywallView`. The gate is in
+`EstateHomeView.runSeal` and sits in front of EVERY seal: pay once and all
+later seals are free, never pay and nothing seals. (The first cut gated on
+"has this estate ever sealed", which let any estate that got through once
+seal free forever. Do not reintroduce that.) Restore is on the sheet and the
+You screen, and "Pay for your seal" is under Help. Demo mode never asks.
+Still on Nathan: the product in App Store Connect, the Paid Apps agreement,
+and a review screenshot.
 
 ## Ideas that are written down, not built
 

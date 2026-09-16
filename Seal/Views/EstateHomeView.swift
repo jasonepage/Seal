@@ -182,7 +182,7 @@ struct EstateHomeView: View {
                 // The sheet closed after a purchase: go straight on to the
                 // seal the person was in the middle of. Presented from the
                 // dismissal, not from inside the sheet, for the usual reason.
-                if was, !now, purchase.isUnlocked, let estate, !estate.epochPublished { runSeal() }
+                if was, !now, purchase.isUnlocked { runSeal() }
             }
             .sheet(isPresented: $showFamilyPreview) {
                 FamilyPreviewPicker(ownerName: myRoot.displayName, estateEngine: estateEngine,
@@ -780,14 +780,26 @@ struct EstateHomeView: View {
     /// One seal path, shared by the Seal button and the setup card's last
     /// step, so the two can never drift into doing different things.
     ///
-    /// The paywall sits here and nowhere else. It asks on the FIRST seal
-    /// only: an estate that has published an epoch already paid (or sealed
-    /// before there was a price, which is the same thing to us). Demo mode
-    /// never asks. Re-sealing after a change never asks.
+    /// The paywall sits here and nowhere else, and it sits in front of
+    /// EVERY seal, not only the first. The first version gated on "has this
+    /// estate ever sealed", which meant an estate that got through once
+    /// sealed for free forever. Pay once and every seal after is free;
+    /// never pay and nothing seals. Apple holds the receipt, so a reinstall
+    /// or a new phone restores it. Demo mode never asks, because the demo
+    /// cannot seal at all.
     private func runSeal() {
         guard !sealing, !DemoFixtures.isActive else { return }
-        if let estate, !estate.epochPublished, !purchase.isUnlocked {
-            showPaywall = true
+        guard purchase.isUnlocked else {
+            // The launch check may still be in flight on a fast tap. Finish
+            // it before deciding, so a paid person never sees the sheet.
+            if purchase.isChecking {
+                Task {
+                    await purchase.refresh()
+                    if purchase.isUnlocked { runSeal() } else { showPaywall = true }
+                }
+            } else {
+                showPaywall = true
+            }
             return
         }
         sealing = true
