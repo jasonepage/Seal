@@ -36,16 +36,20 @@ struct GuardedEstateView: View {
     private var timeline: ReleaseTimeline? { estateEngine.timeline(of: guarded.estateID) }
     private var events: [EstateEvent] { estateEngine.guardedEvents[guarded.estateID] ?? [] }
     private var live: GuardedEstate { estateEngine.guarded.first { $0.estateID == guarded.estateID } ?? guarded }
+    /// Set once the owner deleted their account (DepartureRules.swift).
+    private var departure: DepartureRules.Departure? { estateEngine.departure(of: guarded.estateID) }
+    private var cancelled: Bool { departure?.keepEnvelopes == false }
 
     var body: some View {
         ZStack {
             SealTheme.ink.ignoresSafeArea()
             ScrollView {
                 VStack(spacing: 18) {
-                    stateCard
-                    if live.isCustodian { custodyCard }
-                    if live.isCustodian { custodianActions }
-                    if live.isRecipient { recipientCard }
+                    if let departure { departureCard(departure) }
+                    if !cancelled { stateCard }
+                    if live.isCustodian, !cancelled { custodyCard }
+                    if live.isCustodian, !cancelled { custodianActions }
+                    if live.isRecipient, !(cancelled && state != .released) { recipientCard }
                     ruleCard
                     logCard
                     Button { showCapsule = true } label: {
@@ -115,6 +119,36 @@ struct GuardedEstateView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(18)
         .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 20))
+        .padding(.horizontal, 20)
+    }
+
+    /// The owner deleted their account. Said first, in plain words, with
+    /// the dates that follow from the rule when they kept the envelopes.
+    private func departureCard(_ d: DepartureRules.Departure) -> some View {
+        let name = live.ownerName.isEmpty ? "The owner" : live.ownerName
+        let day = d.at.formatted(date: .abbreviated, time: .omitted)
+        return VStack(alignment: .leading, spacing: 8) {
+            Label("\(name) deleted their Seal account", systemImage: "person.crop.circle.badge.xmark")
+                .font(.headline).foregroundStyle(.orange)
+            if d.keepEnvelopes {
+                Text("On \(day), \(name) deleted their account and chose to keep these envelopes for their family. \(name) can no longer check in, so the rule will run its course.")
+                if let s = snapshot {
+                    let claim = DepartureRules.earliestClaim(s).formatted(date: .abbreviated, time: .omitted)
+                    let open = DepartureRules.earliestOpening(s).formatted(date: .abbreviated, time: .omitted)
+                    Text(live.isCustodian
+                         ? "A key holder can start opening them on \(claim). If nobody objects, they could open around \(open) at the earliest. It still takes your key."
+                         : "The key holders can start opening them on \(claim). If nobody objects, they could open around \(open) at the earliest.")
+                        .foregroundStyle(.white)
+                }
+            } else {
+                Text("On \(day), \(name) deleted their account and cancelled these envelopes. They can never be opened, by anyone. Nothing more is needed from you.")
+            }
+        }
+        .font(.callout).foregroundStyle(.white.opacity(0.8))
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(18)
+        .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 20))
         .padding(.horizontal, 20)
     }
 
@@ -344,7 +378,7 @@ struct GuardedEstateView: View {
     }
 
     private func line(_ e: EstateEvent) -> String {
-        let who = e.actorHash == myRoot.credentialIDHash ? "You" : (e.actorHash == live.ownerHash ? live.ownerName : "A custodian")
+        let who = e.actorHash == myRoot.credentialIDHash ? "You" : (e.actorHash == live.ownerHash ? live.ownerName : "A key holder")
         switch e.kind {
         case .estateCreated: return "\(who) started the envelopes."
         case .epochPublished: return "\(who) issued key shares."
@@ -359,6 +393,8 @@ struct GuardedEstateView: View {
         case .authorization: return "\(who) tapped a key."
         case .released: return "\(who) combined the keys. Released."
         case .custodyConfirmed: return "\(who) confirmed they still have their key."
+        case .ownerDeparted:
+            return DepartureRules.historyLine(name: who, keep: e.body(DepartureBody.self)?.keepEnvelopes ?? false)
         }
     }
 

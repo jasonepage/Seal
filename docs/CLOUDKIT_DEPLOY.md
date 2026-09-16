@@ -48,6 +48,11 @@ The deploy copies whatever Development has, so Development has to be right.
    failure is silent. `recordName` on `EstateEvent` needs nothing.
 7. Schema → Indexes → `GroupInvite`. `recipient` needs a **QUERYABLE** index:
    `fetchEstateInvites` and the invite push subscription both query on it.
+   Since 2026-09-16 device and backup key revocations are ALSO published as
+   `GroupInvite` records (`recipient` = `revoke.<identity hash>`, random
+   record name), and every directory lookup queries for them. No new record
+   type and no new field, but without this index revoking a phone and
+   looking anybody up both fail.
 8. Schema → Indexes → `Identity`. Confirm `recordName` has a **QUERYABLE**
    index. **This is the one that matters most.** Without it the directory scan,
    the one-key-one-identity check and security-key sign-in all break in

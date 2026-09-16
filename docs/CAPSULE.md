@@ -158,6 +158,7 @@ Kinds and who may write them:
 | `authorization` | custodian | `{ claimID, epoch, recordHeadDigest, assertion, shareForClaimant[] }` |
 | `released` | custodian | `{ claimID, epoch, shareIndexes[], estateKey (base64, 32 bytes) }` |
 | `custodyConfirmed` | custodian | `{ epoch, recordHeadDigest, assertion }` (added 2026-09-16) |
+| `ownerDeparted` | owner | `{ keepEnvelopes, departedAtEpoch }` (added 2026-09-16) |
 
 A "custodian" is any root hash listed in `custodianHashes` of an earlier
 `epochPublished` event by the owner. An event by anyone else, or an owner

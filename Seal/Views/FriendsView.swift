@@ -23,6 +23,11 @@ struct FriendsView: View {
     let sync: SyncEngine
     @Bindable var friendStore: FriendStore
     let estateEngine: EstateEngine
+    /// Both envelope sets (EstateEngine.Slot). The gone check looks at the
+    /// key holders and recipients of each, and removing a person takes
+    /// them out of each. Empty means just `estateEngine`.
+    var allEngines: [EstateEngine] = []
+    private var engines: [EstateEngine] { allEngines.isEmpty ? [estateEngine] : allEngines }
     /// Set when this view is presented as a sheet, which is how the chat
     /// list's people button reaches it. nil would leave no way out, so the
     /// caller always passes one. Same pattern as ProfileView.
@@ -229,6 +234,11 @@ struct FriendsView: View {
                         ForEach(friendStore.friends) { friend in
                             friendRow(friend)
                         }
+                        Text("Pull down to check whether anyone has deleted their Seal account.")
+                            .font(.caption2).foregroundStyle(.white.opacity(0.35))
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.top, 4)
                     }
                     .padding(.horizontal, 24)
                 }
@@ -239,7 +249,15 @@ struct FriendsView: View {
             // width, so one wide child makes the whole screen drag sideways.
             .containerRelativeFrame(.horizontal)
         }
-        .scrollBounceBehavior(.basedOnSize)
+        // NOT basedOnSize: pull to refresh needs the list to bounce even
+        // when it is short, which it usually is.
+        .scrollBounceBehavior(.always)
+        .refreshable {
+            await friendStore.refreshGone(sync: sync, engines: engines, force: true)
+        }
+        .task {
+            await friendStore.refreshGone(sync: sync, engines: engines, force: false)
+        }
     }
 
     /// Scrollable body + an action footer pinned above the tab bar.
@@ -498,36 +516,56 @@ struct FriendsView: View {
     // MARK: - Moderation (person-level block / report from Circle)
 
     private func friendRow(_ friend: FriendStore.StoredFriend) -> some View {
-        let role = estateEngine.estate.map { estate -> String? in
-            let custodian = estate.custodians.contains { $0.rootHash == friend.identity.credentialIDHash }
-            let recipient = estate.recipients.contains { $0.rootHash == friend.identity.credentialIDHash }
-            switch (custodian, recipient) {
-            case (true, true): return "Custodian and recipient"
-            case (true, false): return "Custodian"
-            case (false, true): return "Recipient"
-            default: return nil
-            }
-        } ?? nil
+        let hash = friend.identity.credentialIDHash
+        let custodian = engines.contains { engine in
+            engine.estate?.custodians.contains(where: { c in c.rootHash == hash }) ?? false
+        }
+        let recipient = engines.contains { engine in
+            engine.estate?.recipients.contains(where: { r in r.rootHash == hash }) ?? false
+        }
+        let role: String? = switch (custodian, recipient) {
+        case (true, true): "Key holder and recipient"
+        case (true, false): "Key holder"
+        case (false, true): "Recipient"
+        default: nil
+        }
+        let goneAt = friendStore.goneDate(hash)
         return NavigationLink {
             PersonView(person: friend, myRoot: myRoot, friendStore: friendStore,
-                       estateEngine: estateEngine, ceremony: ceremony, sync: sync)
+                       estateEngine: estateEngine, ceremony: ceremony, sync: sync,
+                       allEngines: engines)
         } label: {
             HStack {
-                Image(systemName: "checkmark.seal.fill")
-                    .foregroundStyle(friend.identity.tier == .verified ? SealTheme.brass : SealTheme.silver)
+                // A gone person loses the verified badge. The badge says
+                // "this key is live and pinned", and it no longer is.
+                if goneAt == nil {
+                    Image(systemName: "checkmark.seal.fill")
+                        .foregroundStyle(friend.identity.tier == .verified ? SealTheme.brass : SealTheme.silver)
+                } else {
+                    Image(systemName: "person.crop.circle.badge.xmark")
+                        .foregroundStyle(.white.opacity(0.4))
+                }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(friend.identity.displayName)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(.white.opacity(goneAt == nil ? 1 : 0.55))
+                    if let goneAt {
+                        Text("Deleted their Seal account. Found \(goneAt.formatted(date: .abbreviated, time: .omitted)).")
+                            .font(.caption2)
+                            .foregroundStyle(.white.opacity(0.5))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     if let role {
                         Text(role)
                             .font(.caption2)
-                            .foregroundStyle(SealTheme.brass.opacity(0.9))
+                            .foregroundStyle(goneAt == nil ? SealTheme.brass.opacity(0.9) : .orange.opacity(0.8))
                     }
                 }
                 Spacer()
-                Text(friend.friendship.forgedAt, style: .date)
-                    .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.4))
+                if goneAt == nil {
+                    Text(friend.friendship.forgedAt, style: .date)
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.4))
+                }
                 // Outside a List nothing draws the disclosure arrow, and
                 // without one the row does not read as something to tap.
                 Image(systemName: "chevron.right")
@@ -535,7 +573,7 @@ struct FriendsView: View {
                     .foregroundStyle(.white.opacity(0.3))
             }
             .padding(16)
-            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
+            .background(.white.opacity(goneAt == nil ? 0.05 : 0.025), in: RoundedRectangle(cornerRadius: 16))
         }
         .buttonStyle(.plain)
         .parentTapTarget()
@@ -546,24 +584,38 @@ struct FriendsView: View {
                 Label("See the record", systemImage: "list.bullet.rectangle.portrait")
             }
             Divider()
-            Button(role: .destructive) {
-                estateEngine.removeCustodian(friend.identity.credentialIDHash)
-                friendStore.remove(friend.identity.credentialIDHash)
-                moderationTitle = "Removed"
-                moderationMessage = "\(friend.identity.displayName) has been removed. If they were a custodian, your envelopes are re-keyed the next time you seal them. Meet in person to add them again."
-                showModerationAlert = true
-            } label: {
-                Label("Remove \(friend.identity.displayName)", systemImage: "person.badge.minus")
-            }
-            Button(role: .destructive) {
-                estateEngine.removeCustodian(friend.identity.credentialIDHash)
-                friendStore.remove(friend.identity.credentialIDHash)
-                if let url = reportURL(for: friend.identity) { openURL(url) }
-                moderationTitle = "Reported"
-                moderationMessage = "Thanks. \(friend.identity.displayName) has been removed and reported. We review reports and remove violators within 24 hours."
-                showModerationAlert = true
-            } label: {
-                Label("Report \(friend.identity.displayName)", systemImage: "exclamationmark.bubble")
+            if goneAt != nil {
+                // Only the friendship goes. The gone mark stays, so the
+                // envelopes and the Keys tab keep saying what happened
+                // until the owner deals with them there.
+                Button(role: .destructive) {
+                    friendStore.remove(hash)
+                    moderationTitle = "Removed from People"
+                    moderationMessage = "\(friend.identity.displayName) is no longer on your People list. Any envelope or key still meant for them is marked on the Envelopes and Keys tabs."
+                    showModerationAlert = true
+                } label: {
+                    Label("Remove from People", systemImage: "person.badge.minus")
+                }
+            } else {
+                Button(role: .destructive) {
+                    for engine in engines { engine.removeCustodian(hash) }
+                    friendStore.remove(hash)
+                    moderationTitle = "Removed"
+                    moderationMessage = "\(friend.identity.displayName) has been removed. If they were a key holder, your envelopes are locked again with new keys the next time you seal them. Meet in person to add them again."
+                    showModerationAlert = true
+                } label: {
+                    Label("Remove \(friend.identity.displayName)", systemImage: "person.badge.minus")
+                }
+                Button(role: .destructive) {
+                    for engine in engines { engine.removeCustodian(hash) }
+                    friendStore.remove(hash)
+                    if let url = reportURL(for: friend.identity) { openURL(url) }
+                    moderationTitle = "Reported"
+                    moderationMessage = "Thanks. \(friend.identity.displayName) has been removed and reported. We review reports and remove violators within 24 hours."
+                    showModerationAlert = true
+                } label: {
+                    Label("Report \(friend.identity.displayName)", systemImage: "exclamationmark.bubble")
+                }
             }
         }
     }

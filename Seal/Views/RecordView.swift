@@ -166,6 +166,7 @@ struct RecordView: View {
         case .keyTapped: "key.horizontal.fill"
         case .released: "envelope.open.fill"
         case .keyConfirmed: "checkmark.seal.fill"
+        case .ownerDeparted: "person.crop.circle.badge.xmark"
         }
     }
 
@@ -174,7 +175,7 @@ struct RecordView: View {
     /// difference before a word is read (UI.md §1).
     private func tint(_ kind: RecordEvent.Kind) -> Color {
         switch kind {
-        case .heartbeat, .silenceObserved, .envelopesSealed, .estateCreated: SealTheme.silver
+        case .heartbeat, .silenceObserved, .envelopesSealed, .estateCreated, .ownerDeparted: SealTheme.silver
         default: SealTheme.brass
         }
     }

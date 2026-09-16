@@ -29,20 +29,27 @@ struct EstateHomeView: View {
     @Bindable var ceremony: CeremonyManager
     let sync: SyncEngine
     @Bindable var friendStore: FriendStore
-    /// The two sets of envelopes (EstateEngine.Slot). Everything below
-    /// reads `estateEngine`, which is whichever set the picker at the top
-    /// of the Envelopes and Keys tabs is showing. What this phone holds
-    /// for others is always read from the letters engine.
-    @Bindable var lettersEngine: EstateEngine
-    @Bindable var urgentEngine: EstateEngine
+    /// One engine per rule (RuleBook.swift, RELEASE.md section 13). The
+    /// inbox shows every rule's envelopes in one list; the Keys tab shows
+    /// one section per rule. `estateEngine` below is the DEFAULT rule's
+    /// engine: new envelopes start there, the setup card and the status
+    /// strip read it, and what this phone holds for others lives on it.
+    @Bindable var engines: EstateEngines
     @Bindable var appLock: AppLock
     let onOpenProfile: () -> Void
 
-    @State private var slot: EstateEngine.Slot = .letters
-    private var estateEngine: EstateEngine { slot == .urgent ? urgentEngine : lettersEngine }
+    private var estateEngine: EstateEngine { engines.main }
+    private var lettersEngine: EstateEngine { engines.main }
 
-    @State private var showPolicy = false
-    @State private var editing: Envelope?
+    /// Which rule's numbers the rule sheet is editing.
+    @State private var policyFor: EngineRef?
+    @State private var editing: EnvelopeRef?
+    /// "Your rules" from the inbox menu: the rule sheet with no envelope.
+    @State private var showRules = false
+    /// Picking a person met in person to hold a key, then which rule when
+    /// there is more than one.
+    @State private var showAddKeyHolder = false
+    @State private var pendingKeyHolder: FriendStore.StoredFriend?
     @State private var showRecipientPicker = false
     /// What the recipient picker is being used for this time: the blank
     /// editor, as it always was, or the interview.
@@ -55,7 +62,9 @@ struct EstateHomeView: View {
     @State private var draftedEnvelope: Envelope?
     /// Set when the picker is choosing a person for an envelope that was
     /// written to a typed name and is waiting to be bound.
-    @State private var bindingEnvelope: Envelope?
+    @State private var bindingEnvelope: EnvelopeRef?
+    /// An undeliverable envelope the owner asked to delete, waiting for yes.
+    @State private var deletingEnvelope: EnvelopeRef?
     @State private var sealing = false
     @State private var sealError: String?
     @State private var sealedOK = false
@@ -81,6 +90,28 @@ struct EstateHomeView: View {
         let friend: FriendStore.StoredFriend?
     }
 
+    /// An envelope with the rule (engine) it lives in. The inbox spans
+    /// every rule, so a row has to carry its engine to the editor.
+    struct EnvelopeRef: Identifiable {
+        let envelope: Envelope
+        let engine: EstateEngine
+        /// Stable across a move to another rule, which gives the envelope
+        /// a fresh id: the editor sheet must not close and reopen for it.
+        let id: String
+
+        init(envelope: Envelope, engine: EstateEngine, id: String? = nil) {
+            self.envelope = envelope
+            self.engine = engine
+            self.id = id ?? envelope.id
+        }
+    }
+
+    /// An engine as a sheet item.
+    struct EngineRef: Identifiable {
+        let engine: EstateEngine
+        var id: String { engine.storeHash }
+    }
+
     /// "See how it opens": the sandboxed explainer, started on the right
     /// path with that estate's real numbers. It touches no engine and no
     /// clock. (The DEBUG Time Travel screen is not this: it moves the real
@@ -97,8 +128,8 @@ struct EstateHomeView: View {
     /// own, but has a part in somebody else's estate. That person is a key
     /// holder or a recipient, and the screen should speak to them first.
     private var guardsOnly: Bool {
-        let ownEnvelopes = estate?.envelopes.isEmpty ?? true
-        let ownCustodians = estate?.custodians.isEmpty ?? true
+        let ownEnvelopes = engines.all.allSatisfy { $0.estate?.envelopes.isEmpty ?? true }
+        let ownCustodians = engines.all.allSatisfy { $0.estate?.custodians.isEmpty ?? true }
         return ownEnvelopes && ownCustodians && !lettersEngine.guarded.isEmpty
     }
 
@@ -109,12 +140,20 @@ struct EstateHomeView: View {
     /// Envelopes (write, preview, seal), Keys (the rule, who holds a key
     /// for you, what you hold for others), People (meet and add). Sheets
     /// hang off the tab view so every tab can open them.
-    enum Tab: Hashable { case envelopes, keys, people }
+    enum Tab: Hashable { case envelopes, keys, forOthers, people }
     @State private var tab: Tab = .envelopes
 
     var body: some View {
         attachSheets(to: tabs)
+            // Once a day, whichever tab is open: has anybody in either
+            // envelope set deleted their Seal account? (GoneCheck.swift)
+            .task {
+                await friendStore.refreshGone(sync: sync, engines: engines.all, force: false)
+            }
     }
+
+    /// Everybody this phone knows deleted their Seal account.
+    private var gone: [String: Date] { friendStore.goneMarks }
 
     private var tabs: some View {
         TabView(selection: $tab) {
@@ -124,8 +163,17 @@ struct EstateHomeView: View {
             screen(title: "Keys") { keysTab }
                 .tabItem { Label("Keys", systemImage: "key.fill") }
                 .tag(Tab.keys)
+            // Only once this phone holds something for somebody. A key
+            // holder for nine people gets nine rows here, not nine cards
+            // under their own keys.
+            if !lettersEngine.guarded.isEmpty {
+                screen(title: "For others") { forOthersTab }
+                    .tabItem { Label("For others", systemImage: "shippingbox.fill") }
+                    .tag(Tab.forOthers)
+            }
             FriendsView(myRoot: myRoot, ceremony: ceremony, sync: sync,
-                        friendStore: friendStore, estateEngine: estateEngine)
+                        friendStore: friendStore, estateEngine: estateEngine,
+                        allEngines: engines.all)
                 .tabItem { Label("People", systemImage: "person.2.fill") }
                 .tag(Tab.people)
         }
@@ -188,7 +236,6 @@ struct EstateHomeView: View {
                     LazyVStack(spacing: 0, pinnedViews: []) {
                         NotificationsOffCard(matters: !lettersEngine.guarded.isEmpty || !inSetup)
                             .padding(.bottom, 12)
-                        setPicker
                         if guardsOnly {
                             PeopleYouWouldDoThisForCard(
                                 onWrite: {
@@ -199,8 +246,8 @@ struct EstateHomeView: View {
                             .padding(.bottom, 12)
                         } else if inSetup {
                             setupCard.padding(.bottom, 12)
-                        } else if loudState {
-                            statusCard.padding(.bottom, 12)
+                        } else if let loudEngine {
+                            statusCard(loudEngine).padding(.bottom, 12)
                         } else {
                             statusStrip
                         }
@@ -238,38 +285,22 @@ struct EstateHomeView: View {
         .preferredColorScheme(.dark)
     }
 
-    /// Letters, or bills and medical. The second set has its own key
-    /// holders, its own shorter rule and its own keys (RELEASE.md section
-    /// 10), so a release of one opens nothing in the other.
-    private var setPicker: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Picker("Which set", selection: $slot) {
-                Text("Letters").tag(EstateEngine.Slot.letters)
-                Text("Bills and medical").tag(EstateEngine.Slot.urgent)
-            }
-            .pickerStyle(.segmented)
-            if slot == .urgent {
-                Text("A separate set that can open sooner: the bills, the insurance, the medical papers. Its own key holders and its own shorter rule. Opening it opens none of the letters.")
-                    .font(.caption).foregroundStyle(.white.opacity(0.5))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(.horizontal, 20).padding(.bottom, 10)
-    }
-
     /// A claim, a release or a long silence is not a strip. It stays loud.
-    private var loudState: Bool {
-        switch estateEngine.ownerState {
+    /// Any rule's engine can be loud; the first loud one gets the card.
+    private static func isLoud(_ state: ReleaseState?) -> Bool {
+        switch state {
         case .active?, .cancelled?, .none: false
         default: true
         }
     }
+    private var loudEngine: EstateEngine? { engines.all.first { Self.isLoud($0.ownerState) } }
+    private var loudState: Bool { loudEngine != nil }
 
     /// One line, the truth first. Orange when something is only on this
     /// phone, brass when everything is sealed and closed.
     private var statusStrip: some View {
-        let unsealed = estate?.addressedEnvelopes.filter { !$0.sealed }.count ?? 0
-        let changed = estate?.hasUnsealedChanges ?? false
+        let unsealed = engines.all.reduce(0) { $0 + ($1.estate?.addressedEnvelopes.filter { !$0.sealed }.count ?? 0) }
+        let changed = engines.all.contains { $0.estate?.hasUnsealedChanges ?? false }
         let last = estateEngine.ownerSnapshot?.lastHeartbeatAt
         let when: String = {
             guard let last else { return "" }
@@ -285,7 +316,7 @@ struct EstateHomeView: View {
                 .foregroundStyle(changed ? .orange : .white.opacity(0.85))
                 .lineLimit(1)
             Spacer()
-            if let error = estateEngine.lastError {
+            if let error = engines.all.compactMap(\.lastError).first {
                 Image(systemName: "wifi.exclamationmark").foregroundStyle(.orange.opacity(0.8))
                     .accessibilityLabel(error)
             }
@@ -299,11 +330,21 @@ struct EstateHomeView: View {
     /// the right, and an orange dot when it is not sealed yet.
     @ViewBuilder
     private var inbox: some View {
-        if let estate, !estate.envelopes.isEmpty {
-            let rows = estate.envelopes.sorted { $0.updatedAt > $1.updatedAt }
-            ForEach(rows) { envelope in
-                Button { editing = envelope } label: { inboxRow(envelope, estate: estate) }
+        let rows = engines.allEnvelopes.map { EnvelopeRef(envelope: $0.envelope, engine: $0.engine) }
+        if !rows.isEmpty {
+            ForEach(rows) { ref in
+                Button { editing = ref } label: { inboxRow(ref) }
                     .buttonStyle(.plain)
+                    .contextMenu {
+                        if ref.envelope.isUndeliverable(gone: gone) {
+                            Button { bindingEnvelope = ref } label: {
+                                Label("Give it to someone else", systemImage: "person.crop.circle.badge.plus")
+                            }
+                            Button(role: .destructive) { deletingEnvelope = ref } label: {
+                                Label("Delete this envelope", systemImage: "trash")
+                            }
+                        }
+                    }
                 Divider().overlay(.white.opacity(0.08)).padding(.leading, 76)
             }
         } else {
@@ -319,14 +360,18 @@ struct EstateHomeView: View {
         }
     }
 
-    private func inboxRow(_ envelope: Envelope, estate: Estate) -> some View {
+    private func inboxRow(_ ref: EnvelopeRef) -> some View {
+        let envelope = ref.envelope
+        let recipients = ref.engine.estate?.recipients ?? []
+        let ruleTag = engines.tag(for: ref.engine)
         let recipient = envelope.isAddressed
-            ? (estate.recipients.first { $0.rootHash == envelope.recipientHash }?.displayName ?? "Someone")
+            ? (recipients.first { $0.rootHash == envelope.recipientHash }?.displayName ?? "Someone")
             : (envelope.draftRecipientName ?? "Someone")
         let initial = String(recipient.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased()
         let summary = envelope.contentsSummary
         let contents = summary.prefix(1).uppercased() + summary.dropFirst()
         let status = envelope.isAddressed ? (envelope.sealed ? nil : "Not sealed") : "Waiting to meet them"
+        let undeliverable = envelope.isUndeliverable(gone: gone)
         return HStack(alignment: .top, spacing: 14) {
             ZStack {
                 Circle().fill(envelope.sealed ? SealTheme.brass.opacity(0.18) : .white.opacity(0.08))
@@ -338,6 +383,15 @@ struct EstateHomeView: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(recipient).font(.headline).foregroundStyle(.white).lineLimit(1)
+                    // Which rule, only when there is more than one.
+                    if let ruleTag {
+                        Text(ruleTag)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.7))
+                            .padding(.horizontal, 7).padding(.vertical, 2)
+                            .background(.white.opacity(0.10), in: Capsule())
+                            .lineLimit(1)
+                    }
                     Spacer(minLength: 8)
                     Text(envelope.updatedAt.formatted(.relative(presentation: .named)))
                         .font(.caption).foregroundStyle(.white.opacity(0.45)).lineLimit(1)
@@ -352,8 +406,14 @@ struct EstateHomeView: View {
                     }
                     Text(contents).font(.caption).foregroundStyle(.white.opacity(0.5)).lineLimit(1)
                 }
+                if undeliverable {
+                    Text("\(recipient) deleted their Seal account. This envelope cannot be delivered. Press and hold to give it to someone else or delete it.")
+                        .font(.caption.weight(.semibold)).foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
+        .opacity(undeliverable ? 0.85 : 1)
         .padding(.horizontal, 20).padding(.vertical, 12)
         .contentShape(Rectangle())
     }
@@ -374,6 +434,9 @@ struct EstateHomeView: View {
                 Label(due ? "Check your saved secrets (due)" : "Your saved secrets", systemImage: due ? "exclamationmark.lock.fill" : "lock.rotation")
             }
             .disabled(estateEngine.allSecrets.isEmpty)
+            Button { showRules = true } label: {
+                Label("Your rules", systemImage: "clock.badge")
+            }
             Button { explain = ExplainRequest(role: .sealer, numbers: numbersForMyEstate) } label: {
                 Label("Watch it happen", systemImage: "play.circle")
             }
@@ -410,8 +473,8 @@ struct EstateHomeView: View {
                 .parentTapTarget(56)
             }
             .padding(.horizontal, 20)
-            if let estate, estate.hasUnsealedChanges, !inSetup {
-                sealBar(estate)
+            if engines.all.contains(where: { $0.estate?.hasUnsealedChanges ?? false }), !inSetup {
+                sealBar
             }
         }
         .padding(.bottom, 8)
@@ -419,14 +482,22 @@ struct EstateHomeView: View {
 
     /// One bar: what is waiting, and the button. One short reason when it
     /// cannot run; the setup card carries the longer ones.
-    private func sealBar(_ estate: Estate) -> some View {
-        let unsealed = estate.addressedEnvelopes.filter { !$0.sealed }.count
-        let ready = estate.isReadyToSeal && !DemoFixtures.isActive
+    private var sealBar: some View {
+        let pending = engines.all.filter { $0.estate?.hasUnsealedChanges ?? false }
+        let unsealed = pending.reduce(0) { $0 + ($1.estate?.addressedEnvelopes.filter { !$0.sealed }.count ?? 0) }
+        let notReady = pending.first { !($0.estate?.isReadyToSeal ?? false) }
+        let ready = notReady == nil && !DemoFixtures.isActive
+        let reason: String = {
+            guard let notReady else { return "Only on this phone until you do." }
+            return engines.rules.count > 1
+                ? "Add a key holder for \(notReady.slot.name) on the Keys tab first."
+                : "Add a key holder on the Keys tab first."
+        }()
         return HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(unsealed > 0 ? (unsealed == 1 ? "1 envelope not sealed" : "\(unsealed) envelopes not sealed") : "Seal again")
                     .font(.subheadline.weight(.semibold)).foregroundStyle(.white)
-                Text(ready ? "Only on this phone until you do." : "Add a key holder on the Keys tab first.")
+                Text(reason)
                     .font(.caption).foregroundStyle(.white.opacity(0.55)).lineLimit(1)
             }
             Spacer()
@@ -449,14 +520,109 @@ struct EstateHomeView: View {
 
     // MARK: - Tab 2: Keys
 
+    /// About people, not rules: one row per person who holds a key for
+    /// you, whatever rule it is for. The rules themselves live on each
+    /// envelope's "When it opens" card and under "Your rules" in the
+    /// Envelopes menu.
     @ViewBuilder
     private var keysTab: some View {
-        setPicker
-        if !inSetup, !estateEngine.custodiansWithNewPhones.isEmpty { newPhoneCard }
-        custodiansSection
-        if slot == .letters { coupleRow }
-        guardedSection
+        ForEach(engines.all, id: \.storeHash) { engine in
+            if engine.estate?.epochPublished == true, !engine.custodiansWithNewPhones.isEmpty {
+                newPhoneCard(engine)
+            }
+            if let estate = engine.estate {
+                custodyWarning(estate, engine: engine)
+            }
+        }
+        keyHoldersSection
+        coupleRow
         footer
+    }
+
+    // MARK: - Tab 3: For others
+
+    /// What this phone holds for other people, one compact row each:
+    /// whose, what part (a key, an envelope, or both), where it stands,
+    /// and a chevron into the full screen. The first row that needs
+    /// something from this person is lit.
+    @ViewBuilder
+    private var forOthersTab: some View {
+        let items = lettersEngine.guarded.sorted { $0.ownerName < $1.ownerName }
+        VStack(alignment: .leading, spacing: 10) {
+            Text(items.count == 1
+                 ? "One person trusts you with a part of their envelopes."
+                 : "\(items.count) people trust you with a part of their envelopes.")
+                .font(.callout).foregroundStyle(.white.opacity(0.7))
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 20)
+            VStack(spacing: 0) {
+                ForEach(items) { g in
+                    NavigationLink {
+                        GuardedEstateView(guarded: g, myRoot: myRoot, ceremony: ceremony,
+                                          estateEngine: lettersEngine, appLock: appLock)
+                    } label: {
+                        forOthersRow(g)
+                    }
+                    .buttonStyle(.plain)
+                    Divider().overlay(.white.opacity(0.08)).padding(.leading, 76)
+                }
+            }
+            Button {
+                let first = items.first
+                explain = ExplainRequest(role: first?.isCustodian == true ? .keyHolder : .recipient,
+                                         numbers: first.map { OnboardingNumbers(guarded: $0, snapshot: lettersEngine.guardedSnapshots[$0.estateID]) } ?? .defaults)
+            } label: {
+                Label("See how it opens", systemImage: "play.circle").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(SealSecondaryButtonStyle())
+            .parentTapTarget()
+            .padding(.horizontal, 20).padding(.top, 8)
+        }
+    }
+
+    private func forOthersRow(_ g: GuardedEstate) -> some View {
+        let name = g.ownerName.isEmpty ? "Someone" : g.ownerName
+        let state = lettersEngine.state(of: g.estateID)
+        let part: String = {
+            switch (g.isCustodian, g.isRecipient) {
+            case (true, true): return "You hold a key and have envelopes coming"
+            case (true, false): return "You hold a key"
+            default: return "Envelopes are coming to you"
+            }
+        }()
+        let departure = lettersEngine.departure(of: g.estateID)
+        // Lit when the state asks something of this person.
+        let needsYou: Bool = {
+            if departure?.keepEnvelopes == false { return false }
+            switch state {
+            case .overdue?, .claimOpen?, .authorized?: return g.isCustodian
+            case .released?: return g.isRecipient
+            default: return false
+            }
+        }()
+        return HStack(alignment: .top, spacing: 14) {
+            ZStack {
+                Circle().fill(needsYou ? SealTheme.brass.opacity(0.18) : .white.opacity(0.08))
+                Image(systemName: g.isCustodian ? "key.fill" : "envelope.fill")
+                    .foregroundStyle(needsYou ? SealTheme.brass : .white.opacity(0.7))
+            }
+            .frame(width: 42, height: 42)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(name).font(.headline).foregroundStyle(.white).lineLimit(1)
+                Text(part).font(.subheadline).foregroundStyle(.white.opacity(0.8)).lineLimit(1)
+                Text(departure.map { d in
+                        d.keepEnvelopes
+                            ? "\(name) deleted their Seal account and kept these for their family."
+                            : "\(name) deleted their Seal account and cancelled these."
+                     } ?? Self.stateLine(state, guarded: g))
+                    .font(.caption).foregroundStyle(needsYou ? SealTheme.brass : .white.opacity(0.5))
+                    .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 8)
+            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.white.opacity(0.3)).padding(.top, 4)
+        }
+        .padding(.horizontal, 20).padding(.vertical, 12)
+        .contentShape(Rectangle())
     }
 
     /// Two people, two phones, one evening (CoupleSetupView).
@@ -506,7 +672,7 @@ struct EstateHomeView: View {
                 CoupleSetupView(myRoot: myRoot, friendStore: friendStore, estateEngine: estateEngine,
                                 ceremony: ceremony, sync: sync,
                                 onOpenPeople: { showCoupleSetup = false; tab = .people },
-                                onWriteEnvelope: { envelope in showCoupleSetup = false; editing = envelope },
+                                onWriteEnvelope: { envelope in showCoupleSetup = false; editing = EnvelopeRef(envelope: envelope, engine: estateEngine) },
                                 onSeal: { showCoupleSetup = false; runSeal() },
                                 onClose: { showCoupleSetup = false })
                     .environment(\.parentMode, parentMode)
@@ -516,7 +682,7 @@ struct EstateHomeView: View {
                 SecretReviewView(estateEngine: estateEngine, ownerHash: myRoot.credentialIDHash,
                                  onEdit: { envelope in
                                      showSecretReview = false
-                                     editing = envelope
+                                     editing = EnvelopeRef(envelope: envelope, engine: estateEngine)
                                  },
                                  onClose: { showSecretReview = false })
                     .environment(\.parentMode, parentMode)
@@ -528,19 +694,37 @@ struct EstateHomeView: View {
                     .environment(\.parentMode, parentMode)
                     .parentTypeScale()
             }
-            .sheet(isPresented: $showPolicy) {
-                PolicyView(estateEngine: estateEngine, onClose: { showPolicy = false })
+            .sheet(item: $policyFor) { ref in
+                PolicyView(estateEngine: ref.engine, onClose: { policyFor = nil })
                     .environment(\.parentMode, parentMode)
                     .parentTypeScale()
             }
-            .sheet(item: $editing) { envelope in
-                EnvelopeEditorView(envelope: envelope, estateEngine: estateEngine, friendStore: friendStore,
+            .sheet(item: $editing) { ref in
+                EnvelopeEditorView(envelope: ref.envelope, estateEngine: ref.engine, friendStore: friendStore,
                                    appLock: appLock, onClose: { editing = nil },
                                    onChoosePerson: {
+                                       let now = editing ?? ref
                                        editing = nil
-                                       bindingEnvelope = envelope
+                                       bindingEnvelope = now
                                    },
-                                   ownerName: myRoot.displayName)
+                                   ownerName: myRoot.displayName,
+                                   engines: engines,
+                                   onMove: { target in
+                                       // The current reference, not the one
+                                       // captured when the sheet opened: a
+                                       // second move must start from where
+                                       // the first one left the envelope.
+                                       guard let now = editing else { throw EstateEngines.MoveError.notFound }
+                                       let moved = try engines.move(now.envelope.id, from: now.engine, to: target)
+                                       editing = EnvelopeRef(envelope: moved, engine: target, id: now.id)
+                                       return moved
+                                   })
+                    .environment(\.parentMode, parentMode)
+                    .parentTypeScale()
+            }
+            // Every rule, with no envelope in hand (the inbox menu).
+            .sheet(isPresented: $showRules) {
+                RuleSheet(engines: engines, friendStore: friendStore, onClose: { showRules = false })
                     .environment(\.parentMode, parentMode)
                     .parentTypeScale()
             }
@@ -554,8 +738,9 @@ struct EstateHomeView: View {
                         estateEngine.addRecipient(friend.identity)
                         switch pickerMode {
                         case .blank:
-                            editing = estateEngine.newEnvelope(for: friend.identity.credentialIDHash,
-                                                               title: "For \(friend.identity.displayName)")
+                            editing = EnvelopeRef(envelope: estateEngine.newEnvelope(for: friend.identity.credentialIDHash,
+                                                                                     title: "For \(friend.identity.displayName)"),
+                                                  engine: estateEngine)
                         case .interview:
                             interviewFor = InterviewSubject(name: friend.identity.displayName, friend: friend)
                         }
@@ -565,7 +750,7 @@ struct EstateHomeView: View {
                         // one; it becomes a recipient at bindEnvelope.
                         switch pickerMode {
                         case .blank:
-                            editing = estateEngine.newEnvelope(forName: name)
+                            editing = EnvelopeRef(envelope: estateEngine.newEnvelope(forName: name), engine: estateEngine)
                         case .interview:
                             interviewFor = InterviewSubject(name: name, friend: nil)
                         }
@@ -575,12 +760,41 @@ struct EstateHomeView: View {
                 .parentTypeScale()
             }
             // Choosing the person for an envelope that was written to a name.
-            .sheet(item: $bindingEnvelope) { envelope in
+            // A key holder from the Keys tab: pick the person, then the rule
+            // when there is more than one.
+            .sheet(isPresented: $showAddKeyHolder) {
                 RecipientPickerSheet(friendStore: friendStore, estateEngine: estateEngine,
+                                     bindingExisting: true, title: "Who holds a key?") { pick in
+                    showAddKeyHolder = false
+                    guard case .met(let friend) = pick else { return }
+                    if engines.rules.count > 1 {
+                        pendingKeyHolder = friend
+                    } else {
+                        estateEngine.addCustodian(friend.identity)
+                    }
+                }
+                .environment(\.parentMode, parentMode)
+                .parentTypeScale()
+            }
+            .confirmationDialog(
+                pendingKeyHolder.map { "Which rule does \($0.identity.displayName) hold a key for?" } ?? "",
+                isPresented: Binding(get: { pendingKeyHolder != nil }, set: { if !$0 { pendingKeyHolder = nil } }),
+                titleVisibility: .visible
+            ) {
+                ForEach(engines.all, id: \.storeHash) { engine in
+                    Button(engine.slot.name) {
+                        if let friend = pendingKeyHolder { engine.addCustodian(friend.identity) }
+                        pendingKeyHolder = nil
+                    }
+                }
+                Button("Cancel", role: .cancel) { pendingKeyHolder = nil }
+            }
+            .sheet(item: $bindingEnvelope) { ref in
+                RecipientPickerSheet(friendStore: friendStore, estateEngine: ref.engine,
                                      bindingExisting: true) { pick in
                     bindingEnvelope = nil
                     if case .met(let friend) = pick {
-                        estateEngine.bindEnvelope(envelope.id, to: friend.identity)
+                        ref.engine.bindEnvelope(ref.envelope.id, to: friend.identity)
                     }
                 }
                 .environment(\.parentMode, parentMode)
@@ -589,7 +803,7 @@ struct EstateHomeView: View {
             .sheet(item: $interviewFor, onDismiss: {
                 if let drafted = draftedEnvelope {
                     draftedEnvelope = nil
-                    editing = drafted
+                    editing = EnvelopeRef(envelope: drafted, engine: estateEngine)
                 }
             }) { subject in
                 EnvelopeInterviewView(
@@ -613,6 +827,16 @@ struct EstateHomeView: View {
                     .environment(\.parentMode, parentMode)
                     .parentTypeScale()
             }
+            .confirmationDialog(
+                "Delete this envelope? Everything in it is removed from this phone. This cannot be undone.",
+                isPresented: Binding(get: { deletingEnvelope != nil }, set: { if !$0 { deletingEnvelope = nil } }),
+                titleVisibility: .visible
+            ) {
+                Button("Delete envelope", role: .destructive) {
+                    if let ref = deletingEnvelope { ref.engine.removeEnvelope(ref.envelope.id) }
+                    deletingEnvelope = nil
+                }
+            }
             .alert("Could not seal", isPresented: Binding(get: { sealError != nil }, set: { if !$0 { sealError = nil } })) {
                 Button("OK", role: .cancel) {}
             } message: { Text(sealError ?? "") }
@@ -622,7 +846,7 @@ struct EstateHomeView: View {
                 Text("Your envelopes are sealed and your key holders have been told they hold a key. Open Seal now and then; that is all it takes to keep them closed.")
             }
             .onReceive(NotificationCenter.default.publisher(for: Clocks.changed)) { _ in
-                Task { await estateEngine.refreshOwner() }
+                Task { for engine in engines.all { await engine.refreshOwner() } }
             }
     }
 
@@ -632,7 +856,7 @@ struct EstateHomeView: View {
     /// the owner has written is published and wrapped. Drafts are named first
     /// because an unsealed envelope is the one thing here that silently does
     /// nothing at all.
-    private var unsealedLine: String? {
+    private static func unsealedLine(_ estate: Estate?) -> String? {
         guard let estate, estate.hasUnsealedChanges else { return nil }
         // addressedEnvelopes: one written to a typed name cannot be sealed
         // yet, so counting it here would tell somebody to tap a button that
@@ -709,7 +933,7 @@ struct EstateHomeView: View {
         case .keyHolders:
             tab = .people
         case .rule:
-            showPolicy = true
+            policyFor = EngineRef(engine: estateEngine)
         case .seal:
             // Nothing to seal until there are key holders and a valid rule,
             // and the row above says so. Send them there rather than firing
@@ -812,10 +1036,17 @@ struct EstateHomeView: View {
         return OnboardingNumbers(policy: estate.policy, custodianCount: estate.custodians.count)
     }
 
-    private var statusCard: some View {
-        let state = estateEngine.ownerState
-        let snapshot = estateEngine.ownerSnapshot
+    /// The loud card for one rule's engine. The default rule's most of the
+    /// time; whichever rule has a claim running when one does.
+    private func statusCard(_ engine: EstateEngine) -> some View {
+        let state = engine.ownerState
+        let snapshot = engine.ownerSnapshot
+        let estate = engine.estate
+        let ruleName: String? = engines.rules.count > 1 ? engine.slot.name : nil
         return VStack(alignment: .leading, spacing: 10) {
+            if let ruleName {
+                Text(ruleName).font(.caption.weight(.semibold)).foregroundStyle(.white.opacity(0.5))
+            }
             switch state {
             case .none:
                 HStack(alignment: .center, spacing: 14) {
@@ -831,7 +1062,7 @@ struct EstateHomeView: View {
                 // sealed yet", which is the worst lie the app could tell: those
                 // two exist on this phone and nowhere else, and would open for
                 // nobody. Say the true thing first.
-                if let unsealedLine {
+                if let unsealedLine = Self.unsealedLine(estate) {
                     Label("Not sealed yet.", systemImage: "exclamationmark.circle.fill")
                         .font(.system(.title3, design: .rounded, weight: .semibold))
                         .foregroundStyle(.orange)
@@ -890,7 +1121,7 @@ struct EstateHomeView: View {
                 Text("If that is not what you want, tap the button. It stops everything. You do not need your key for this.")
                 Button {
                     Task {
-                        do { try await estateEngine.cancelClaim() } catch { sealError = SyncEngine.friendly(error) }
+                        do { try await engine.cancelClaim() } catch { sealError = SyncEngine.friendly(error) }
                     }
                 } label: {
                     Text("I am here. Stop it.")
@@ -905,7 +1136,7 @@ struct EstateHomeView: View {
                     .foregroundStyle(.orange)
                 Text("Your key holders combined their keys. If you are reading this, please contact them: the seal is broken and cannot be put back. Start a new set of envelopes when you are ready.")
             }
-            if let error = estateEngine.lastError {
+            if let error = engine.lastError {
                 Text(error).font(.caption).foregroundStyle(.orange.opacity(0.8))
             }
         }
@@ -927,8 +1158,8 @@ struct EstateHomeView: View {
     /// on refresh (custodiansWithNewPhones); this names the person and makes
     /// the fix one tap. Orange, not brass: nothing here is a trust moment,
     /// it is a repair.
-    private var newPhoneCard: some View {
-        let people = estateEngine.custodiansWithNewPhones
+    private func newPhoneCard(_ engine: EstateEngine) -> some View {
+        let people = engine.custodiansWithNewPhones
         let names = people.map(\.displayName)
         let who: String
         switch names.count {
@@ -1026,80 +1257,113 @@ struct EstateHomeView: View {
         sealing = true
         Task {
             defer { sealing = false }
+            // Every rule with something waiting, the default rule when
+            // nothing is (the setup card's last step). One pass, in order,
+            // stopping at the first failure so the message names one rule.
+            var due = engines.all.filter { engine in
+                (engine.estate?.hasUnsealedChanges ?? false) || !engine.custodiansWithNewPhones.isEmpty
+            }
+            if due.isEmpty { due = [estateEngine] }
             do {
-                try await estateEngine.sealAndPublish()
+                for engine in due {
+                    do {
+                        try await engine.sealAndPublish()
+                    } catch {
+                        if engines.rules.count > 1 { throw SealRuleError(rule: engine.slot.name, underlying: error) }
+                        throw error
+                    }
+                }
                 sealedOK = true
+            } catch let e as SealRuleError {
+                sealError = "\(e.rule): \(SyncEngine.friendly(e.underlying))"
             } catch {
                 sealError = SyncEngine.friendly(error)
             }
         }
     }
 
+    /// Which rule's seal failed, when there is more than one.
+    private struct SealRuleError: Error {
+        let rule: String
+        let underlying: Error
+    }
+
 
     // MARK: - Custodians
 
-    private var custodiansSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            sectionHeader("Who holds a key", trailing: {
-                Button { showPolicy = true } label: { Label("The rule", systemImage: "slider.horizontal.3") }
-                    .buttonStyle(.bordered).tint(SealTheme.brass)
-                    .parentTapTarget()
-            })
-            if let estate, !estate.custodians.isEmpty {
-                Text(estate.policy.summary(custodianCount: estate.custodians.count))
-                    .font(.callout).foregroundStyle(SealTheme.brass.opacity(0.9))
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 24)
-                ForEach(estate.custodians) { custodian in
-                    // The row used to be a dead HStack, so the one thing a
-                    // person comes to this section to do, record the handover,
-                    // had no way in from here. It opens that person's page now.
-                    // If no met-in-person record backs the hash (it should, a
-                    // custodian is made from one), the row stays static rather
-                    // than offering a tap that leads nowhere.
-                    if let friend = storedFriend(for: custodian) {
-                        NavigationLink {
-                            PersonView(person: friend, myRoot: myRoot, friendStore: friendStore,
-                                       estateEngine: estateEngine, ceremony: ceremony, sync: sync)
-                        } label: {
-                            custodianRow(custodian, tappable: true)
-                        }
-                        .buttonStyle(.plain)
-                        .parentTapTarget()
-                    } else {
-                        custodianRow(custodian, tappable: false)
-                    }
-                }
-            } else {
-                Text("A key holder is someone you met in person and handed a security key to. Open People, tap a person, and make them a key holder.")
+    private var keyHoldersSection: some View {
+        let rows = engines.keyHolderRows
+        let several = engines.rules.count > 1
+        return VStack(alignment: .leading, spacing: 10) {
+            sectionHeader("Who holds a key", trailing: { EmptyView() })
+            if rows.isEmpty {
+                Text("A key holder is someone you met in person and handed a security key to. Add one below, or open People, tap a person, and make them a key holder.")
                     .font(.callout).foregroundStyle(.white.opacity(0.55))
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 24)
             }
+            ForEach(rows) { row in
+                // The row opens that person's page (the handover, the
+                // printed page) on the rule they hold a key for; with
+                // several, the default rule's page when they hold that
+                // one. If no met-in-person record backs the hash, the row
+                // stays static rather than offering a tap that leads
+                // nowhere.
+                if let friend = storedFriend(for: row.custodian) {
+                    NavigationLink {
+                        PersonView(person: friend, myRoot: myRoot, friendStore: friendStore,
+                                   estateEngine: row.primary, ceremony: ceremony, sync: sync,
+                                   allEngines: engines.all)
+                    } label: {
+                        keyHolderRow(row, several: several, tappable: true)
+                    }
+                    .buttonStyle(.plain)
+                    .parentTapTarget()
+                } else {
+                    keyHolderRow(row, several: several, tappable: false)
+                }
+            }
+            Button { showAddKeyHolder = true } label: {
+                Label("Add a key holder", systemImage: "person.badge.key")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(SealSecondaryButtonStyle())
+            .parentTapTarget()
+            .padding(.horizontal, 20)
         }
     }
 
-    private func storedFriend(for custodian: Custodian) -> FriendStore.StoredFriend? {
-        friendStore.friends.first { $0.identity.credentialIDHash == custodian.rootHash }
-    }
-
-    private func custodianRow(_ custodian: Custodian, tappable: Bool) -> some View {
-        HStack(spacing: 14) {
-            Image(systemName: custodian.handoverReceiptID == nil ? "key" : "key.fill")
-                .foregroundStyle(SealTheme.brass).frame(width: 28)
+    private func keyHolderRow(_ row: EstateEngines.KeyHolderRow, several: Bool, tappable: Bool) -> some View {
+        let custodian = row.custodian
+        let isGone = gone[custodian.rootHash] != nil
+        let rules = row.ruleNames
+        let holdsFor: String = rules.count == 1 ? rules[0]
+            : (rules.count == 2 ? "\(rules[0]) and \(rules[1])" : rules.dropLast().joined(separator: ", ") + ", and " + (rules.last ?? ""))
+        return HStack(spacing: 14) {
+            Image(systemName: isGone ? "person.crop.circle.badge.xmark"
+                  : (row.handoverSigned ? "key.fill" : "key"))
+                .foregroundStyle(isGone ? Color.white.opacity(0.4) : SealTheme.brass).frame(width: 28)
             VStack(alignment: .leading, spacing: 3) {
-                Text(custodian.displayName).font(.headline).foregroundStyle(.white)
-                // "Tap to record it" only where there is something to tap.
-                Text(custodian.handoverReceiptID == nil
-                     ? (tappable ? "Key handover not recorded yet. Tap to record it."
-                                 : "Key handover not recorded yet.")
-                     : "Key handover signed by both of you.")
-                    .font(.caption).foregroundStyle(.white.opacity(0.5))
-                    .fixedSize(horizontal: false, vertical: true)
+                Text(custodian.displayName).font(.headline).foregroundStyle(.white.opacity(isGone ? 0.55 : 1))
+                if several {
+                    Text("Holds a key for \(holdsFor).")
+                        .font(.caption).foregroundStyle(.white.opacity(0.6))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                // "Tap to record it" only where there is something to tap,
+                // and not for somebody who is gone: there is nothing to record.
+                if !isGone {
+                    Text(!row.handoverSigned
+                         ? (tappable ? "Key handover not recorded yet. Tap to record it."
+                                     : "Key handover not recorded yet.")
+                         : "Key handover signed by both of you.")
+                        .font(.caption).foregroundStyle(.white.opacity(0.5))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 // Do they still have it? From the record: their yearly tap
                 // (CustodyConfirmation). Orange with the next step when it
                 // is overdue, quiet otherwise.
-                if let standing = estateEngine.custodyStanding(for: custodian) {
+                if let standing = row.primary.custodyStanding(for: custodian, gone: gone) {
                     Label(standing.line, systemImage: standing.overdue ? "exclamationmark.triangle.fill" : "checkmark.seal")
                         .font(.caption)
                         .foregroundStyle(standing.overdue ? .orange : .white.opacity(0.5))
@@ -1114,6 +1378,45 @@ struct EstateHomeView: View {
         .padding(16)
         .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
         .padding(.horizontal, 20)
+    }
+
+    /// The same count the yearly confirmation feeds: a key holder who is
+    /// overdue, or who deleted their Seal account. Said once above the
+    /// rows. Nothing about the rule changes here; the owner decides.
+    @ViewBuilder
+    private func custodyWarning(_ estate: Estate, engine: EstateEngine) -> some View {
+        let unresponsive = engine.unresponsiveKeyHolders(gone: gone)
+        let goneCount = estate.goneCustodians(gone: gone).count
+        let able = estate.custodians.count - unresponsive.count
+        if !unresponsive.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                Label((engines.rules.count > 1 ? "\(engine.slot.name): " : "") + (unresponsive.count == 1
+                      ? "1 of your \(estate.custodians.count) key holders may not be able to help."
+                      : "\(unresponsive.count) of your \(estate.custodians.count) key holders may not be able to help."),
+                      systemImage: "exclamationmark.triangle.fill")
+                    .font(.subheadline.weight(.semibold)).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                if goneCount > 0 {
+                    Text(goneCount == 1
+                         ? "One of them deleted their Seal account."
+                         : "\(goneCount) of them deleted their Seal accounts.")
+                        .font(.caption).foregroundStyle(.white.opacity(0.7))
+                }
+                if able < estate.policy.threshold {
+                    Text("Your rule needs \(estate.policy.threshold) key holders to tap their keys, and only \(max(able, 0)) can be counted on right now. Add another key holder, or change the rule.")
+                        .font(.caption).foregroundStyle(.white.opacity(0.7))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+            .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
+            .padding(.horizontal, 20)
+        }
+    }
+
+    private func storedFriend(for custodian: Custodian) -> FriendStore.StoredFriend? {
+        friendStore.friends.first { $0.identity.credentialIDHash == custodian.rootHash }
     }
 
     // MARK: - Guarded
@@ -1227,9 +1530,18 @@ struct RecipientPickerSheet: View {
     /// True when picking a person for an envelope that already exists. A
     /// typed name is no help there, so that half is hidden.
     var bindingExisting = false
+    /// The sheet's title. "Who is it for?" for an envelope; a rule's key
+    /// holder picker says whose key it is.
+    var title = "Who is it for?"
     let onPick: (RecipientPick) -> Void
 
     @State private var typedName = ""
+
+    /// People who can still receive something. Somebody who deleted their
+    /// Seal account is not offered (GoneCheck.swift).
+    private var metFriends: [FriendStore.StoredFriend] {
+        friendStore.friends.filter { friendStore.goneDate($0.id) == nil }
+    }
 
     private var trimmedName: String {
         typedName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1241,13 +1553,13 @@ struct RecipientPickerSheet: View {
                 SealTheme.ink.ignoresSafeArea()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 22) {
-                        if !friendStore.friends.isEmpty {
+                        if !metFriends.isEmpty {
                             metSection
                         }
                         if !bindingExisting {
                             notYetSection
-                        } else if friendStore.friends.isEmpty {
-                            Text("You have not added anybody in person yet. Open People, meet them, and then come back to this envelope.")
+                        } else if metFriends.isEmpty {
+                            Text("You have not added anybody in person yet. Open People, meet them, and then come back here.")
                                 .font(.callout).foregroundStyle(.white.opacity(0.6))
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -1258,7 +1570,7 @@ struct RecipientPickerSheet: View {
                     .containerRelativeFrame(.horizontal)
                 }
             }
-            .navigationTitle("Who is it for?")
+            .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
@@ -1274,7 +1586,7 @@ struct RecipientPickerSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("People you have met")
                 .font(.headline).foregroundStyle(.white.opacity(0.85))
-            ForEach(friendStore.friends) { friend in
+            ForEach(metFriends) { friend in
                 Button { onPick(.met(friend)) } label: {
                     HStack(spacing: 12) {
                         IdentityRing(displayName: friend.identity.displayName, tier: friend.identity.tier, size: 36)
@@ -1296,7 +1608,7 @@ struct RecipientPickerSheet: View {
 
     private var notYetSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(friendStore.friends.isEmpty ? "Who do you want to write to?" : "Somebody not in Seal yet")
+            Text(metFriends.isEmpty ? "Who do you want to write to?" : "Somebody not in Seal yet")
                 .font(.headline).foregroundStyle(.white.opacity(0.85))
             Text("Type their name and write to them tonight. The envelope waits here as a draft. When you meet them in person and add them, it becomes theirs and can be sealed.")
                 .font(.callout).foregroundStyle(.white.opacity(0.6))

@@ -191,8 +191,10 @@ extension CeremonyManager {
         setPhase(.searching)
         do {
             let commitment = BackupCredential.revocationCommitment(publicKey: backup.publicKey)
-            let credential = try await performRequests(
-                makeFriendAssertionRequests(friendCredentialID: rootCredentialID, challenge: commitment))
+            // One provider, by the owner's tier. Both in one request sends a
+            // passkey owner straight to the security key sheet (revokeDevice).
+            let credential = try await performRequest(
+                makeAssertionRequest(tier: myRoot.tier, challenge: commitment, allowedCredentialID: rootCredentialID))
             guard let assertion = credential as? ASAuthorizationPublicKeyCredentialAssertion else {
                 throw CeremonyError.unexpectedCredential
             }

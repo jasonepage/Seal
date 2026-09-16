@@ -36,6 +36,14 @@ struct EnvelopeEditorView: View {
     /// The owner's own name, for the "From ..." line in the preview. The
     /// preview shows the recipient's screen, and that line is on it.
     var ownerName: String = ""
+    /// Every rule (RuleBook.swift), for the "When it opens" card. Optional
+    /// so nothing else that builds this view has to change; without it the
+    /// card is not shown.
+    var engines: EstateEngines? = nil
+    /// Moves this envelope to another rule and returns it as it now is
+    /// (a fresh id and content key in the new box). The home screen owns
+    /// the move so it can keep its own reference in step.
+    var onMove: ((EstateEngine) throws -> Envelope)? = nil
 
     @State private var showSecretEditor = false
     @State private var showPhotoPicker = false
@@ -45,6 +53,7 @@ struct EnvelopeEditorView: View {
     /// The date picker's working value while the card is open. Nil in the
     /// envelope means "open with everything else".
     @State private var pickingDate = false
+    @State private var showRule = false
     @State private var videoThumbnail: UIImage?
     @State private var confirmDelete = false
     @State private var showPreview = false
@@ -114,6 +123,7 @@ struct EnvelopeEditorView: View {
                         photosCard
                         stepsCard
                         secretsCard
+                        if engines != nil { whenItOpensCard }
                         openOnDateCard
                         if envelope.isAddressed { previewRow }
                         Text(envelope.isAddressed
@@ -175,6 +185,20 @@ struct EnvelopeEditorView: View {
                                   onClose: { showPreview = false })
                     .environment(\.parentMode, parentMode)
                     .parentTypeScale()
+            }
+            .sheet(isPresented: $showRule) {
+                if let engines {
+                    RuleSheet(engines: engines, friendStore: friendStore, current: estateEngine,
+                              onMove: { target in
+                                  // Save first, so the words that cross are
+                                  // the words on screen.
+                                  estateEngine.updateEnvelope(envelope)
+                                  if let onMove { envelope = try onMove(target) }
+                              },
+                              onClose: { showRule = false })
+                        .environment(\.parentMode, parentMode)
+                        .parentTypeScale()
+                }
             }
             .sheet(isPresented: $showFirstSteps) {
                 FirstStepsEditorSheet(steps: $envelope.firstSteps, secrets: $envelope.secrets,
@@ -371,7 +395,7 @@ struct EnvelopeEditorView: View {
                 Text("\(envelope.letter.split(whereSeparator: \.isWhitespace).count) words")
                     .font(.caption).foregroundStyle(.white.opacity(0.4))
             } else {
-                invitation("The part \(recipientName) will read first and keep longest. It does not have to be long.")
+                invitation("The part \(recipientName) reads first and keeps longest. It does not have to be long.")
             }
         }
     }
@@ -386,7 +410,7 @@ struct EnvelopeEditorView: View {
             if hasSteps {
                 StepsTimelineMini(steps: steps, secrets: envelope.secrets)
             } else {
-                invitation("On a hard day a list is worth more than a pile of passwords. Who to call, where the will is, what to cancel.")
+                invitation("On a hard day a list is worth more than a pile of passwords. Who to call, where the legal papers are, what to cancel.")
                 HStack(spacing: 6) {
                     ForEach(FirstStep.starters.prefix(3)) { starter in
                         Text(starter.title)
@@ -486,7 +510,7 @@ struct EnvelopeEditorView: View {
                     }
                 }
             } else {
-                invitation("A picture of the two of you. The house. The dog. \(recipientName) will look at it more than once.")
+                invitation("A picture of the two of you. The house. The dog. \(recipientName) looks at it more than once.")
             }
         }
     }
@@ -517,7 +541,7 @@ struct EnvelopeEditorView: View {
                     .parentTapTarget()
                 }
             } else {
-                invitation("Thirty seconds is enough. \(recipientName) will want to hear you say their name.")
+                invitation("Thirty seconds is enough. \(recipientName) wants to hear you say their name.")
             }
         }
     }
@@ -556,7 +580,7 @@ struct EnvelopeEditorView: View {
                     .parentTapTarget()
                 }
             } else {
-                invitation("Up to a minute, from the front camera. Your face, your voice, in your kitchen. Nothing else in the envelope will be looked at more.")
+                invitation("Up to a minute, from the front camera. Your face, your voice, in your kitchen. Nothing else in the envelope gets looked at more.")
             }
         }
     }
@@ -643,6 +667,33 @@ struct EnvelopeEditorView: View {
         .padding(16)
         .background(.white.opacity(has ? 0.06 : 0.035), in: RoundedRectangle(cornerRadius: 16))
         .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(has ? SealTheme.brass.opacity(0.25) : .clear, lineWidth: 1))
+    }
+
+    // MARK: - When it opens
+
+    /// The rule this envelope is on, in one line, and the door to change
+    /// it (RuleSheet). Brass when the rule has key holders, because then
+    /// the sentence is a real promise; pewter while it is only numbers.
+    private var whenItOpensCard: some View {
+        let estate = estateEngine.estate
+        let holders = estate?.custodians ?? []
+        let several = (engines?.rules.count ?? 1) > 1
+        let line: String = {
+            guard let estate else { return "No rule yet." }
+            if holders.isEmpty {
+                return "After \(estate.policy.silenceDays) days of silence, \(estate.policy.warningDays) days of warnings and \(estate.policy.graceDays) days of grace. Nobody holds a key for this rule yet."
+            }
+            return estate.policy.summary(custodianCount: holders.count) + " Keys: " + holders.map(\.displayName).joined(separator: ", ") + "."
+        }()
+        return card("clock.badge", several ? "When it opens: \(estateEngine.slot.name)" : "When it opens",
+                    filled: !holders.isEmpty, action: "Change", onAction: { showRule = true }) {
+            Text(line)
+                .font(.callout).foregroundStyle(.white.opacity(0.8))
+                .fixedSize(horizontal: false, vertical: true)
+            if !several {
+                invitation("One rule for everything you write, unless you make another. The bills could open sooner than the letters, say.")
+            }
+        }
     }
 
     // MARK: - What they see

@@ -67,7 +67,9 @@ try:
 except ImportError:
     shamir = None
 
-OWNER_KINDS = {"estateCreated", "epochPublished", "policyChanged", "vaultUpdated", "heartbeat", "cancellation"}
+OWNER_KINDS = {"estateCreated", "epochPublished", "policyChanged", "vaultUpdated", "heartbeat", "cancellation",
+               # The owner deleted their account and said what to do (2026-09-16).
+               "ownerDeparted"}
 CUSTODIAN_KINDS = {"silenceObserved", "releaseClaimed", "objection", "objectionWithdrawn", "authorization", "released",
                    # "I still have my key" (2026-09-16). A receipt; never counted toward a release.
                    "custodyConfirmed"}

@@ -1,10 +1,196 @@
 # Where Seal stands
 
-**Updated:** 2026-09-16 (morning after) · **Owner:** Nathan (Jason Page) · natepage67@gmail.com
+**Updated:** 2026-09-16 (evening: a rule per envelope, step 2) · **Owner:** Nathan (Jason Page) · natepage67@gmail.com
 **Repo:** `~/Documents/GitHub/Seal` · iOS 26.5+, SwiftUI, no backend
 
 New Swift files under `Seal/` join the target automatically (file system
 synced groups), so no project edits are needed to add one.
+
+## A RULE PER ENVELOPE, STEPS 1 AND 2 (2026-09-16 evening; step 1 built clean, step 2 UNCOMPILED)
+
+RELEASE.md section 13 is the design. Step 1 (the engine list, RuleBook,
+the inbox across rules) compiled and ran on Jason's phone. Jason then
+asked for the cut he had in mind: rules live on the envelope, and the
+Keys tab is about people, not rules. Step 2 does that. Not committed.
+
+**What step 2 changed.**
+
+- `Seal/Views/RuleSheet.swift` (new): one sheet for everything about
+  rules. One card per rule: name (rename and delete behind the ellipsis),
+  the numbers in a sentence, who holds a key, "Numbers" (opens the
+  existing `PolicyView`), "Key holders" (tick people met in person;
+  `addCustodian` / `removeCustodian` on that rule's engine), and, with
+  an envelope in hand, "Use this rule for the envelope" with the
+  warning that both sets need sealing again. "Make a new rule" at the
+  bottom, hidden at three. Reached from the editor's "When it opens"
+  card and from the Envelopes menu as "Your rules".
+- `EnvelopeEditorView`: a "When it opens" card between the secrets and
+  "Open on a date" (only when `engines` is passed; every other caller is
+  unchanged). It shows the envelope's rule in one line and "Change"
+  opens the rule sheet. `onMove` is handed in by the home screen.
+- `EstateEngines.move(_:from:to:)` (RuleBook.swift): a fresh envelope in
+  the target rule (new id, new content key, because the old key sat in
+  the old rule's tables), the words carried over, every photo, voice and
+  video decrypted under the old rule and attached again under the new,
+  the old copy removed only after everything landed, and the old rule
+  marked `tablesStale` so its next seal publishes its tables without the
+  envelope. `EstateEngine.adopt(_:recipient:)` and `markTablesStale()`
+  are the two engine doors. `Estate.tablesStale` is a new stored
+  property with a default, decoded with `decodeIfPresent` and counted in
+  `hasUnsealedChanges`, cleared by the seal.
+- `EstateHomeView`: the Keys tab is people. `EstateEngines.keyHolderRows`
+  folds the custodians of every rule into one row per person with
+  "Holds a key for Your rule and Sooner" when there is more than one
+  rule; the row opens `PersonView` on the default rule's engine when
+  they hold that one. "Add a key holder" picks the person, then asks
+  which rule when there is more than one. No rule headers, no "The
+  rule" buttons, no "Add a rule" on Keys. `EnvelopeRef` has a stable id
+  so the editor sheet stays up through a move. The setup card's "Set
+  your rule" still opens `PolicyView` for the default rule.
+
+**Not changed:** the crypto, `ReleaseMachine`, `ReleaseFeed`,
+`EstateLogVerifier`, `EstateEvent`, CloudKit, the capsule, `PolicyView`,
+`PersonView`, `FriendsView`, `CoupleSetupView`, `GuardedEstateView`, the
+project file.
+
+**Still on the default rule only:** new envelopes start there (move
+them from the card); "Your saved secrets", "What your family sees" and
+Time Travel read it; People's "Make them a key holder" adds to it.
+
+**Most likely to fail to compile**, in order:
+
+1. `EnvelopeEditorView`'s new trailing parameters `engines:` and
+   `onMove:` after `ownerName:` (the call in `EstateHomeView` passes
+   them in that order; the memberwise init follows declaration order).
+2. `Estate.tablesStale`: the `Keys` enum in the `Estate` decoding
+   extension gained `case tablesStale`; the synthesized `encode(to:)`
+   uses the synthesized CodingKeys, which include it automatically.
+3. In `RuleSheet`, `current === engine` (both `EstateEngine?` and
+   `EstateEngine`; if it complains, write `current.map { $0 === engine } ?? false`).
+4. `confirmationDialog` with a `ForEach` over engines for the "which
+   rule" question in `EstateHomeView`.
+5. `EstateEngines.move` uses `Envelope.unbound(name:title:now:)` and
+   `Envelope.new(...)`, then assigns `firstSteps`, `secretConfirmations`,
+   `openNoEarlierThan`; all are `var`s on `Envelope`.
+6. The `card(...)` helper in the editor with a `Text` and an `if` in its
+   content closure (the same shape the other cards use).
+
+**How to test.** Build. Envelopes tab: open an envelope, scroll to "When
+it opens": it names your rule and its key holders. Tap Change: the rule
+sheet, your rule marked as this envelope's. Tap "Make a new rule", keep
+Sooner, Add: the numbers screen opens with 30, 7, 0; Done. On the Sooner
+card tap "Key holders" and tick Karen. Tap "Use this rule for the
+envelope", confirm: the sheet's marker moves to Sooner; Done; the card
+now says "When it opens: Sooner". Back on the inbox the row carries a
+Sooner tag and the Seal bar says two envelopes (or "Seal again" for the
+old rule). Seal. Keys tab: one Karen row, "Holds a key for Your rule and
+Sooner". On Karen's phone, For others shows "Jason" and "Jason (Sooner)".
+Time Travel past 30 days on Karen's side and the Sooner claim can start
+while the letters cannot. Envelopes menu, "Your rules": the same sheet
+with no envelope marked.
+
+## THE FIRST MINUTE, REDONE (2026-09-16 evening, UNCOMPILED)
+
+Written through the file bridge (the Mac shell would not start). Nothing
+here has been built. Not committed.
+
+The onboarding was written before most of this week's features existed.
+Same bones (two shared screens, a fork by role, one figure per screen,
+skippable, re-openable, Chapters menu), new content, two new paths.
+
+**What changed.**
+
+- "Which one are you?" has four choices: Just me, Me and my partner, I was
+  handed a key, Someone wrote me an envelope. `OnboardingRole` gains
+  `.couple`; `.sealer` is unchanged, so every caller compiles as it was.
+- The two sealer paths are one script builder (`sealerScreens`) with an
+  id prefix (`s.` and `c.`), so the copy exists once. Just me is eleven
+  screens after the fork; the couple path is twelve (it adds "Two phones"
+  and swaps the keys screen for "One more key holder each", and its
+  checklist says what happens on each phone). Between them they teach:
+  the envelope and its parts, the seed phrase catch, the check-in with
+  Siri and the widget, the rule, one tap stops it, who opens what, the
+  arithmetic, key holders met in person with the yearly tap and the
+  printed page, the backup key and why there is no email reset, bills
+  and medical, envelopes that wait (typed name, sponsored key in one
+  line, open on a date said exactly, the delete question), and the price.
+- The price screen reads `SealPurchase.displayPrice` from the environment
+  (`@Environment(SealPurchase.self) private var purchase: SealPurchase?`,
+  optional so previews and any tree without the store do not crash) and
+  falls back to "The price is shown before you pay." No number is typed
+  anywhere. Key holders and recipients never see a price.
+- Key holder path: four screens, tightened, plus the yearly tap and the
+  printed page on the keep screen. Fixed two old wrong sentences: at a
+  threshold of 1 with several key holders the title said "You are the only
+  one" (now "Any one of you can act"), and the curve screen said "1 points
+  fix the line" (now its own honest screen at a threshold of 1). "All
+  three of you" and "both of you" at a threshold equal to the count.
+- Recipient path: three screens, tightened. No longer says the envelope
+  opens "after the person is gone" as a fact; says "after a long silence"
+  and "after their key holders act" (PRODUCT.md section 8).
+- `OnboardingNumbers.custodyConfirmMonths` (defaulted, read from the real
+  policy when there is one) and `custodyConfirmLead` ("Once a year,"), so
+  the yearly tap is never a typed number. `anyMofN` says "all 3" instead
+  of "any 3 of 3". The timeline legend no longer says "0 more quiet days"
+  or "1 days".
+- Two new figures in `OnboardingFigures.swift`: `TwoPhonesFigure` (two
+  phones, a key crosses each way, brass on landing because the handover
+  is a receipt) and `SpareKeyFigure` (the key in use, a spare slides in
+  behind it). Animate once, Reduce Motion shows the finished state.
+- Every figure has an accessibility label in words
+  (`OnboardingScreen.Figure.accessibilityLabel(_:)`), applied on the
+  figure in `SealOnboardingView`.
+- Skip, Back, Next and the role buttons all carry `parentTapTarget()`.
+
+**Files.** `Seal/Views/Onboarding/SealOnboardingView.swift` (rewritten),
+`Seal/Views/Onboarding/OnboardingFigures.swift` (numbers struct, legend,
+two figures added; the four old figures untouched),
+`Seal/SelfTest/OnboardingCopyTests.swift` (new),
+`Seal/SelfTest/SelfTestRegistry.swift` (one line), this file. Not touched:
+`SealMark.swift`, `GuardedRoleCard.swift`, `RegistrationView`,
+`ProfileView`, `EstateHomeView`, `CoupleSetupView`, `SponsoredKeyView`,
+the paywall, the store, any engine, the project file.
+
+**Tests.** `OnboardingCopyTests`, registered: every title, body, step,
+role button and figure label, at thresholds 1 to 3 and key holder counts
+1 to 3, real and default numbers, with a price and without, has no em
+dash, no "custodian", no whole word "will", no double space, no "1 days"
+or "0 days"; every path has at least three screens and ends on steps
+(sealer paths) or keep (key holder, recipient); ids are unique and do
+not move with the numbers; the price sentence reads right with a price
+and with nil and never leaks to a key holder or recipient; at a
+threshold of 1 no key holder screen says "does nothing" or "cannot open
+anything"; above 1 it does.
+
+**Most likely to fail to compile**, in order:
+
+1. `@Environment(SealPurchase.self) private var purchase: SealPurchase?`.
+   If the compiler rejects the optional form, make it non-optional and
+   inject `.environment(SealPurchase())` in the four `#Preview` blocks.
+2. `OnboardingScreen.Figure` now has an associated value case AND plain
+   cases with `isSteps` / `isKeep` written as one-line `if case`. If it
+   complains, expand them to a `switch`.
+3. `String + Substring` in `OnboardingScript.word(_:capital:)`; it is
+   wrapped in `String(...)` already, but if it still complains, build it
+   with `.capitalized`.
+4. In the tests, `for price in [fakePrice, nil]` infers `[String?]`; if
+   not, write `[String?]` explicitly.
+5. `TwoPhonesFigure` uses `.position` inside a `GeometryReader`; if the
+   phones overlap oddly at Bigger text, the figure height (170) is the
+   knob.
+
+**How to test on a phone.** Delete the app (or clear `seal.welcomeSeen` by
+signing out and reinstalling). Launch. The onboarding shows before
+registration. Walk all four paths from "Which one are you?", then open
+Chapters and jump into the middle of each. Then register, and check the
+backup key prompt still appears after sign-up (untouched, but the copy
+now promises it). Then You, Help, "How Seal works" (opens at the front).
+Then on a key holder's phone, For others, "See how it opens" (opens on
+the key holder path with that estate's real numbers; with a threshold of
+1 the titles change). Turn on Bigger text in You and open it again from
+Help: every screen scrolls, nothing drags sideways, the role buttons and
+Next are tall. Turn on Reduce Motion in Settings, Accessibility, Motion,
+and page through: every figure shows its finished picture at once.
 
 ## What Seal is
 
@@ -23,6 +209,184 @@ timestamps, custody receipts and sealed cards were kept and extended.
 - Team `8C4BM6A82T` · Bundle `io.github.jasonepage.Seal`
 - CloudKit container `iCloud.io.github.jasonepage.Seal`
 - WebAuthn relying party `sealmessenger.com`
+
+## DELETING AN ACCOUNT THAT HAS ENVELOPES (2026-09-16 afternoon, UNCOMPILED)
+
+Jason asked what happens to Karen's envelopes when she deletes her account.
+The answer was: it depended on an accident. If her delete managed to flip
+her live record, every key holder's and recipient's phone failed the owner
+lookup, "What has happened" froze, and a release could never be accepted
+(stuck forever). If the flip failed (record created by another iCloud
+account), everything carried on as a plain silence and the envelopes
+opened, although the delete screen promised "ALL data is destroyed".
+Nobody was ever told she left. Jason chose: **ask the owner**, and **sign
+the delete marker**.
+
+What was built:
+
+- **The question.** `ProfileView`'s delete dialog, when anything is sealed,
+  offers "Delete, and keep my envelopes for my family" or "Delete, and
+  cancel my envelopes forever". Deleting now takes one tap of the key.
+  `ProfileView` takes `urgentEngine` (HomeView passes it) so both sets are
+  covered.
+- **The entry.** New owner event kind `ownerDeparted`, body
+  `DepartureBody { keepEnvelopes, departedAtEpoch }`, written by
+  `EstateEngine.announceDeparture` straight to the directory (and stamped)
+  before the marker and the wipe. Admitted as an owner kind by
+  `EstateLogVerifier`; `ReleaseFeed` passes over it (it still moves the
+  silence anchor like any owner entry); `ReleaseMachine` untouched;
+  `RecordEvent`, `RecordView`, `tools/verify_capsule.py`,
+  `docs/CAPSULE.md` know the kind. Old builds drop the entry unread.
+- **What it means.** `Seal/Estate/DepartureRules.swift` (new). Keep: the
+  rule runs its course; the key holder's screen shows the earliest claim
+  date (entry + silence) and the earliest opening (plus warnings and
+  grace). Cancel: the owner's phone deletes every sealed blob it uploaded,
+  and `EstateEngine.openClaim`, `authorize` and `release` refuse. A cancel
+  beats a keep. A later owner heartbeat voids the entry (the delete did not
+  finish). A release that already happened stays opened.
+- **The screens.** `GuardedEstateView`: an orange card first, "Karen
+  deleted her Seal account", with the dates or "They can never be opened";
+  the status, custody and action cards hide when cancelled; the history
+  line reads "Karen deleted their Seal account and kept the envelopes for
+  their family." (or "cancelled the envelopes."). "A custodian" in that list
+  is now "A key holder". The For others row says the same in one line.
+- **The record no longer freezes.** `deleteIdentity` flips the tier but no
+  longer scrubs device endorsements. `SyncEngine.fetchIdentityForHistory`
+  reads a deleted record only when this phone pinned that key, and
+  `EstateEngine.refresh` falls back to it (`ownerForHistory`). Owners
+  deleted by an older build (Karen's test) had their endorsements scrubbed,
+  so their record stays frozen on other phones; delete and re-test.
+- **Signed delete marker.** `Seal/Identity/TombstoneProof.swift` (new): the
+  owner's tap over SHA256("seal.identity.delete.v1" || nonce), stored in
+  the marker's existing `revocations` field. `isTombstoned` and the
+  directory scan count a marker only when the proof verifies under the
+  pinned key or the live record's key (or when no identity exists to
+  protect). `CeremonyManager.signDeletion` makes the tap; the retire
+  ceremony's tap now uses the same challenge and is stored as the proof.
+  Unsigned markers from older builds count only on the phone that wrote
+  them, or where the live tier was flipped. No schema change.
+- **Tests:** `Seal/SelfTest/DepartureTests.swift`, registered: only the
+  owner's key makes a marker count (stranger, wrong hash, other challenge,
+  other website all refused); only the owner can write the entry; keep,
+  cancel wins, garbled reads as cancel, a later check-in voids it; the
+  dates follow the rule and the machine is unchanged.
+- Docs: `docs/RELEASE.md` section 11 (old 11 is now 12), `docs/GOTCHAS.md`.
+
+Most likely to fail to compile: `markers.updateValue(... as? Data, forKey:)`
+on a `[String: Data?]` in `BackupDirectory.swift`; the `Text(departure.map {
+... } ?? ...)` in `EstateHomeView.forOthersRow`; `for n in 1...e.epoch` with
+`UInt64`.
+
+How to test: two phones on this build. Mom seals an envelope for you with
+you as key holder. On Mom's phone: You, Delete identity, pick keep, tap
+Face ID. On yours: For others, Mom's row says she deleted her account and
+kept them; open it and see the orange card with two dates and the new
+line in "What has happened". Repeat with cancel on a fresh identity:
+the card says they can never be opened and the claim button is gone.
+Time Travel past the silence on the keep case and the claim button appears.
+
+## TWO BUGS: REVOKE AND DELETED PEOPLE (2026-09-16 midday, UNCOMPILED)
+
+Written through the file bridge (the Mac shell would not start). Nothing
+here has been built. Not committed.
+
+### Bug 1: "Revoke device" in You did nothing
+
+Causes found, all fixed:
+
+1. `CeremonyManager.revokeDevice` sent both providers in one request, so a
+   passkey owner got the security key sheet and cancelled. Now one
+   provider by the owner's tier (the earlier session's edit, confirmed on
+   disk and read through). `revokeBackupCredential` in
+   `BackupKeyCeremony.swift` had the same two-provider bug; fixed the same way.
+2. `ProfileView` swallowed errors with `try?`. Now do/catch with a "Could not
+   revoke" alert (earlier session's edit, confirmed). A cancelled tap shows
+   no alert.
+3. **Creator-only write.** `SyncEngine.publishRevocation` saved into the
+   Identity record, which only the iCloud account that created it may
+   modify. It now always writes a side record: type `GroupInvite`, random
+   name `rvk.<hash>.<uuid>`, `recipient` = `revoke.<hash>`, `payload` = the
+   `DeviceRevocation` JSON. It still also tries the Identity record's own
+   list (works for the creator; older builds read only that). Random name
+   on purpose: a predictable name could be created first by a stranger and
+   block the revocation. `fetchSideRevocations` reads every page (capped at
+   20 pages). `fetchIdentity` and `fetchDeviceList` merge the side list in.
+   Every revocation still has to verify under the ROOT key
+   (`revokedDevicePublicKeys`), so junk records do nothing. The unsigned
+   `revokedAt` field stays gone. No new record type, no new field; it
+   relies on the `recipient` QUERYABLE index that invites already need.
+   `fetchIdentity` now throws if that query fails (fail closed).
+4. `revokeDevice` now verifies the tap against the root key before
+   publishing, and if the saved root has no `rawCredentialID` it asks the
+   directory once before throwing `missingCredentialID`. On a phone that
+   signed in normally the ID is there: `fetchIdentity` reads the
+   `credentialID` field and sign-in saves that root.
+5. The Profile list could still say "not revoked" for a few seconds
+   (query index lag). `ProfileView.revokedHere` shows it revoked at once.
+
+Known limit, not fixed: `publishIdentity` has the same creator-only rule,
+so a phone signed into a DIFFERENT iCloud account than the one that first
+published the identity cannot add its own endorsement. That phone would not
+be in the device list to begin with.
+
+### Bug 2: a deleted person still showed in People
+
+- `Friendship.tombstonedAt: Date?` with a hand-written `init(from:)` in
+  `Models.swift` (decodeIfPresent for every later field).
+- `FriendStore`: `markGone`, `goneMarks`, `goneDate`, `lastGoneCheck`, and a
+  small ledger (`seal.gone.<hash>`) so the mark outlives "Remove from
+  People" and covers key holders with no friendship. `FriendStore.wipe`
+  clears both new keys.
+- `Seal/Identity/GoneCheck.swift` (new): `SyncEngine.accountState` (the live
+  record's tier flag first, then the `tomb.<hash>` marker; throws when
+  offline, so nobody is marked by a blip), `FriendStore.refreshGone`
+  (friends plus the key holders and recipients of BOTH slots; at most once
+  a day unless forced; the day only resets after a full pass), and the pure
+  estate helpers: `Envelope.isUndeliverable(gone:)`,
+  `Estate.undeliverableEnvelopes`, `Estate.goneCustodians`,
+  `CustodyConfirmation.goneStanding` and `.unresponsive`,
+  `EstateEngine.custodyStanding(for:gone:)`, `.unresponsiveKeyHolders`,
+  `.reassignEnvelope`.
+- People (`FriendsView`): pull to refresh, plus the daily check on appear.
+  A gone row loses the badge, greys out, says "Deleted their Seal account.
+  Found <date>." Its press-and-hold menu has "Remove from People" (the
+  friendship only). The ordinary Remove now clears the key holder from both
+  slots. Role text says "Key holder".
+- `PersonView`: an orange banner at the top; the key holder card becomes
+  one line and "Stop being a key holder" (both slots); no handover, no
+  printed page, no "make them a key holder"; "Remove from People" with a
+  confirmation. Leftover "custodian" copy there is now "key holder".
+- Envelopes inbox: an undeliverable row says "Karen deleted their Seal
+  account. This envelope cannot be delivered." Press and hold: "Give it to
+  someone else" (the existing picker, gone people hidden) or "Delete this
+  envelope" (with a confirmation). A seal with such an envelope still
+  fails until the owner deals with it; that is the old behavior.
+- Keys tab: an orange box above the rows counts unresponsive key holders
+  (overdue or gone), says how many are gone, and warns when fewer can
+  help than the rule needs. The row greys out and uses the gone line.
+  `ReleasePolicy` is never changed by any of this.
+- Also runs once a day from `EstateHomeView.task`, for both slots.
+- Not touched: ReleaseMachine, ReleaseFeed, EstateLogVerifier. No new
+  CloudKit record types. `docs/CLOUDKIT_DEPLOY.md` step 7 notes that
+  revocations now use the `GroupInvite` index too.
+- Tests: `Seal/SelfTest/GoneAccountTests.swift`, registered. Old JSON
+  decodes and is not gone; the mark survives a reload and a removal; a
+  gone recipient makes the envelope undeliverable; a gone key holder is
+  counted.
+
+Most likely to fail to compile: `catch CeremonyManager.CeremonyError.cancelled`
+in ProfileView (if it complains, use `catch let e as CeremonyManager.CeremonyError where e == .cancelled`,
+the enum has no payloads); the `let role: String? = switch` expression in
+FriendsView; `init(from:)` in the `Friendship` extension.
+
+### How to test
+
+Bug 1: on a phone with two devices on the identity, You, the minus next to
+the other device, Revoke device, Face ID or key. Expect the row to strike
+through at once and stay struck through after reopening You.
+Bug 2: on the owner phone, pull down on People after the other phone
+deletes its identity. Expect the row to grey out and say the account was
+deleted.
 
 ## THE SPONSORED KEY (built 2026-09-16, UNCOMPILED, needs hardware)
 
@@ -69,6 +433,15 @@ Making one a key holder would need `myShare` and `release` to try
 `kemPrivateBundles` too and a way to tap the key for authorization on the
 future phone; that works in principle (the key is the root credential)
 but is untested and deliberately left for after the first hardware pass.
+
+## FOR OTHERS: a fourth tab (2026-09-16, UNCOMPILED)
+
+Jason's call: what this phone holds for other people is its own tab,
+"For others", shown only when `lettersEngine.guarded` is not empty. One
+compact row per person (name, the part held, the state line, lit when
+the state needs this person), tap for `GuardedEstateView`, one "See how
+it opens" button. `guardedSection` and its cards are gone from the Keys
+tab. A phone that only holds things for others opens on that tab.
 
 ## BILLS AND MEDICAL: the second envelope set (built 2026-09-16, UNCOMPILED)
 

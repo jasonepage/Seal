@@ -60,11 +60,34 @@ final class SyncEngine {
     /// record next, a publish writes it), so an unreachable directory is an
     /// error here, not a "probably fine". The local graveyard is consulted
     /// first and needs no network at all.
+    ///
+    /// SIGNED MARKERS ONLY (TombstoneProof.swift). A marker counts when its
+    /// proof verifies under the pinned key, or the live record's key. An
+    /// unsigned or forged one is ignored, so a stranger cannot lock anybody
+    /// out. A live record flipped to the deleted tier still counts, since
+    /// only its creator could flip it.
     func isTombstoned(credentialIDHash hash: String) async throws -> Bool {
         if DeletedIdentityLedger.contains(hash) { return true }
         let id = CKRecord.ID(recordName: Self.tombstoneName(hash))
-        do { _ = try await publicDB.record(for: id); return true }
+        let marker: CKRecord
+        do { marker = try await publicDB.record(for: id) }
         catch let error as CKError where error.code == .unknownItem { return false }
+        var knownKey = KeyPinStore.pinnedKey(for: hash)
+        if knownKey == nil {
+            do {
+                let live = try await publicDB.record(for: CKRecord.ID(recordName: hash))
+                if live["tier"] as? String == Self.deletedTier { return true }
+                knownKey = live["publicKey"] as? Data
+            } catch let error as CKError where error.code == .unknownItem {
+                // No live record: nothing for the marker to hurt.
+            }
+        }
+        let counts = TombstoneProof.markerCounts(hash: hash, proofData: marker[TombstoneProof.field] as? Data,
+                                                 knownKey: knownKey)
+        if !counts {
+            WebAuthnDiag.log.error("isTombstoned: ignoring an unsigned or forged delete marker for \(hash, privacy: .public)")
+        }
+        return counts
     }
 
     // MARK: - Identity directory (FR-4)
@@ -285,6 +308,7 @@ final class SyncEngine {
            let decoded = try? JSONDecoder().decode([DeviceRevocation].self, from: data) {
             revocations = decoded
         }
+        revocations += try await fetchSideRevocations(credentialIDHash: credentialIDHash)
 
         // Backup credentials (FR-3). THIS is the single point where a backup
         // is checked against the root signature and the revocation list, so
@@ -327,18 +351,103 @@ final class SyncEngine {
         try await fetchDirectoryCredentials().map(\.credentialID)
     }
 
-    /// Append a (root-key-signed) device revocation to our directory record.
+    // MARK: - Revocations (FR-19, FR-3)
+    //
+    // THE CREATOR-ONLY RULE. A public database record can be modified only
+    // by the iCloud account that created it. `publishRevocation` used to
+    // append to the Identity record itself, so on any phone signed into a
+    // different iCloud account than the one that first published the
+    // identity, the save failed with "WRITE operation not permitted" and
+    // the revocation never landed. Same shape as the delete problem, and
+    // the same cure: a record this account creates, and therefore owns.
+    //
+    // WHERE IT GOES. A `GroupInvite` record (existing type, no schema
+    // change) with a RANDOM name, `recipient` = "revoke.<identity hash>"
+    // (already QUERYABLE) and `payload` = the DeviceRevocation JSON.
+    //   - Random, not "revoke.<hash>.<device>": a predictable name can be
+    //     created first by anybody, and a squatted name would block the
+    //     real revocation forever. A random name cannot be squatted.
+    //   - Found by query on `recipient`, the index the invite path already
+    //     requires. The invite push predicate is `recipient == <hash>`, and
+    //     "revoke.<hash>" never equals a hash, so no alert fires.
+    //
+    // WHY THIS IS STILL SAFE. Anybody can create such a record. That buys
+    // them nothing: every revocation, from the Identity record or from a
+    // side record, goes through `IdentityManager.revokedDevicePublicKeys`
+    // (or the backup twin), which drops anything not signed by the ROOT
+    // credential over `seal.revoke.v1` + the device key. Junk is ignored.
+    // The unsigned `revokedAt` field stays gone (security fix 3).
+
+    static func revocationAddress(_ credentialIDHash: String) -> String { "revoke.\(credentialIDHash)" }
+
+    /// Publish a root-signed revocation. The side record always; the
+    /// Identity record's own list too when this account is its creator.
     func publishRevocation(_ revocation: DeviceRevocation, for credentialIDHash: String) async throws {
+        // 1. Authoritative, and works from any iCloud account.
+        let sideID = CKRecord.ID(recordName: "rvk.\(credentialIDHash).\(UUID().uuidString)")
+        let side = CKRecord(recordType: "GroupInvite", recordID: sideID)
+        side["recipient"] = Self.revocationAddress(credentialIDHash)
+        side["payload"] = try JSONEncoder().encode(revocation)
+        try await publicDB.save(side)
+
+        // 2. Best effort: the legacy list on the Identity record. Older
+        //    builds read only this, and a direct fetch has no query index
+        //    lag. Skipped quietly when another account owns the record.
         let recordID = CKRecord.ID(recordName: credentialIDHash)
-        let record = try await publicDB.record(for: recordID)
-        var revocations: [DeviceRevocation] = []
-        if let existing = record["revocations"] as? Data,
-           let decoded = try? JSONDecoder().decode([DeviceRevocation].self, from: existing) {
-            revocations = decoded
+        for attempt in 1...3 {
+            do {
+                let record = try await publicDB.record(for: recordID)
+                var revocations: [DeviceRevocation] = []
+                if let existing = record["revocations"] as? Data,
+                   let decoded = try? JSONDecoder().decode([DeviceRevocation].self, from: existing) {
+                    revocations = decoded
+                }
+                guard !revocations.contains(where: { $0.devicePublicKey == revocation.devicePublicKey
+                                                     && $0.assertion == revocation.assertion }) else { return }
+                revocations.append(revocation)
+                record["revocations"] = try JSONEncoder().encode(revocations)
+                try await publicDB.save(record)
+                return
+            } catch let error as CKError where error.code == .serverRecordChanged {
+                try? await Task.sleep(for: .milliseconds(200 << attempt))
+                continue
+            } catch {
+                WebAuthnDiag.log.info("publishRevocation: side record saved; identity record not updated (\(error.localizedDescription, privacy: .public))")
+                return
+            }
         }
-        revocations.append(revocation)
-        record["revocations"] = try JSONEncoder().encode(revocations)
-        try await publicDB.save(record)
+    }
+
+    /// Revocations published as side records, unverified. Every page is
+    /// read, because a stranger could pad the query with junk to push the
+    /// real one off the first page. Capped so junk cannot make this run
+    /// forever; the cap is far above anything a real identity writes.
+    /// Throws when the directory cannot be read: a revocation we failed to
+    /// fetch must not read as "nothing revoked".
+    func fetchSideRevocations(credentialIDHash: String) async throws -> [DeviceRevocation] {
+        let query = CKQuery(recordType: "GroupInvite",
+                            predicate: NSPredicate(format: "recipient == %@", Self.revocationAddress(credentialIDHash)))
+        var out: [DeviceRevocation] = []
+        func absorb(_ results: [(CKRecord.ID, Result<CKRecord, any Error>)]) {
+            for (_, result) in results {
+                guard let record = try? result.get(), let data = record["payload"] as? Data,
+                      let revocation = try? JSONDecoder().decode(DeviceRevocation.self, from: data) else { continue }
+                out.append(revocation)
+            }
+        }
+        var (results, cursor) = try await publicDB.records(matching: query, desiredKeys: ["payload"], resultsLimit: 200)
+        var pages = 1
+        while true {
+            absorb(results)
+            guard let next = cursor else { break }
+            guard pages < 20 else {
+                WebAuthnDiag.log.error("fetchSideRevocations: more than 20 pages for \(credentialIDHash, privacy: .public), stopping")
+                break
+            }
+            (results, cursor) = try await publicDB.records(continuingMatchFrom: next, desiredKeys: ["payload"], resultsLimit: 200)
+            pages += 1
+        }
+        return out
     }
 
     /// Account deletion (App Review 5.1.1(v)): remove our Identity record
@@ -353,7 +462,11 @@ final class SyncEngine {
     /// endorsements scrubbed, and keep the record as a gravestone that
     /// fetchIdentity, the sign-in allow-list, and publishIdentity all refuse to
     /// revive (FR-19). Uses only existing fields, so no schema change.
-    func deleteIdentity(credentialIDHash: String) async throws {
+    /// `proof` is the owner's tap over the delete challenge. Without it the
+    /// marker is ignored by every other phone (TombstoneProof.swift); the
+    /// only callers are ProfileView's delete and the retire ceremony, and
+    /// both pass one.
+    func deleteIdentity(credentialIDHash: String, proof: TombstoneProof) async throws {
         // 1. Authoritative deletion = a write-once marker record that THIS
         //    account creates and therefore OWNS. Creating a brand-new record
         //    always succeeds (you're the creator of what you create), so delete
@@ -367,6 +480,7 @@ final class SyncEngine {
         do {
             let tomb = CKRecord(recordType: "Identity", recordID: tombID)
             tomb["tier"] = Self.deletedTier
+            tomb[TombstoneProof.field] = try JSONEncoder().encode(proof)
             try await publicDB.save(tomb)
         } catch let error as CKError where error.code == .serverRecordChanged {
             // Marker already present (this or another account deleted before).
@@ -387,7 +501,12 @@ final class SyncEngine {
         let record = (try? await publicDB.record(for: recordID))
             ?? CKRecord(recordType: "Identity", recordID: recordID)
         record["tier"] = Self.deletedTier
-        record["deviceEndorsements"] = Data()
+        // The device endorsements STAY (changed 2026-09-16). They are signed
+        // public data, and they are what lets a key holder's phone keep
+        // checking the owner's past record entries, including the
+        // "I deleted my account" one, after the account is gone
+        // (`fetchIdentityForHistory`). Nothing can be sent to them anyway:
+        // `fetchIdentity` returns nil for the deleted tier.
         // Scrub backup credentials as well, so a deleted identity can't be
         // reached through one (FR-3). Guarded on the field already being
         // present: writing a field the Production schema doesn't have yet
@@ -407,6 +526,53 @@ final class SyncEngine {
         WebAuthnDiag.log.info("deleteIdentity: tombstoned \(credentialIDHash, privacy: .public) (marker written; live record flipped: \(flipped, privacy: .public))")
     }
 
+    /// A DELETED identity, for checking what it signed while it was alive.
+    ///
+    /// `fetchIdentity` returns nil for a deleted identity, which is right
+    /// for anything that sends or signs in. But a key holder still has to
+    /// verify the owner's old record entries, or the record freezes the day
+    /// the owner leaves. So this reads the flipped record anyway, and only
+    /// when this phone PINNED the owner's key when they met: the pin is the
+    /// trust, the record only supplies the device list the key signed.
+    /// Returns nil for a live identity (use `fetchIdentity`), an unpinned
+    /// one, a mismatched key, or a record deleted before endorsements were
+    /// kept (those can only be checked from what the phone already saved).
+    func fetchIdentityForHistory(credentialIDHash: String) async throws -> (RootIdentity, [DeviceEndorsement])? {
+        let record: CKRecord
+        do {
+            record = try await publicDB.record(for: CKRecord.ID(recordName: credentialIDHash))
+        } catch let error as CKError where error.code == .unknownItem {
+            return nil
+        }
+        guard record["tier"] as? String == Self.deletedTier,
+              let pinned = KeyPinStore.pinnedKey(for: credentialIDHash),
+              let publicKey = record["publicKey"] as? Data, publicKey == pinned,
+              let data = record["deviceEndorsements"] as? Data, !data.isEmpty,
+              let endorsements = try? JSONDecoder().decode([DeviceEndorsement].self, from: data)
+        else { return nil }
+        // The tier string is the deleted sentinel, not a real tier. Nothing
+        // on the verification path reads it.
+        let root = RootIdentity(credentialIDHash: credentialIDHash, publicKey: publicKey, tier: .verified,
+                                displayName: record["displayName"] as? String ?? "",
+                                rawCredentialID: record["credentialID"] as? Data)
+        var revocations: [DeviceRevocation] = []
+        if let data = record["revocations"] as? Data,
+           let decoded = try? JSONDecoder().decode([DeviceRevocation].self, from: data) {
+            revocations = decoded
+        }
+        revocations += try await fetchSideRevocations(credentialIDHash: credentialIDHash)
+        let revoked = IdentityManager.revokedDevicePublicKeys(root: root, revocations: revocations)
+        return (root, endorsements.filter { !revoked.contains($0.devicePublicKey) })
+    }
+
+    /// Remove one of this account's estate blobs. Only the iCloud account
+    /// that saved it may; anything else fails and the caller reports it.
+    /// A blob that is already gone counts as removed.
+    func deleteEstateBlob(name: String) async throws {
+        do { _ = try await publicDB.deleteRecord(withID: CKRecord.ID(recordName: name)) }
+        catch let error as CKError where error.code == .unknownItem { return }
+    }
+
     /// The public key the directory publishes under a hash, or nil when no
     /// record exists there. No pin check, no tier check, no verification:
     /// this is for the retire ceremony, which only needs to know what key a
@@ -421,7 +587,10 @@ final class SyncEngine {
     }
 
     /// Raw device list (including revoked) for the profile UI.
-    func fetchDeviceList(credentialIDHash: String) async throws -> ([DeviceEndorsement], [DeviceRevocation]) {
+    /// `includingSideRevocations` is false only for the sign-in possession
+    /// check, which ignores revocations and should not gain a query.
+    func fetchDeviceList(credentialIDHash: String,
+                         includingSideRevocations: Bool = true) async throws -> ([DeviceEndorsement], [DeviceRevocation]) {
         let record = try await publicDB.record(for: CKRecord.ID(recordName: credentialIDHash))
         var endorsements: [DeviceEndorsement] = []
         var revocations: [DeviceRevocation] = []
@@ -432,6 +601,9 @@ final class SyncEngine {
         if let data = record["revocations"] as? Data,
            let decoded = try? JSONDecoder().decode([DeviceRevocation].self, from: data) {
             revocations = decoded
+        }
+        if includingSideRevocations {
+            revocations += try await fetchSideRevocations(credentialIDHash: credentialIDHash)
         }
         return (endorsements, revocations)
     }

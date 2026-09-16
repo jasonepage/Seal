@@ -22,8 +22,14 @@ struct PersonView: View {
     @Bindable var estateEngine: EstateEngine
     @Bindable var ceremony: CeremonyManager
     let sync: SyncEngine
+    /// Both envelope sets, so "Stop being a key holder" on a gone person
+    /// clears them from each. Empty means just `estateEngine`.
+    var allEngines: [EstateEngine] = []
+    private var engines: [EstateEngine] { allEngines.isEmpty ? [estateEngine] : allEngines }
 
     @State private var handingOver = false
+    @State private var confirmRemove = false
+    @Environment(\.dismiss) private var dismiss
     @State private var handoverError: String?
     @State private var handoverDone = false
     @State private var showRecord = false
@@ -35,12 +41,17 @@ struct PersonView: View {
     private var custodian: Custodian? { estateEngine.estate?.custodians.first { $0.rootHash == hash } }
     private var isRecipient: Bool { estateEngine.estate?.recipients.contains { $0.rootHash == hash } ?? false }
     private var envelopes: [Envelope] { estateEngine.estate?.envelopes(for: hash) ?? [] }
+    /// Read live from the store, not from `person`, which is a copy taken
+    /// when the row was tapped.
+    private var goneAt: Date? { friendStore.goneDate(hash) }
+    private var name: String { person.identity.displayName }
 
     var body: some View {
         ZStack {
             SealTheme.ink.ignoresSafeArea()
             ScrollView {
                 VStack(spacing: 18) {
+                    if let goneAt { goneBanner(goneAt) }
                     VStack(spacing: 8) {
                         IdentityRing(displayName: person.identity.displayName, tier: person.identity.tier, size: 84)
                         Text(person.identity.displayName)
@@ -54,7 +65,11 @@ struct PersonView: View {
                     }
                     .padding(.top, 12)
 
-                    custodianCard
+                    if goneAt == nil {
+                        custodianCard
+                    } else {
+                        goneKeyHolderCard
+                    }
                     envelopesCard
 
                     Button { showRecord = true } label: {
@@ -64,6 +79,16 @@ struct PersonView: View {
                     .buttonStyle(.bordered).tint(.white)
                     .parentTapTarget()
                     .padding(.horizontal, 20)
+
+                    if goneAt != nil {
+                        Button(role: .destructive) { confirmRemove = true } label: {
+                            Label("Remove from People", systemImage: "person.badge.minus")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered).tint(.orange)
+                        .parentTapTarget()
+                        .padding(.horizontal, 20)
+                    }
                 }
                 .padding(.bottom, 24)
                 .frame(maxWidth: 520).frame(maxWidth: .infinity)
@@ -79,6 +104,15 @@ struct PersonView: View {
                            counterpart: person, onClose: { showRecord = false })
             }
             .preferredColorScheme(.dark)
+        }
+        .confirmationDialog(
+            "Remove \(name) from People? Any envelope or key still meant for \(name) stays marked on the Envelopes and Keys tabs until you deal with it there.",
+            isPresented: $confirmRemove, titleVisibility: .visible
+        ) {
+            Button("Remove from People", role: .destructive) {
+                friendStore.remove(hash)
+                dismiss()
+            }
         }
         .alert("Handover", isPresented: Binding(get: { handoverError != nil }, set: { if !$0 { handoverError = nil } })) {
             Button("OK", role: .cancel) {}
@@ -104,7 +138,7 @@ struct PersonView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("A key holder").font(.headline).foregroundStyle(.white)
             if let custodian {
-                Text("\(person.identity.displayName) is one of your custodians. \(custodian.handoverReceiptID == nil ? "\(person.identity.displayName) has not yet confirmed it on this phone." : "\(person.identity.displayName) confirmed it on this phone, and both of you signed the record.")")
+                Text("\(person.identity.displayName) is one of your key holders. \(custodian.handoverReceiptID == nil ? "\(person.identity.displayName) has not yet confirmed it on this phone." : "\(person.identity.displayName) confirmed it on this phone, and both of you signed the record.")")
                     .font(.callout).foregroundStyle(.white.opacity(0.7)).fixedSize(horizontal: false, vertical: true)
                 if custodian.handoverReceiptID == nil {
                     Button { Task { await handOverKey() } } label: {
@@ -155,12 +189,59 @@ struct PersonView: View {
                 .buttonStyle(.bordered).tint(.orange)
                 .parentTapTarget()
             } else {
-                Text("A custodian holds one of the keys that can open your envelopes after you are gone. Pick people who are likely to still be reachable in ten years.")
+                Text("A key holder keeps one of the keys that can open your envelopes after you are gone. Pick people who are likely to still be reachable in ten years.")
                     .font(.callout).foregroundStyle(.white.opacity(0.7)).fixedSize(horizontal: false, vertical: true)
                 Button { estateEngine.addCustodian(person.identity) } label: {
-                    Text("Make \(person.identity.displayName) a custodian").frame(maxWidth: .infinity)
+                    Text("Make \(person.identity.displayName) a key holder").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent).tint(SealTheme.brass)
+                .parentTapTarget()
+            }
+        }
+        .padding(16)
+        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
+        .padding(.horizontal, 20)
+    }
+
+    /// Said once, at the top, in plain words.
+    private func goneBanner(_ at: Date) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("Deleted their Seal account", systemImage: "person.crop.circle.badge.xmark")
+                .font(.headline).foregroundStyle(.orange)
+            Text("This phone found on \(at.formatted(date: .abbreviated, time: .omitted)) that \(name) deleted their Seal account. Nothing new can be sent to \(name), and \(name) cannot hold a key for you. Their name stays here so you know who this was.")
+                .font(.callout).foregroundStyle(.white.opacity(0.75))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
+        .padding(.horizontal, 20)
+        .padding(.top, 12)
+    }
+
+    /// The key holder card for a gone person: what it means, and the one
+    /// action that still makes sense. No handover, no printed page, no
+    /// "make them a key holder". The rule is not changed for the owner.
+    private var goneKeyHolderCard: some View {
+        let stillHolding = engines.filter { engine in
+            engine.estate?.custodians.contains(where: { c in c.rootHash == hash }) ?? false
+        }
+        return VStack(alignment: .leading, spacing: 12) {
+            Text("A key holder").font(.headline).foregroundStyle(.white)
+            if stillHolding.isEmpty {
+                Text("\(name) is not one of your key holders.")
+                    .font(.callout).foregroundStyle(.white.opacity(0.6))
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text("\(name) is still listed as a key holder, but their key can no longer help open your envelopes. Take them off the list, choose another key holder, then seal again.")
+                    .font(.callout).foregroundStyle(.white.opacity(0.75))
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(role: .destructive) {
+                    for engine in stillHolding { engine.removeCustodian(hash) }
+                } label: {
+                    Text("Stop being a key holder").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered).tint(.orange)
                 .parentTapTarget()
             }
         }
@@ -172,8 +253,14 @@ struct PersonView: View {
     private var envelopesCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Envelopes for \(person.identity.displayName)").font(.headline).foregroundStyle(.white)
+            if goneAt != nil, !envelopes.isEmpty {
+                Label("\(name) deleted their Seal account, so these envelopes cannot be delivered. On the Envelopes tab, press and hold one to give it to someone else or delete it.",
+                      systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if envelopes.isEmpty {
-                Text("None yet. Write one from the home screen.")
+                Text(goneAt == nil ? "None yet. Write one from the home screen." : "None.")
                     .font(.callout).foregroundStyle(.white.opacity(0.55))
             } else {
                 // Position in the list, not the stored revealOrder: that
@@ -187,7 +274,7 @@ struct PersonView: View {
                         Text("opens \(ordinal(position + 1))").font(.caption).foregroundStyle(.white.opacity(0.4))
                     }
                 }
-                Text("They open on \(person.identity.displayName)'s phone, in this order, only after release. Nobody else, including the custodians, learns these exist.")
+                Text("They open on \(person.identity.displayName)'s phone, in this order, only after release. Nobody else, including the key holders, learns these exist.")
                     .font(.caption).foregroundStyle(.white.opacity(0.45)).fixedSize(horizontal: false, vertical: true)
             }
         }

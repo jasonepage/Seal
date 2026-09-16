@@ -60,11 +60,52 @@ extension CeremonyManager {
         }
     }
 
+    /// The tap that deletes a signed-in identity (ProfileView). One
+    /// provider, by the owner's tier, over the delete challenge. The tap is
+    /// checked here before anything is written, so a wrong key never
+    /// produces a marker other phones would ignore.
+    func signDeletion(myRoot: RootIdentity, directory: SyncEngine) async throws -> TombstoneProof {
+        var rawID = myRoot.rawCredentialID
+        if rawID == nil {
+            rawID = (try? await directory.fetchIdentity(credentialIDHash: myRoot.credentialIDHash))?.0.rawCredentialID
+        }
+        guard let credentialID = rawID else { throw CeremonyError.missingCredentialID }
+        setPhase(.searching)
+        do {
+            let nonce = Self.randomChallenge()
+            let credential = try await performRequest(
+                makeAssertionRequest(tier: myRoot.tier, challenge: TombstoneProof.challenge(nonce: nonce),
+                                     allowedCredentialID: credentialID))
+            guard let assertion = credential as? ASAuthorizationPublicKeyCredentialAssertion else {
+                throw CeremonyError.unexpectedCredential
+            }
+            let proof = TombstoneProof(nonce: nonce, assertion: WebAuthnAssertion(
+                credentialID: assertion.credentialID,
+                clientDataJSON: assertion.rawClientDataJSON,
+                authenticatorData: assertion.rawAuthenticatorData,
+                signature: assertion.signature))
+            guard proof.proves(deletionOf: myRoot.credentialIDHash, publicKey: myRoot.publicKey) else {
+                throw CeremonyError.verificationFailed
+            }
+            resetPhase()
+            return proof
+        } catch let error as ASAuthorizationError where error.code == .canceled {
+            setPhase(.failed(CeremonyError.cancelled.localizedDescription))
+            throw CeremonyError.cancelled
+        } catch {
+            setPhase(.failed((error as? LocalizedError)?.errorDescription ?? "Something went wrong. Tap to try again."))
+            throw error
+        }
+    }
+
     /// Returns the retired credential's hash.
     func retireCredential(directory: SyncEngine, tier: IdentityTier) async throws -> String {
         setPhase(.searching)
         do {
-            let challenge = Self.randomChallenge()
+            // The delete challenge (TombstoneProof.swift), so this same tap
+            // is the proof stored in the marker.
+            let nonce = Self.randomChallenge()
+            let challenge = TombstoneProof.challenge(nonce: nonce)
             // Kept so the backup check after the tap does not scan twice.
             var scanned: [SyncEngine.DirectoryCredential]?
             let request: ASAuthorizationRequest
@@ -148,7 +189,8 @@ extension CeremonyManager {
                 }
             }
 
-            try await directory.deleteIdentity(credentialIDHash: hash)
+            try await directory.deleteIdentity(credentialIDHash: hash,
+                                               proof: TombstoneProof(nonce: nonce, assertion: stored))
             WebAuthnDiag.log.info("retire: tombstoned \(hash, privacy: .public) without sign-in")
             resetPhase()
             return hash

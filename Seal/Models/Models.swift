@@ -107,8 +107,39 @@ struct Friendship: Codable, Identifiable, Hashable {
     /// owner and handed over (Identity/SponsoredKey.swift). There was no
     /// ceremony because there was no second phone; the owner held the key.
     var sponsored: Bool? = nil
+    /// When this phone found that the person deleted their Seal identity
+    /// (a write-once "tomb.<hash>" marker, or the live record flipped to
+    /// the deleted tier). Set by FriendStore.refreshGone and never cleared:
+    /// a tombstone is forever. nil means not known to be gone. The row
+    /// stays, because the name still means something to the owner.
+    var tombstonedAt: Date? = nil
+    var isGone: Bool { tombstonedAt != nil }
     /// Every friendship is in person now: the remote "introduction" path was
     /// retired with the messenger, and its proof field with it. Old keychain
     /// entries that carried one still decode (the key is ignored).
     var isInPerson: Bool { true }
+}
+
+//  A DEFAULT VALUE DOES NOT MAKE A MISSING KEY DECODE (GOTCHAS, and the
+//  long note at the bottom of EstateModels.swift). Every Friendship in a
+//  keychain today was written without `tombstonedAt`, so the decoder is
+//  written by hand and every field added after the first release is read
+//  with `decodeIfPresent`. Encoding stays synthesized. In an extension so
+//  the memberwise initialiser survives for every existing caller.
+extension Friendship {
+    private enum Keys: String, CodingKey {
+        case friendRootID, attestation, reverseAttestation, forgedAt
+        case autoReciprocated, sponsored, tombstonedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: Keys.self)
+        friendRootID = try c.decode(String.self, forKey: .friendRootID)
+        attestation = try c.decode(Data.self, forKey: .attestation)
+        reverseAttestation = try c.decodeIfPresent(Data.self, forKey: .reverseAttestation)
+        forgedAt = try c.decode(Date.self, forKey: .forgedAt)
+        autoReciprocated = try c.decodeIfPresent(Bool.self, forKey: .autoReciprocated)
+        sponsored = try c.decodeIfPresent(Bool.self, forKey: .sponsored)
+        tombstonedAt = try c.decodeIfPresent(Date.self, forKey: .tombstonedAt)
+    }
 }

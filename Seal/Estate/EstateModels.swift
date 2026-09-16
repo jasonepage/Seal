@@ -317,6 +317,11 @@ struct Estate: Codable, Hashable {
     /// The rule as last published, so a change to silence, warning or grace
     /// days is noticed and announced with a policyChanged event.
     var publishedPolicy: ReleasePolicy? = nil
+    /// True after an envelope was moved out to another rule: the key table
+    /// that listed it must be published again without it, even though no
+    /// envelope that stayed behind changed. Cleared by the next seal.
+    /// A stored property with a default, so older estates decode.
+    var tablesStale: Bool = false
 
     struct TableKeyRecord: Codable, Hashable {
         let tableID: String
@@ -371,7 +376,7 @@ struct Estate: Codable, Hashable {
     /// name is skipped by every step of the seal, so counting it here would
     /// leave the Seal button lit with nothing for it to do.
     var hasUnsealedChanges: Bool {
-        needsNewEpoch || publishedPolicy != policy || addressedEnvelopes.contains { !$0.sealed }
+        needsNewEpoch || publishedPolicy != policy || tablesStale || addressedEnvelopes.contains { !$0.sealed }
     }
 }
 
@@ -459,6 +464,7 @@ extension Estate {
     private enum Keys: String, CodingKey {
         case id, ownerHash, epoch, policy, custodians, recipients, envelopes, createdAt, tableKeys, epochPublished
         case publishedCustodianHashes, publishedThreshold, publishedCustodianDevices, publishedTableIDs, publishedPolicy
+        case tablesStale
     }
 
     init(from decoder: Decoder) throws {
@@ -478,6 +484,7 @@ extension Estate {
         publishedCustodianDevices = try c.decodeIfPresent([String: [String]].self, forKey: .publishedCustodianDevices) ?? [:]
         publishedTableIDs = try c.decodeIfPresent([String].self, forKey: .publishedTableIDs) ?? []
         publishedPolicy = try c.decodeIfPresent(ReleasePolicy.self, forKey: .publishedPolicy)
+        tablesStale = try c.decodeIfPresent(Bool.self, forKey: .tablesStale) ?? false
     }
 }
 

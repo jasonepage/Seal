@@ -5,6 +5,7 @@
 import Foundation
 import CryptoKit
 import AuthenticationServices
+import os
 
 //  CeremonyManager+Sponsored.swift
 //  Seal
@@ -118,23 +119,35 @@ extension CeremonyManager {
 
     // MARK: - PRF plumbing (iOS 26.4 security key API)
 
+    // Guarded, because one build configuration still carries an older
+    // deployment target. Below 26.4 a security key simply reports "cannot
+    // carry a secret", which is the truth on that OS.
+
     static func askPRFSupport(on request: ASAuthorizationRequest) {
-        if let r = request as? ASAuthorizationSecurityKeyPublicKeyCredentialRegistrationRequest {
+        if #available(iOS 26.4, *),
+           let r = request as? ASAuthorizationSecurityKeyPublicKeyCredentialRegistrationRequest {
             r.prf = .checkForSupport
         }
     }
 
     static func prfSupported(in registration: ASAuthorizationPublicKeyCredentialRegistration) -> Bool {
-        (registration as? ASAuthorizationSecurityKeyPublicKeyCredentialRegistration)?.prf?.isSupported ?? false
+        if #available(iOS 26.4, *) {
+            return (registration as? ASAuthorizationSecurityKeyPublicKeyCredentialRegistration)?.prf?.isSupported ?? false
+        }
+        return false
     }
 
     static func attachPRF(salt: Data, to request: ASAuthorizationRequest) {
-        if let r = request as? ASAuthorizationSecurityKeyPublicKeyCredentialAssertionRequest {
+        if #available(iOS 26.4, *),
+           let r = request as? ASAuthorizationSecurityKeyPublicKeyCredentialAssertionRequest {
             r.prf = .inputValues(.init(saltInput1: salt, saltInput2: nil))
         }
     }
 
     static func prfOutput(of credential: ASAuthorizationCredential) -> SymmetricKey? {
-        (credential as? ASAuthorizationSecurityKeyPublicKeyCredentialAssertion)?.prf?.first
+        if #available(iOS 26.4, *) {
+            return (credential as? ASAuthorizationSecurityKeyPublicKeyCredentialAssertion)?.prf?.first
+        }
+        return nil
     }
 }

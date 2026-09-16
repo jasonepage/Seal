@@ -112,9 +112,12 @@ extension SyncEngine {
     }
 
     private func scanDirectory(includingBackups: Bool, includingDead: Bool) async throws -> [DirectoryCredential] {
+        // `publicKey` and the proof field are read so a delete marker counts
+        // only when it is signed (TombstoneProof.swift). `revocations` is
+        // already in every deployed schema.
         let keys = includingBackups
-            ? ["credentialID", "tier", "backupEndorsements"]
-            : ["credentialID", "tier"]
+            ? ["credentialID", "tier", "backupEndorsements", "publicKey", TombstoneProof.field]
+            : ["credentialID", "tier", "publicKey", TombstoneProof.field]
         let query = CKQuery(recordType: "Identity", predicate: NSPredicate(value: true))
         var found: [DirectoryCredential] = []
         // Every identity the directory says is dead: the write-once
@@ -127,15 +130,23 @@ extension SyncEngine {
         // in every allow list and exclusion list, so the dead identity kept
         // showing up in the Face ID picker and blocking re-registration.
         var dead = DeletedIdentityLedger.all()
+        // Markers found, and each live record's key, checked at the end
+        // once both are known (the query returns them in no fixed order).
+        var markers: [String: Data?] = [:]
+        var liveKeys: [String: Data] = [:]
 
         func absorb(_ results: [(CKRecord.ID, Result<CKRecord, any Error>)]) {
             for (recordID, result) in results {
                 guard let record = try? result.get() else { continue }
                 let name = recordID.recordName
                 if name.hasPrefix("tomb.") {
-                    dead.insert(String(name.dropFirst("tomb.".count)))
+                    // updateValue, not subscript: assigning a nil Data? through
+                    // the subscript would drop the marker instead of storing "no proof".
+                    markers.updateValue(record[TombstoneProof.field] as? Data,
+                                        forKey: String(name.dropFirst("tomb.".count)))
                     continue
                 }
+                if let key = record["publicKey"] as? Data { liveKeys[name] = key }
                 if (record["tier"] as? String) == Self.deletedTier {
                     dead.insert(name)
                     continue
@@ -162,6 +173,14 @@ extension SyncEngine {
             guard let next = cursor else { break }
             (results, cursor) = try await publicDB.records(
                 continuingMatchFrom: next, desiredKeys: keys, resultsLimit: 200)
+        }
+        for (hash, proof) in markers {
+            let key = KeyPinStore.pinnedKey(for: hash) ?? liveKeys[hash]
+            if TombstoneProof.markerCounts(hash: hash, proofData: proof, knownKey: key) {
+                dead.insert(hash)
+            } else {
+                WebAuthnDiag.log.error("directory scan: ignoring an unsigned or forged delete marker for \(hash, privacy: .public)")
+            }
         }
         if includingDead { return found }
         return found.filter { !dead.contains($0.ownerHash) }
@@ -297,7 +316,8 @@ extension SyncEngine {
         guard let rootPub = try? P256.Signing.PublicKey(rawRepresentation: root.publicKey) else { return false }
         let endorsements: [DeviceEndorsement]
         do {
-            let (list, _) = try await fetchDeviceList(credentialIDHash: root.credentialIDHash)
+            let (list, _) = try await fetchDeviceList(credentialIDHash: root.credentialIDHash,
+                                                     includingSideRevocations: false)
             endorsements = list
         } catch {
             WebAuthnDiag.log.error("signIn: could not fetch device list for possession check: \(error.localizedDescription, privacy: .public)")

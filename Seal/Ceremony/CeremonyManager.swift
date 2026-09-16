@@ -582,12 +582,24 @@ final class CeremonyManager: NSObject {
     /// Revoke a device (FR-19): the ROOT key signs a challenge committing to
     /// the device being killed. Only the root key holder can do this.
     func revokeDevice(devicePublicKey: Data, myRoot: RootIdentity, directory: SyncEngine) async throws {
-        guard let credentialID = myRoot.rawCredentialID else { throw CeremonyError.missingCredentialID }
+        // The saved root normally carries its credential ID (registration
+        // sets it, sign-in reads it from the directory). A root saved by an
+        // older build may not, so ask the directory once before giving up.
+        var rawID = myRoot.rawCredentialID
+        if rawID == nil {
+            rawID = (try? await directory.fetchIdentity(credentialIDHash: myRoot.credentialIDHash))?.0.rawCredentialID
+        }
+        guard let credentialID = rawID else { throw CeremonyError.missingCredentialID }
         phase = .searching
         do {
             let commitment = Data(SHA256.hash(data: Data("seal.revoke.v1".utf8) + devicePublicKey))
-            let credential = try await performRequests(
-                makeFriendAssertionRequests(friendCredentialID: credentialID, challenge: commitment))
+            // ONE provider, chosen by the owner's tier, the same reason signIn
+            // does: with both in one request iOS goes straight to the
+            // security key sheet, and a passkey owner never sees Face ID,
+            // cancels, and nothing happens. This is the owner's own root
+            // credential, so its tier is known.
+            let credential = try await performRequest(
+                makeAssertionRequest(tier: myRoot.tier, challenge: commitment, allowedCredentialID: credentialID))
             guard let assertion = credential as? ASAuthorizationPublicKeyCredentialAssertion else {
                 throw CeremonyError.unexpectedCredential
             }
@@ -596,6 +608,14 @@ final class CeremonyManager: NSObject {
                 clientDataJSON: assertion.rawClientDataJSON,
                 authenticatorData: assertion.rawAuthenticatorData,
                 signature: assertion.signature)
+            // Check the tap before publishing it. A revocation that does not
+            // verify is ignored by every phone, so publishing one would show
+            // "revoked" here while the device stays trusted everywhere else.
+            let rootPub = try P256.Signing.PublicKey(rawRepresentation: myRoot.publicKey)
+            guard stored.verify(with: rootPub),
+                  Self.clientDataChallengeMatches(stored.clientDataJSON, expected: commitment) else {
+                throw CeremonyError.verificationFailed
+            }
             let revocation = DeviceRevocation(
                 devicePublicKey: devicePublicKey,
                 assertion: try JSONEncoder().encode(stored),

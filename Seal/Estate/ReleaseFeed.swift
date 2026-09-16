@@ -100,6 +100,12 @@ enum ReleaseFeed {
                 if let body = e.body(EpochBody.self) { policy.threshold = body.threshold }
             case .vaultUpdated, .silenceObserved:
                 break
+            case .ownerDeparted:
+                // The owner deleted their account (DepartureRules.swift).
+                // Counted above as the owner's last sign of life, like any
+                // owner event, and nothing more here. Whether the envelopes
+                // may still open is the engine's decision, not the machine's.
+                break
             case .custodyConfirmed:
                 // A key holder saying "I still have my key". Evidence for
                 // the owner's screen (CustodyConfirmation.swift), never a

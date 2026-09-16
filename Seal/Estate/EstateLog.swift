@@ -62,6 +62,13 @@ nonisolated struct EstateEvent: Codable, Hashable, Identifiable {
         /// and its challenge lives in a different domain
         /// (CustodyConfirmation.swift). Added 2026-09-16.
         case custodyConfirmed
+        /// Owner. Payload: DepartureBody. "I deleted my Seal account, and
+        /// this is what I want done with the envelopes." Written by the
+        /// owner's phone just before it wipes itself (Added 2026-09-16).
+        /// Like every owner event it moves the silence anchor to its own
+        /// time; nothing else in ReleaseFeed or ReleaseMachine reads it.
+        /// What it means is enforced by EstateEngine (DepartureRules.swift).
+        case ownerDeparted
     }
 
     let id: String
@@ -190,6 +197,15 @@ struct ObjectionBody: Codable, Hashable {
     let note: String
 }
 
+struct DepartureBody: Codable, Hashable {
+    /// true: "keep them for my family", the rule runs as it always would,
+    /// and the owner can never check in again. false: "cancel them",
+    /// nobody may open them, and the owner's phone removed what it could
+    /// of the sealed material before leaving.
+    let keepEnvelopes: Bool
+    let departedAtEpoch: Int64
+}
+
 struct CancellationBody: Codable, Hashable {
     /// nil cancels whatever claim is open.
     let claimID: String?
@@ -315,7 +331,7 @@ enum EstateLogVerifier {
         var identities: [String: (RootIdentity, [DeviceEndorsement])]
     }
 
-    static let ownerKinds: Set<EstateEvent.Kind> = [.estateCreated, .epochPublished, .policyChanged, .vaultUpdated, .heartbeat, .cancellation]
+    static let ownerKinds: Set<EstateEvent.Kind> = [.estateCreated, .epochPublished, .policyChanged, .vaultUpdated, .heartbeat, .cancellation, .ownerDeparted]
     static let custodianKinds: Set<EstateEvent.Kind> = [.silenceObserved, .releaseClaimed, .objection, .objectionWithdrawn, .authorization, .released, .custodyConfirmed]
 
     /// Returns the events whose signature chains verify and whose actor
