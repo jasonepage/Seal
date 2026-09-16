@@ -512,7 +512,14 @@ struct EstateHomeView: View {
                     }
                 }
                 if let last = snapshot?.lastHeartbeatAt {
-                    Text("You last checked in \(last.formatted(.relative(presentation: .named))). Opening Seal is the check-in. If you go quiet for \(estate?.policy.silenceDays ?? 90) days, your custodians can start the process, and you get warned for weeks before anything opens.")
+                    // The real numbers from the rule, not "weeks". And "just
+                    // now" under a minute, because "2 seconds ago" reads as a
+                    // stopwatch on a screen that is supposed to feel calm.
+                    let policy = estate?.policy ?? ReleasePolicy(threshold: 1)
+                    let when = Date().timeIntervalSince(last) < 60
+                        ? "just now"
+                        : last.formatted(.relative(presentation: .named))
+                    Text("You checked in \(when). Opening Seal is the check-in. If you go \(policy.silenceDays) days without opening it, a key holder can start the process. You are warned every day for \(policy.warningDays) days, then \(policy.graceDays) quiet days pass, and only then can keys be tapped. Opening Seal at any point stops it.")
                 }
                 // The explainer was reachable only from a key holder's or a
                 // recipient's card, so the one person who set the whole thing
