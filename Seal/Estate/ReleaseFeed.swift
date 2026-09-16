@@ -54,6 +54,17 @@ enum ReleaseFeed {
 
         for e in events.sorted(by: { ($0.occurredAtEpoch, $0.id) < ($1.occurredAtEpoch, $1.id) }) {
             let at = timeOf(e)
+            // ANY event the owner's phone signed is proof the owner was alive
+            // at that moment, so every one of them moves the silence clock,
+            // not just the heartbeat. Before this, a key holder's phone that
+            // saw an epoch and a vault statement but no heartbeat (the first
+            // minutes after a seal, or a log whose estateCreated went to the
+            // other CloudKit environment) anchored silence at the beginning
+            // of time and reported the owner ninety days overdue on day one.
+            // A key holder's first notification from Seal was a false alarm.
+            if e.actorHash == ownerHash {
+                lastHeartbeat = max(lastHeartbeat ?? at, at)
+            }
             switch e.kind {
             case .estateCreated:
                 if let body = e.body(EstateCreatedBody.self) {

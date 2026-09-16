@@ -9,6 +9,13 @@ from the outside.
 - **TestFlight and the App Store use Production CloudKit. Xcode builds use
   Development.** Two separate worlds with separate data. Something that works on
   your desk can be completely broken in TestFlight.
+- **But the keychain is shared.** An Xcode build and a TestFlight build of the
+  same bundle on the same phone read the same local state: the estate, the
+  local event log, the friends, all of it. So a TestFlight session can start
+  with an `ownerEvents` log that was written against Development, and
+  `sealAndPublish` then skips `estateCreated` because "it already exists". It
+  does, in the other world. Seen 2026-09-16 on the first Production seal.
+  Wipe local state (sign out) when switching a phone between the two.
 - Schema changes are additive and one-directional: exercise them in Development,
   then Deploy Schema Changes to Production. You cannot delete a field once it is
   in Production. See [CLOUDKIT_DEPLOY.md](CLOUDKIT_DEPLOY.md).
