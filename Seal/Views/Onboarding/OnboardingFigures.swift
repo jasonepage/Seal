@@ -7,7 +7,7 @@ import SwiftUI
 //  OnboardingFigures.swift
 //  Seal
 //
-//  THE PICTURES THAT TEACH. Four drawings, all in code, all finite:
+//  THE PICTURES THAT TEACH. Six drawings, all in code, all finite:
 //
 //    ReleaseTimelineFigure   the days count, the warnings ring, the owner's
 //                            one tap stops it, or the keys can be tapped.
@@ -15,6 +15,10 @@ import SwiftUI
 //    ShamirCurveFigure       one point and the line could be anything; M
 //                            points and the secret falls out at the edge.
 //    KeyKeepFigure           a key at rest. The key holder's whole job.
+//    TwoPhonesFigure         two phones side by side; a key crosses from
+//                            each to the other. The couple path.
+//    SpareKeyFigure          the key you use and the spare you put away.
+//                            The backup key screen.
 //
 //  Every figure animates once on appear and then stops. Nothing loops.
 //  With Reduce Motion on, each figure shows its finished state at once with
@@ -36,26 +40,34 @@ struct OnboardingNumbers: Hashable {
     /// True when these came from a real estate rather than the defaults.
     /// Copy says "usually any two of three" when this is false.
     var exact: Bool = false
+    /// How often a key holder is asked to tap their key to show they still
+    /// have it (ReleasePolicy.custodyConfirmMonths). Read from the real
+    /// rule when there is one; the policy default otherwise. Never typed
+    /// into copy.
+    var custodyConfirmMonths: Int = ReleasePolicy.defaultCustodyConfirmMonths
 
     static let defaults = OnboardingNumbers()
 
     init() {}
 
     init(silenceDays: Int, warningDays: Int, graceDays: Int,
-         threshold: Int, custodianCount: Int, exact: Bool) {
+         threshold: Int, custodianCount: Int, exact: Bool,
+         custodyConfirmMonths: Int = ReleasePolicy.defaultCustodyConfirmMonths) {
         self.silenceDays = max(1, silenceDays)
         self.warningDays = max(1, warningDays)
         self.graceDays = max(0, graceDays)
         self.threshold = max(1, threshold)
         self.custodianCount = max(self.threshold, custodianCount)
         self.exact = exact
+        self.custodyConfirmMonths = max(1, custodyConfirmMonths)
     }
 
     /// The owner's own rule.
     init(policy: ReleasePolicy, custodianCount: Int) {
         self.init(silenceDays: policy.silenceDays, warningDays: policy.warningDays,
                   graceDays: policy.graceDays, threshold: policy.threshold,
-                  custodianCount: custodianCount, exact: true)
+                  custodianCount: custodianCount, exact: true,
+                  custodyConfirmMonths: policy.custodyConfirmMonths)
     }
 
     /// An estate this phone guards. The snapshot carries the policy the
@@ -71,10 +83,23 @@ struct OnboardingNumbers: Hashable {
                   graceDays: policy?.graceDays ?? ReleasePolicy.defaultGraceDays,
                   threshold: threshold,
                   custodianCount: count,
-                  exact: epoch != nil)
+                  exact: epoch != nil,
+                  custodyConfirmMonths: policy?.custodyConfirmMonths ?? ReleasePolicy.defaultCustodyConfirmMonths)
     }
 
     var totalDays: Int { silenceDays + warningDays + graceDays }
+
+    /// "Once a year," or "Every six months," and so on, for the start of a
+    /// sentence about the key holder's yearly tap.
+    var custodyConfirmLead: String {
+        switch custodyConfirmMonths {
+        case 12: return "Once a year,"
+        case 6: return "Every six months,"
+        case 24: return "Every two years,"
+        case 1: return "Every month,"
+        default: return "Every \(custodyConfirmMonths) months,"
+        }
+    }
 
     /// TRUE WHEN ONE KEY HOLDER ALONE CAN RELEASE THE ESTATE.
     ///
@@ -92,12 +117,14 @@ struct OnboardingNumbers: Hashable {
     /// How many key holders there are besides the one being spoken to.
     var others: Int { max(0, custodianCount - 1) }
 
-    /// "any 2 of 3", or "on their own" when one key holder is enough, or
-    /// "usually any 2 of 3" when these are defaults rather than a real rule.
-    /// Never "any 1 of 1", which is both untrue in spirit and not English.
+    /// "any 2 of 3", or "all 3" when every key is needed, or "the one key
+    /// holder" when one is enough, or "usually any 2 of 3" when these are
+    /// defaults rather than a real rule. Never "any 1 of 1", which is both
+    /// untrue in spirit and not English, and never "any 3 of 3".
     var anyMofN: String {
         if oneIsEnough { return custodianCount <= 1 ? "the one key holder" : "any one key holder" }
-        return exact ? "any \(threshold) of \(custodianCount)" : "usually any \(threshold) of \(custodianCount)"
+        let core = threshold == custodianCount ? "all \(custodianCount)" : "any \(threshold) of \(custodianCount)"
+        return exact ? core : "usually " + core
     }
 }
 
@@ -235,8 +262,12 @@ struct ReleaseTimelineFigure: View {
             // The legend, as rows so it survives any text size.
             VStack(alignment: .leading, spacing: 6) {
                 legendRow(Color.white.opacity(0.35), "\(numbers.silenceDays) days of quiet from the owner")
-                legendRow(Color.orange.opacity(0.85), "\(numbers.warningDays) days of daily warnings")
-                legendRow(Color.white.opacity(0.35), "\(numbers.graceDays) more quiet days")
+                legendRow(Color.orange.opacity(0.85), numbers.warningDays == 1
+                          ? "1 day of warnings"
+                          : "\(numbers.warningDays) days of daily warnings")
+                legendRow(Color.white.opacity(0.35), numbers.graceDays == 0
+                          ? "No extra quiet days"
+                          : (numbers.graceDays == 1 ? "1 more quiet day" : "\(numbers.graceDays) more quiet days"))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -764,6 +795,144 @@ struct SealedEnvelopeFigure: View {
     }
 }
 
+// MARK: - Two phones
+
+/// The couple path in one picture. Two phones side by side, each with
+/// its own envelope. A key crosses from each phone to the other, so each
+/// holds a key for the other. The crossing is the handover, a two sided
+/// receipt, so the keys turn brass when they land. One crossing on
+/// appear and then nothing.
+struct TwoPhonesFigure: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var crossed = false
+
+    private var caption: String {
+        crossed
+            ? "Each phone holds a key for the other."
+            : "Two phones. Each writes its own envelopes."
+    }
+
+    var body: some View {
+        VStack(spacing: 14) {
+            GeometryReader { geo in
+                let w = geo.size.width
+                let h = geo.size.height
+                let phoneW = min(92, w * 0.30)
+                let phoneH = min(h, phoneW * 1.75)
+                let leftX = w * 0.25
+                let rightX = w * 0.75
+                ZStack {
+                    phone(width: phoneW, height: phoneH)
+                        .position(x: leftX, y: h / 2)
+                    phone(width: phoneW, height: phoneH)
+                        .position(x: rightX, y: h / 2)
+
+                    // Two keys. The upper one goes left to right, the
+                    // lower one right to left. Each lands on the other
+                    // phone's screen.
+                    key(landed: crossed)
+                        .position(x: crossed ? rightX : leftX, y: h * 0.40)
+                    key(landed: crossed)
+                        .rotationEffect(.degrees(180))
+                        .position(x: crossed ? leftX : rightX, y: h * 0.62)
+                }
+            }
+            .frame(height: 170)
+            .accessibilityHidden(true)
+
+            FigureCaption(text: caption, tint: crossed ? SealTheme.brass : .white.opacity(0.75))
+        }
+        .task { await run() }
+    }
+
+    private func phone(width: CGFloat, height: CGFloat) -> some View {
+        ZStack(alignment: .bottom) {
+            RoundedRectangle(cornerRadius: width * 0.18, style: .continuous)
+                .fill(Color.white.opacity(0.06))
+            RoundedRectangle(cornerRadius: width * 0.18, style: .continuous)
+                .stroke(Color.white.opacity(0.45), lineWidth: 1.5)
+            // The envelope this phone writes, small, at the bottom of the
+            // screen. Stroked, like the glyph in the mark.
+            EnvelopeGlyphShape()
+                .stroke(Color.white.opacity(0.55),
+                        style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+                .frame(width: width * 0.42, height: width * 0.30)
+                .padding(.bottom, height * 0.12)
+        }
+        .frame(width: width, height: height)
+    }
+
+    private func key(landed: Bool) -> some View {
+        KeyShape()
+            .fill(landed ? SealTheme.brass : SealTheme.silver, style: FillStyle(eoFill: true))
+            .aspectRatio(100.0 / 40.0, contentMode: .fit)
+            .frame(width: 58)
+            .shadow(color: .black.opacity(0.4), radius: 4, x: 0, y: 3)
+    }
+
+    /// Main actor, so the state writes after each sleep land on the main
+    /// thread. A plain async method would hop off it.
+    @MainActor
+    private func run() async {
+        crossed = false
+        if reduceMotion { crossed = true; return }
+        try? await Task.sleep(for: .milliseconds(700))
+        guard !Task.isCancelled else { return }
+        withAnimation(.spring(duration: 0.9, bounce: 0.15)) { crossed = true }
+    }
+}
+
+// MARK: - A spare key
+
+/// The backup key screen. The key you use sits in front. A second key
+/// slides in from the side and settles behind it, put away. Silver, both
+/// of them: nothing here is a trust moment, it is a drawer.
+struct SpareKeyFigure: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var settled = false
+
+    var body: some View {
+        VStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color.white.opacity(0.05))
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color.white.opacity(0.18), lineWidth: 1)
+
+                // The spare, behind and a little lower. It arrives from
+                // the right and stops.
+                KeyShape()
+                    .fill(SealTheme.silver.opacity(0.55), style: FillStyle(eoFill: true))
+                    .aspectRatio(100.0 / 40.0, contentMode: .fit)
+                    .frame(width: 130)
+                    .rotationEffect(.degrees(settled || reduceMotion ? 6 : 14))
+                    .offset(x: settled || reduceMotion ? 22 : 160, y: 22)
+                    .opacity(settled || reduceMotion ? 1 : 0)
+
+                // The key in use, in front.
+                KeyShape()
+                    .fill(SealTheme.silver, style: FillStyle(eoFill: true))
+                    .aspectRatio(100.0 / 40.0, contentMode: .fit)
+                    .frame(width: 150)
+                    .rotationEffect(.degrees(-8))
+                    .offset(x: -16, y: -10)
+                    .shadow(color: .black.opacity(0.4), radius: 6, x: 0, y: 4)
+            }
+            .frame(height: 140)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .accessibilityHidden(true)
+
+            FigureCaption(text: "One key you use. One spare, put away somewhere safe.")
+        }
+        .task {
+            guard !reduceMotion else { return }
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            withAnimation(.spring(duration: 0.9, bounce: 0.2)) { settled = true }
+        }
+    }
+}
+
 #Preview("Figures") {
     ZStack {
         SealTheme.ink.ignoresSafeArea()
@@ -774,6 +943,8 @@ struct SealedEnvelopeFigure: View {
                 ShamirCurveFigure(numbers: .defaults)
                 KeyKeepFigure()
                 SealedEnvelopeFigure()
+                TwoPhonesFigure()
+                SpareKeyFigure()
             }
             .padding(24)
         }

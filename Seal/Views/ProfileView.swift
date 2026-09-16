@@ -4,6 +4,7 @@
 
 import SwiftUI
 import CloudKit
+import os
 
 /// Profile + key management surface (UI.md §3.5, trimmed to what exists).
 struct ProfileView: View {
@@ -16,6 +17,12 @@ struct ProfileView: View {
     /// section. Nothing else in Profile touches them.
     @Bindable var friendStore: FriendStore
     let estateEngine: EstateEngine
+    /// The bills and medical set, so deleting speaks for both envelope sets.
+    /// Every rule's engine (RuleBook.swift), so a delete covers all of them.
+    var allEngines: [EstateEngine] = []
+    private var engines: [EstateEngine] { allEngines.isEmpty ? [estateEngine] : allEngines }
+    /// Something sealed exists, so deleting has to ask what happens to it.
+    private var hasSealedEnvelopes: Bool { engines.contains { $0.estate?.epochPublished == true } }
     /// nil only in previews. Optional rather than @Bindable because the toggle
     /// uses a manual binding anyway, and @Observable tracks the reads in body.
     var parentMode: ParentMode? = nil
@@ -31,7 +38,12 @@ struct ProfileView: View {
     @State private var deleteError: String?
     @State private var devices: [DeviceEndorsement] = []
     @State private var revokedKeys: Set<Data> = []
+    /// What went wrong revoking, said out loud. It used to be swallowed.
+    @State private var revokeError: String?
     @State private var revoking: DeviceEndorsement?
+    /// Revoked in this session and verified before publishing. Shown as
+    /// revoked even while the directory query has not caught up.
+    @State private var revokedHere: Set<Data> = []
     @State private var renaming = false
     @State private var draftName = ""
     /// Mirrors the keychain flag; loaded in .task so the toggle renders true state.
@@ -153,11 +165,22 @@ struct ProfileView: View {
                 }
             }
             .confirmationDialog(
-                "Permanently delete your identity? It's removed from the directory, friends can no longer verify you, and ALL data is destroyed. This cannot be undone, not by you, not by us.",
+                hasSealedEnvelopes
+                ? "Delete your Seal account forever? This cannot be undone. First, choose what happens to your sealed envelopes.\n\nKeep them: they stay sealed for your family. You can never check in again, so they open under your rule, after the silence, the warnings and your key holders' taps.\n\nCancel them: they are removed and can never be opened by anyone.\n\nYour key holders will see which you chose. Your key signs it, one more tap."
+                : "Delete your Seal account forever? It is removed from the directory, people you met can no longer check it is you, and everything on this phone is erased. This cannot be undone. Your key signs it, one more tap.",
                 isPresented: $confirmDelete, titleVisibility: .visible
             ) {
-                Button("Delete identity forever", role: .destructive) {
-                    Task { await deleteIdentity() }
+                if hasSealedEnvelopes {
+                    Button("Delete, and keep my envelopes for my family", role: .destructive) {
+                        Task { await deleteIdentity(keepEnvelopes: true) }
+                    }
+                    Button("Delete, and cancel my envelopes forever", role: .destructive) {
+                        Task { await deleteIdentity(keepEnvelopes: false) }
+                    }
+                } else {
+                    Button("Delete my account forever", role: .destructive) {
+                        Task { await deleteIdentity(keepEnvelopes: true) }
+                    }
                 }
             }
             .confirmationDialog(
@@ -168,15 +191,28 @@ struct ProfileView: View {
                 Button("Revoke device", role: .destructive) {
                     if let device = revoking {
                         Task {
-                            try? await ceremony.revokeDevice(
-                                devicePublicKey: device.devicePublicKey,
-                                myRoot: myRoot, directory: sync)
+                            do {
+                                try await ceremony.revokeDevice(
+                                    devicePublicKey: device.devicePublicKey,
+                                    myRoot: myRoot, directory: sync)
+                                // The tap verified and the record is saved.
+                                // A fresh query can miss it for a few
+                                // seconds (index lag), so remember it here.
+                                revokedHere.insert(device.devicePublicKey)
+                            } catch CeremonyManager.CeremonyError.cancelled {
+                                // They backed out on purpose. Nothing to say.
+                            } catch {
+                                revokeError = (error as? LocalizedError)?.errorDescription ?? SyncEngine.friendly(error)
+                            }
                             await loadDevices()
                         }
                     }
                     revoking = nil
                 }
             }
+            .alert("Could not revoke", isPresented: Binding(get: { revokeError != nil }, set: { if !$0 { revokeError = nil } })) {
+                Button("OK", role: .cancel) {}
+            } message: { Text(revokeError ?? "") }
             .task {
                 timestampsOn = TimestampStore.isEnabled(ownerHash: myRoot.credentialIDHash)
                 await loadDevices()
@@ -581,13 +617,34 @@ struct ProfileView: View {
     /// Directory record first, local wipe second, if the network call fails
     /// we keep local state so the user can retry (an orphaned directory
     /// record with no keys behind it would defeat the point of deletion).
-    private func deleteIdentity() async {
+    ///
+    /// The order matters (DepartureRules.swift, TombstoneProof.swift):
+    ///   1. the tap, which signs the delete marker;
+    ///   2. the signed "I deleted my account" entry in each envelope set,
+    ///      and on cancel the removal of every sealed blob;
+    ///   3. the marker;
+    ///   4. the local wipe.
+    /// A failure in 1 to 3 stops before the wipe, so the person can retry.
+    /// If 2 lands and 3 fails, the entry is voided by the next check-in.
+    private func deleteIdentity(keepEnvelopes: Bool) async {
         deleting = true
         deleteError = nil
         defer { deleting = false }
         if !DemoFixtures.isActive {
             do {
-                try await sync.deleteIdentity(credentialIDHash: myRoot.credentialIDHash)
+                let proof = try await ceremony.signDeletion(myRoot: myRoot, directory: sync)
+                var notRemoved = 0
+                for engine in engines {
+                    notRemoved += try await engine.announceDeparture(keepEnvelopes: keepEnvelopes)
+                }
+                if notRemoved > 0 {
+                    // Every copy of Seal still refuses to open them: the
+                    // signed cancel is in the record. Logged, not blocking.
+                    WebAuthnDiag.log.error("delete: \(notRemoved, privacy: .public) sealed blob(s) could not be removed")
+                }
+                try await sync.deleteIdentity(credentialIDHash: myRoot.credentialIDHash, proof: proof)
+            } catch CeremonyManager.CeremonyError.cancelled {
+                return
             } catch {
                 // Only blame the connection when it actually is one, otherwise
                 // show the real CloudKit reason instead of hiding it.
@@ -596,7 +653,7 @@ struct ProfileView: View {
                 } ?? false
                 deleteError = isNetwork
                     ? "Couldn't reach iCloud to remove your directory entry, check your connection and try again."
-                    : "Delete failed: \(error.localizedDescription)"
+                    : "Delete failed: " + ((error as? LocalizedError)?.errorDescription ?? SyncEngine.friendly(error))
                 return
             }
         }
@@ -607,9 +664,13 @@ struct ProfileView: View {
 
     private func loadDevices() async {
         guard let (endorsements, revocations) = try? await sync.fetchDeviceList(
-            credentialIDHash: myRoot.credentialIDHash) else { return }
+            credentialIDHash: myRoot.credentialIDHash) else {
+            revokedKeys.formUnion(revokedHere)
+            return
+        }
         devices = endorsements
         revokedKeys = IdentityManager.revokedDevicePublicKeys(root: myRoot, revocations: revocations)
+            .union(revokedHere)
     }
 
     private var directoryStatus: String {
