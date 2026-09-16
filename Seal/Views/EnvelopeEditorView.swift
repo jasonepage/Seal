@@ -32,6 +32,11 @@ struct EnvelopeEditorView: View {
     /// Findings the owner chose to keep in the letter, by value, so the
     /// line does not come back on the next keystroke.
     @State private var keptInLetter: Set<String> = []
+    /// The on-device review (LetterReview). Nil until asked for. An empty
+    /// list is "nothing to ask", which is shown once and quietly.
+    @State private var reviewGaps: [LetterReview.Gap]?
+    @State private var reviewing = false
+    @State private var dismissedGaps: Set<String> = []
 
     /// The one row at the top of an envelope that has words but no person.
     /// It states the good news first (the writing is safe here) because the
@@ -91,6 +96,7 @@ struct EnvelopeEditorView: View {
                         // something close is a secret that quietly stops
                         // working. Secrets are typed, exactly as written.
                         DictationButton(text: $envelope.letter)
+                        if LetterReview.isAvailable { reviewBlock }
                         secretsBlock
                         mediaBlock
                         Text(envelope.isAddressed
@@ -270,6 +276,81 @@ struct EnvelopeEditorView: View {
                 .padding(14)
                 .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
             }
+        }
+    }
+
+    // MARK: - Would this help them?
+
+    /// A soft, dismissible list, never a blocker. The button only exists on
+    /// a phone with the on-device model; every other phone never sees this
+    /// block. Nothing here edits the letter: it asks, the owner answers by
+    /// typing into the letter above, or ignores it.
+    private var reviewBlock: some View {
+        let shown = (reviewGaps ?? []).filter { !dismissedGaps.contains($0.id) }
+        return VStack(alignment: .leading, spacing: 10) {
+            if let gaps = reviewGaps, !gaps.isEmpty, shown.isEmpty {
+                // Every question answered or waved away. Say nothing more.
+                EmptyView()
+            } else if let gaps = reviewGaps, gaps.isEmpty {
+                Text("Nothing \(recipientName) could not act on. The letter reads clearly.")
+                    .font(.callout).foregroundStyle(.white.opacity(0.55))
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if !shown.isEmpty {
+                Text("Things \(recipientName) might not be able to act on. Your words, your call. Answer in the letter, or wave a question away.")
+                    .font(.callout).foregroundStyle(.white.opacity(0.75))
+                    .fixedSize(horizontal: false, vertical: true)
+                ForEach(shown) { gap in
+                    HStack(alignment: .top, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("\u{201C}\(gap.quote)\u{201D}")
+                                .font(.callout.italic()).foregroundStyle(.white.opacity(0.55))
+                            Text(gap.question)
+                                .font(.callout).foregroundStyle(.white)
+                        }
+                        .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
+                        Button { dismissedGaps.insert(gap.id) } label: {
+                            Image(systemName: "xmark").font(.caption.weight(.semibold))
+                                .foregroundStyle(.white.opacity(0.4))
+                        }
+                        .accessibilityLabel("Wave this question away")
+                        .parentTapTarget()
+                    }
+                    .padding(12)
+                    .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
+                }
+            }
+            Button {
+                runReview()
+            } label: {
+                HStack {
+                    if reviewing { ProgressView().tint(.white) }
+                    Label(reviewGaps == nil ? "Would this help \(recipientName)?" : "Check the letter again",
+                          systemImage: "text.magnifyingglass")
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(SealSecondaryButtonStyle())
+            .disabled(reviewing || envelope.letter.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .parentTapTarget()
+            Text("Read on this phone only. It looks for a folder with no name, a person with no number, a place with no address. It never sees the secrets and never changes a word.")
+                .font(.caption).foregroundStyle(.white.opacity(0.4))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 4)
+    }
+
+    private func runReview() {
+        guard !reviewing else { return }
+        reviewing = true
+        dismissedGaps = []
+        // Material can only be built from the letter (LetterReview.Material).
+        let material = LetterReview.Material(envelope: envelope, recipientName: recipientName)
+        Task {
+            defer { reviewing = false }
+            // A nil result is a helper that did not help. Leave the last
+            // list alone rather than replacing it with an error.
+            if let gaps = await LetterReview.review(material) { reviewGaps = gaps }
         }
     }
 
