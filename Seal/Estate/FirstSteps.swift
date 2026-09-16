@@ -72,6 +72,24 @@ struct FirstStep: Codable, Identifiable, Hashable {
 
 extension Envelope {
 
+    /// "A letter, 3 steps and 2 secrets" for the home screen row. Same
+    /// five parts, same order, as the editor's packing line.
+    var contentsSummary: String {
+        var parts: [String] = []
+        if !letter.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { parts.append("a letter") }
+        let steps = usableFirstSteps.count
+        if steps > 0 { parts.append(steps == 1 ? "one step" : "\(steps) steps") }
+        if !secrets.isEmpty { parts.append(secrets.count == 1 ? "one secret" : "\(secrets.count) secrets") }
+        if !photos.isEmpty { parts.append(photos.count == 1 ? "a photo" : "\(photos.count) photos") }
+        if voiceNote != nil { parts.append("your voice") }
+        switch parts.count {
+        case 0: return "empty"
+        case 1: return parts[0]
+        case 2: return "\(parts[0]) and \(parts[1])"
+        default: return parts.dropLast().joined(separator: ", ") + " and " + parts[parts.count - 1]
+        }
+    }
+
     /// The steps that have a title, in the owner's order. Blank rows the
     /// owner left behind are not sealed.
     var usableFirstSteps: [FirstStep] { firstSteps.filter { !$0.isBlank } }

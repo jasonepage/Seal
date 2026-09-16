@@ -811,11 +811,8 @@ struct EstateHomeView: View {
         let recipient = envelope.isAddressed
             ? (estate.recipients.first { $0.rootHash == envelope.recipientHash }?.displayName ?? "Someone")
             : (envelope.draftRecipientName ?? "Someone")
-        // "0 secrets" read like something had gone missing. A letter with no
-        // secrets is a whole envelope, so say what it is.
-        let contents = envelope.secrets.isEmpty
-            ? "letter only"
-            : "\(envelope.secrets.count) secret\(envelope.secrets.count == 1 ? "" : "s")"
+        // What is in it, in Karen's order: "a letter, 3 steps and 2 secrets".
+        let contents = envelope.contentsSummary
         // An envelope written to a typed name says what it is waiting for,
         // rather than "not sealed yet", which would read as the owner's
         // fault when the missing piece is a person.

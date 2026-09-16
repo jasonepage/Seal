@@ -9,138 +9,41 @@ import SwiftUI
 //
 //  THE OWNER'S SIDE OF "WHAT TO DO FIRST" (FirstSteps.swift).
 //
-//  Two screens. `FirstStepsEditorSheet` is the list: numbered, drag to
-//  reorder, swipe to delete, "Add a step" and a menu of common steps to
-//  start from. `FirstStepEditSheet` is one step: a title, a note, and
-//  optionally which of the envelope's secrets it needs.
+//  One screen. The list is drawn as the same timeline Karen will see.
+//  Tap a step and it opens in place: the title, the note with a
+//  dictation button, and which secret it needs. The common steps sit
+//  under the list as chips; tap one and it drops onto the timeline,
+//  already open, waiting for the note. Nothing is behind a menu.
 //
-//  Nothing here touches the engine. The editor hands back the list and
-//  EnvelopeEditorView saves the envelope the way it saves everything else,
-//  which marks it unsealed so the next seal publishes it.
+//  Reordering is two arrows, not a drag, because a drag handle on a
+//  phone held at arm's length is a guess. Removing is one button inside
+//  the open step, with the title in it, so nobody removes the wrong one.
+//
+//  A step can point at a secret. If the secret is not written yet, "Add
+//  a new secret" makes it right here and links it, so "Call the bank"
+//  and the account number are one thought, not two screens.
+//
+//  Nothing here touches the engine. The envelope editor saves the
+//  envelope the way it saves everything else, which marks it unsealed so
+//  the next seal publishes the steps.
 
 struct FirstStepsEditorSheet: View {
     @Binding var steps: [FirstStep]
-    /// The envelope's secrets, so a step can point at one by index.
-    let secrets: [SealedCard]
+    @Binding var secrets: [SealedCard]
     let recipientName: String
+    /// The envelope editor's own path for a new secret, so a secret made
+    /// from a step is stamped and validated exactly like one made from
+    /// the secrets card. Returns the new secret's index.
+    let onAddSecret: (SealedCard) -> Int
     let onClose: () -> Void
 
-    @State private var editing: FirstStep?
-    @State private var adding = false
+    @State private var openID: String?
+    @State private var addingSecretFor: String?
+    @FocusState private var focused: String?
 
-    var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    if steps.isEmpty {
-                        Text("Nothing yet. Add a step, or pick one of the common ones below.")
-                            .foregroundStyle(.white.opacity(0.5))
-                            .listRowBackground(Color.white.opacity(0.05))
-                    }
-                    ForEach(Array(steps.enumerated()), id: \.element.id) { index, step in
-                        Button { editing = step } label: {
-                            HStack(alignment: .top, spacing: 12) {
-                                Text("\(index + 1).")
-                                    .font(.headline).foregroundStyle(SealTheme.brass)
-                                    .frame(minWidth: 28, alignment: .trailing)
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(step.isBlank ? "Untitled step" : step.trimmedTitle)
-                                        .font(.headline).foregroundStyle(.white)
-                                    if !step.trimmedNote.isEmpty {
-                                        Text(step.trimmedNote)
-                                            .font(.callout).foregroundStyle(.white.opacity(0.6))
-                                            .lineLimit(2)
-                                    }
-                                    if let s = step.secretIndex, secrets.indices.contains(s) {
-                                        Label("Uses the secret: \(secrets[s].title)", systemImage: "lock.fill")
-                                            .font(.caption).foregroundStyle(SealTheme.brass.opacity(0.8))
-                                    }
-                                }
-                                Spacer(minLength: 0)
-                                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.white.opacity(0.3))
-                            }
-                            .padding(.vertical, 4)
-                        }
-                        .buttonStyle(.plain)
-                        .listRowBackground(Color.white.opacity(0.05))
-                    }
-                    .onMove { from, to in steps.move(fromOffsets: from, toOffset: to) }
-                    .onDelete { offsets in steps.remove(atOffsets: offsets) }
-                } header: {
-                    Text("\(recipientName) sees these first, in this order. Drag to reorder. Swipe left to remove one.")
-                        .foregroundStyle(.white.opacity(0.6))
-                        .textCase(nil)
-                }
-
-                Section {
-                    Button { adding = true } label: {
-                        Label("Add a step", systemImage: "plus")
-                    }
-                    .foregroundStyle(SealTheme.brass)
-                    .listRowBackground(Color.white.opacity(0.05))
-                    Menu {
-                        ForEach(FirstStep.starters) { starter in
-                            Button(starter.title) {
-                                steps.append(FirstStep(title: starter.title))
-                                editing = steps.last
-                            }
-                        }
-                    } label: {
-                        Label("Pick a common step", systemImage: "list.bullet")
-                    }
-                    .foregroundStyle(SealTheme.brass)
-                    .listRowBackground(Color.white.opacity(0.05))
-                } footer: {
-                    Text("Short and plain works best. \"Call Mike at the credit union.\" \"The car title is in the blue folder in the garage.\" These are sealed with the letter and opened with it.")
-                        .foregroundStyle(.white.opacity(0.45))
-                }
-            }
-            .scrollContentBackground(.hidden)
-            .background(SealTheme.ink)
-            .navigationTitle("What to do first")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarColorScheme(.dark, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
-                        // Blank rows are dropped here, so the owner never
-                        // seals an empty numbered line.
-                        steps.removeAll(where: \.isBlank)
-                        onClose()
-                    }
-                    .foregroundStyle(SealTheme.brass)
-                }
-                ToolbarItem(placement: .topBarLeading) { EditButton().foregroundStyle(SealTheme.brass) }
-            }
-            .sheet(item: $editing) { step in
-                FirstStepEditSheet(step: step, secrets: secrets) { updated in
-                    if let updated, let i = steps.firstIndex(where: { $0.id == updated.id }) {
-                        steps[i] = updated
-                    }
-                    editing = nil
-                }
-            }
-            .sheet(isPresented: $adding) {
-                FirstStepEditSheet(step: FirstStep(title: ""), secrets: secrets) { updated in
-                    if let updated, !updated.isBlank { steps.append(updated) }
-                    adding = false
-                }
-            }
-        }
-        .preferredColorScheme(.dark)
-    }
-}
-
-// MARK: - One step
-
-struct FirstStepEditSheet: View {
-    @State var step: FirstStep
-    let secrets: [SealedCard]
-    let onDone: (FirstStep?) -> Void
-
-    private var hint: String {
-        FirstStep.starters.first { $0.title == step.trimmedTitle }?.hint
-            ?? "Where it is, who to ask for, what to say."
+    private var remainingStarters: [FirstStep.Starter] {
+        let have = Set(steps.map(\.trimmedTitle))
+        return FirstStep.starters.filter { !have.contains($0.title) }
     }
 
     var body: some View {
@@ -148,56 +51,216 @@ struct FirstStepEditSheet: View {
             ZStack {
                 SealTheme.ink.ignoresSafeArea()
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("The step").font(.headline).foregroundStyle(.white)
-                        TextField("Call the bank", text: $step.title)
-                            .padding(14).background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
-                        Text("A note (optional)").font(.headline).foregroundStyle(.white)
-                        TextEditor(text: $step.note)
-                            .scrollContentBackground(.hidden)
-                            .frame(minHeight: 110)
-                            .padding(10).background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
-                            .overlay(alignment: .topLeading) {
-                                if step.note.isEmpty {
-                                    Text(hint).foregroundStyle(.white.opacity(0.3)).padding(18).allowsHitTesting(false)
-                                }
-                            }
-                        if !secrets.isEmpty {
-                            Text("Does this step need one of the secrets?").font(.headline).foregroundStyle(.white)
-                            Picker("Secret", selection: $step.secretIndex) {
-                                Text("No").tag(Int?.none)
-                                ForEach(Array(secrets.enumerated()), id: \.offset) { index, card in
-                                    Text(card.title).tag(Int?.some(index))
-                                }
-                            }
-                            .pickerStyle(.menu).tint(SealTheme.brass)
-                            Text("The secret itself stays behind the Face ID check. The step only points at it by name.")
-                                .font(.caption).foregroundStyle(.white.opacity(0.45))
-                                .fixedSize(horizontal: false, vertical: true)
+                    VStack(alignment: .leading, spacing: 20) {
+                        Text(steps.isEmpty
+                             ? "On a hard day \(recipientName) will not want a pile of passwords. They will want to know what to do. Tap the steps that apply, then say a few words on each."
+                             : "\(recipientName) sees these in this order, with a check circle beside each one.")
+                            .font(.callout).foregroundStyle(.white.opacity(0.7))
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        if !steps.isEmpty { timeline }
+
+                        starterChips
+
+                        Button {
+                            add(FirstStep(title: ""))
+                        } label: {
+                            Label("Write your own step", systemImage: "square.and.pencil").frame(maxWidth: .infinity)
                         }
+                        .buttonStyle(SealSecondaryButtonStyle())
+                        .parentTapTarget(56)
+
+                        Text("Short and plain works best. \"Call Mike at the credit union.\" \"The car title is in the blue folder in the garage.\" Sealed with the letter, opened with it.")
+                            .font(.caption).foregroundStyle(.white.opacity(0.4))
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    .foregroundStyle(.white)
                     .padding(20)
-                    .frame(maxWidth: 520).frame(maxWidth: .infinity)
+                    .frame(maxWidth: 560).frame(maxWidth: .infinity)
                     .containerRelativeFrame(.horizontal)
                 }
+                .scrollDismissesKeyboard(.interactively)
             }
-            .navigationTitle("A step")
+            .navigationTitle("What to do first")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { onDone(nil) }.foregroundStyle(SealTheme.brass) }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        step.title = String(step.trimmedTitle.prefix(FirstStep.maxTitleCharacters))
-                        step.note = String(step.trimmedNote.prefix(FirstStep.maxNoteCharacters))
-                        onDone(step)
+                    Button("Done") {
+                        steps.removeAll(where: \.isBlank)
+                        onClose()
                     }
                     .foregroundStyle(SealTheme.brass)
-                    .disabled(step.isBlank)
+                }
+            }
+            .sheet(isPresented: Binding(get: { addingSecretFor != nil }, set: { if !$0 { addingSecretFor = nil } })) {
+                SecretEditorSheet { card in
+                    if let card, let stepID = addingSecretFor,
+                       let i = steps.firstIndex(where: { $0.id == stepID }) {
+                        steps[i].secretIndex = onAddSecret(card)
+                    }
+                    addingSecretFor = nil
                 }
             }
         }
         .preferredColorScheme(.dark)
+    }
+
+    // MARK: - The timeline
+
+    private var timeline: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(steps.enumerated()), id: \.element.id) { index, step in
+                HStack(alignment: .top, spacing: 12) {
+                    StepMarker(number: index + 1, isLast: index == steps.count - 1, current: openID == step.id)
+                    if openID == step.id {
+                        openStep(index: index)
+                    } else {
+                        closedStep(step)
+                    }
+                }
+                .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(16)
+        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    private func closedStep(_ step: FirstStep) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) { openID = step.id }
+        } label: {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(step.isBlank ? "Untitled step" : step.trimmedTitle)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(step.isBlank ? .white.opacity(0.4) : .white)
+                    .fixedSize(horizontal: false, vertical: true)
+                if !step.trimmedNote.isEmpty {
+                    Text(step.trimmedNote).font(.callout).foregroundStyle(.white.opacity(0.6))
+                        .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Text("Tap to add a note").font(.caption).foregroundStyle(SealTheme.brass.opacity(0.8))
+                }
+                if let s = step.secretIndex, secrets.indices.contains(s) {
+                    SecretChip(title: "Uses \(secrets[s].title)")
+                }
+            }
+            .padding(.top, 3)
+            .padding(.bottom, 16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func openStep(index: Int) -> some View {
+        let binding = $steps[index]
+        let step = steps[index]
+        return VStack(alignment: .leading, spacing: 10) {
+            TextField("What to do", text: binding.title, axis: .vertical)
+                .font(.body.weight(.semibold)).foregroundStyle(.white)
+                .padding(12).background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 12))
+                .focused($focused, equals: step.id + ".title")
+            TextField(hint(for: step), text: binding.note, axis: .vertical)
+                .lineLimit(2...6)
+                .font(.callout).foregroundStyle(.white)
+                .padding(12).background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 12))
+                .focused($focused, equals: step.id + ".note")
+            DictationButton(text: binding.note, promise: "Say it the way you would say it to \(recipientName). It stays on this phone.")
+            secretPicker(index: index)
+            HStack(spacing: 8) {
+                Button { move(index, by: -1) } label: { Image(systemName: "arrow.up") }
+                    .disabled(index == 0)
+                Button { move(index, by: 1) } label: { Image(systemName: "arrow.down") }
+                    .disabled(index == steps.count - 1)
+                Spacer()
+                Button(role: .destructive) {
+                    withAnimation { steps.remove(at: index); openID = nil }
+                } label: {
+                    Label("Remove", systemImage: "trash")
+                }
+                .foregroundStyle(.orange.opacity(0.9))
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { openID = nil; focused = nil }
+                } label: {
+                    Text("Close").fontWeight(.semibold)
+                }
+                .foregroundStyle(SealTheme.brass)
+            }
+            .buttonStyle(.bordered)
+            .tint(.white.opacity(0.6))
+            .font(.subheadline)
+        }
+        .padding(.bottom, 18)
+    }
+
+    private func secretPicker(index: Int) -> some View {
+        let step = steps[index]
+        let linked = step.secretIndex.flatMap { secrets.indices.contains($0) ? secrets[$0] : nil }
+        return Menu {
+            Button("No secret needed") { steps[index].secretIndex = nil }
+            ForEach(Array(secrets.enumerated()), id: \.offset) { i, card in
+                Button {
+                    steps[index].secretIndex = i
+                } label: {
+                    if step.secretIndex == i { Label(card.title, systemImage: "checkmark") } else { Text(card.title) }
+                }
+            }
+            Button {
+                addingSecretFor = step.id
+            } label: {
+                Label("Add a new secret for this step", systemImage: "plus")
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: linked == nil ? "lock.open" : "lock.fill")
+                Text(linked == nil ? "Does this step need a password or a number?" : "Uses \(linked!.title)")
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                Image(systemName: "chevron.up.chevron.down").font(.caption)
+            }
+            .font(.callout)
+            .foregroundStyle(linked == nil ? .white.opacity(0.7) : SealTheme.brass)
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
+        }
+    }
+
+    // MARK: - The chips
+
+    private var starterChips: some View {
+        Group {
+            if !remainingStarters.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(steps.isEmpty ? "Common steps" : "More common steps")
+                        .font(.headline).foregroundStyle(.white)
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 8)], alignment: .leading, spacing: 8) {
+                        ForEach(remainingStarters) { starter in
+                            StarterChip(starter: starter) { add(FirstStep(title: starter.title)) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Actions
+
+    private func add(_ step: FirstStep) {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            steps.append(step)
+            openID = step.id
+        }
+        focused = step.id + (step.isBlank ? ".title" : ".note")
+    }
+
+    private func move(_ index: Int, by delta: Int) {
+        let target = index + delta
+        guard steps.indices.contains(target) else { return }
+        withAnimation(.easeInOut(duration: 0.2)) { steps.swapAt(index, target) }
+    }
+
+    private func hint(for step: FirstStep) -> String {
+        FirstStep.starters.first { $0.title == step.trimmedTitle }?.hint ?? "Where it is, who to ask for, what to say."
     }
 }

@@ -8,8 +8,18 @@ import AVFoundation
 //  EnvelopeEditorView.swift
 //  Seal
 //
-//  WRITE AN ENVELOPE. A letter, a few photos, a voice message, and the
-//  secrets. Every edit un-seals the envelope; the home screen's Seal button
+//  WRITE AN ENVELOPE. Not a form: a box being packed for one person.
+//
+//  Karen will see, in this order: the letter, what to do first, the
+//  secrets, the photos, your voice. So the editor is those five cards in
+//  that order. A card with something in it shows that something small
+//  (the first lines of the letter, the numbered steps, the photo strip);
+//  a card with nothing in it says, in one line, why she would want it.
+//  At the top, one sentence says what the box holds and what it is
+//  missing, and five dots fill in as it fills. When all five are lit it
+//  says so.
+//
+//  Every edit un-seals the envelope; the home screen's Seal button
 //  publishes it again. Secrets are `SealedCard`s: the same rules that kept
 //  a payment address exact keep a seed phrase exact.
 
@@ -43,39 +53,52 @@ struct EnvelopeEditorView: View {
     @State private var reviewGaps: [LetterReview.Gap]?
     @State private var reviewing = false
     @State private var dismissedGaps: Set<String> = []
-
-    /// The one row at the top of an envelope that has words but no person.
-    /// It states the good news first (the writing is safe here) because the
-    /// person reading it just did the hard part and should not be met with a
-    /// warning for it.
-    private var waitingForAPerson: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                Image(systemName: "person.crop.circle.badge.questionmark")
-                    .font(.title3).foregroundStyle(.white.opacity(0.75))
-                Text("This one is for \(recipientName), who is not in Seal yet.")
-                    .font(.headline).foregroundStyle(.white)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Text("Write as much as you like. It stays on this phone as a draft. When you meet \(recipientName) in person and add them under People, choose them here and this envelope becomes theirs.")
-                .font(.callout).foregroundStyle(.white.opacity(0.65))
-                .fixedSize(horizontal: false, vertical: true)
-            if let onChoosePerson {
-                Button(action: onChoosePerson) {
-                    Text("Choose the person").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(SealSecondaryButtonStyle())
-                .parentTapTarget(60)
-            }
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 18))
-    }
+    /// The letter card opens for writing when tapped, or from the start
+    /// when there is no letter yet. Closed, it shows the first lines.
+    @State private var writingLetter = false
+    @State private var player: AVAudioPlayer?
 
     private var recipientName: String {
         if !envelope.isAddressed { return envelope.draftRecipientName ?? "them" }
         return friendStore.friends.first { $0.identity.credentialIDHash == envelope.recipientHash }?.identity.displayName ?? "them"
+    }
+
+    // MARK: - What the box holds
+
+    private var hasLetter: Bool { !envelope.letter.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    private var hasSteps: Bool { !envelope.usableFirstSteps.isEmpty }
+    private var hasSecrets: Bool { !envelope.secrets.isEmpty }
+    private var hasPhotos: Bool { !envelope.photos.isEmpty }
+    private var hasVoice: Bool { envelope.voiceNote != nil }
+    private var filled: [Bool] { [hasLetter, hasSteps, hasSecrets, hasPhotos, hasVoice] }
+
+    /// "A letter and 2 secrets. No steps, no photos, no voice yet."
+    private var packingLine: String {
+        var have: [String] = []
+        if hasLetter { have.append("a letter") }
+        if hasSteps { have.append(envelope.usableFirstSteps.count == 1 ? "one step" : "\(envelope.usableFirstSteps.count) steps") }
+        if hasSecrets { have.append(envelope.secrets.count == 1 ? "one secret" : "\(envelope.secrets.count) secrets") }
+        if hasPhotos { have.append(envelope.photos.count == 1 ? "a photo" : "\(envelope.photos.count) photos") }
+        if hasVoice { have.append("your voice") }
+        var missing: [String] = []
+        if !hasLetter { missing.append("letter") }
+        if !hasSteps { missing.append("steps") }
+        if !hasSecrets { missing.append("secrets") }
+        if !hasPhotos { missing.append("photos") }
+        if !hasVoice { missing.append("voice") }
+        if missing.isEmpty { return "Everything is here. A letter, the steps, the secrets, photos and your voice." }
+        if have.isEmpty { return "Empty so far. Start anywhere below." }
+        let haveLine = join(have).prefix(1).uppercased() + join(have).dropFirst() + "."
+        return haveLine + " No " + missing.joined(separator: ", ") + " yet."
+    }
+
+    private func join(_ parts: [String]) -> String {
+        switch parts.count {
+        case 0: return ""
+        case 1: return parts[0]
+        case 2: return "\(parts[0]) and \(parts[1])"
+        default: return parts.dropLast().joined(separator: ", ") + ", and " + parts.last!
+        }
     }
 
     var body: some View {
@@ -83,32 +106,18 @@ struct EnvelopeEditorView: View {
             ZStack {
                 SealTheme.ink.ignoresSafeArea()
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 16) {
                         if !envelope.isAddressed { waitingForAPerson }
-                        field("Title") {
-                            TextField("For \(recipientName)", text: $envelope.title)
-                                .textFieldStyle(.plain)
-                        }
-                        field("The letter") {
-                            TextEditor(text: $envelope.letter)
-                                .scrollContentBackground(.hidden)
-                                .frame(minHeight: 160)
-                        }
-                        if let finding = secretInLetter { secretInLetterLine(finding) }
-                        // The letter only. Deliberately NOT on the secrets,
-                        // where a password read aloud in a kitchen is a worse
-                        // idea than typing it, and where a transcriber that
-                        // hears "capital B, one, ampersand" and writes
-                        // something close is a secret that quietly stops
-                        // working. Secrets are typed, exactly as written.
-                        DictationButton(text: $envelope.letter)
-                        if LetterReview.isAvailable { reviewBlock }
-                        secretsBlock
-                        firstStepsBlock
-                        mediaBlock
+                        titleRow
+                        packingCard
+                        letterCard
+                        stepsCard
+                        secretsCard
+                        photosCard
+                        voiceCard
                         if envelope.isAddressed { previewRow }
                         Text(envelope.isAddressed
-                             ? "Written for \(recipientName). Opens on their phone, in the order you choose, only after your custodians release it."
+                             ? "Written for \(recipientName). Opens on their phone, in the order you choose, only after your key holders release it."
                              : "Written for \(recipientName), who is not in Seal yet. Nothing about this envelope is published or sealed until you meet them and choose them above.")
                             .font(.caption).foregroundStyle(.white.opacity(0.45))
                             .fixedSize(horizontal: false, vertical: true)
@@ -124,8 +133,9 @@ struct EnvelopeEditorView: View {
                     .frame(maxWidth: .infinity)
                     .containerRelativeFrame(.horizontal)
                 }
+                .scrollDismissesKeyboard(.interactively)
             }
-            .navigationTitle("Envelope")
+            .navigationTitle(envelope.title.isEmpty ? "Envelope" : envelope.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
@@ -137,6 +147,7 @@ struct EnvelopeEditorView: View {
                     .foregroundStyle(SealTheme.brass)
                 }
             }
+            .onAppear { writingLetter = !hasLetter }
             .sheet(isPresented: $showPreview) {
                 // Save first, so the preview shows the letter as it is on
                 // screen and not as it was when the editor opened.
@@ -147,8 +158,14 @@ struct EnvelopeEditorView: View {
                     .parentTypeScale()
             }
             .sheet(isPresented: $showFirstSteps) {
-                FirstStepsEditorSheet(steps: $envelope.firstSteps, secrets: envelope.secrets,
-                                      recipientName: recipientName, onClose: { showFirstSteps = false })
+                FirstStepsEditorSheet(steps: $envelope.firstSteps, secrets: $envelope.secrets,
+                                      recipientName: recipientName,
+                                      onAddSecret: { card in
+                                          envelope.secrets.append(card)
+                                          envelope.secretConfirmations[card.confirmationKey] = estateEngine.now
+                                          return envelope.secrets.count - 1
+                                      },
+                                      onClose: { showFirstSteps = false })
                     .environment(\.parentMode, parentMode)
                     .parentTypeScale()
             }
@@ -200,122 +217,237 @@ struct EnvelopeEditorView: View {
         .preferredColorScheme(.dark)
     }
 
-    // MARK: - Secrets
+    // MARK: - The top
 
-    private var secretsBlock: some View {
+    /// The one row at the top of an envelope that has words but no person.
+    /// It states the good news first (the writing is safe here) because the
+    /// person reading it just did the hard part and should not be met with a
+    /// warning for it.
+    private var waitingForAPerson: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("The secrets").font(.headline).foregroundStyle(.white)
+            HStack(spacing: 10) {
+                Image(systemName: "person.crop.circle.badge.questionmark")
+                    .font(.title3).foregroundStyle(.white.opacity(0.75))
+                Text("This one is for \(recipientName), who is not in Seal yet.")
+                    .font(.headline).foregroundStyle(.white)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Text("Write as much as you like. It stays on this phone as a draft. When you meet \(recipientName) in person and add them under People, choose them here and this envelope becomes theirs.")
+                .font(.callout).foregroundStyle(.white.opacity(0.65))
+                .fixedSize(horizontal: false, vertical: true)
+            if let onChoosePerson {
+                Button(action: onChoosePerson) {
+                    Text("Choose the person").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(SealSecondaryButtonStyle())
+                .parentTapTarget(60)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 18))
+    }
+
+    private var titleRow: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "envelope.fill").foregroundStyle(SealTheme.brass)
+            TextField("For \(recipientName)", text: $envelope.title)
+                .textFieldStyle(.plain)
+                .font(.system(.title3, design: .rounded, weight: .semibold))
+                .foregroundStyle(.white)
+        }
+        .padding(14)
+        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    /// One sentence and five dots. The dots are in Karen's order.
+    private var packingCard: some View {
+        let all = filled.allSatisfy { $0 }
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                ForEach(Array(["Letter", "Steps", "Secrets", "Photos", "Voice"].enumerated()), id: \.offset) { i, name in
+                    VStack(spacing: 4) {
+                        Circle()
+                            .fill(filled[i] ? SealTheme.brass : .white.opacity(0.08))
+                            .overlay(Circle().strokeBorder(filled[i] ? SealTheme.brass : .white.opacity(0.25), lineWidth: 1))
+                            .frame(width: 12, height: 12)
+                        Text(name).font(.caption2).foregroundStyle(.white.opacity(filled[i] ? 0.8 : 0.4))
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+            Text(packingLine)
+                .font(.callout).foregroundStyle(all ? SealTheme.brass : .white.opacity(0.7))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14)
+        .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 14))
+        .animation(.easeInOut(duration: 0.2), value: filled)
+    }
+
+    // MARK: - The five cards
+
+    /// The shell every card uses: an icon, a title, what is in it or the
+    /// invitation, and one action on the right.
+    private func card<Content: View>(_ icon: String, _ title: String, filled: Bool,
+                                     action: String, onAction: @escaping () -> Void,
+                                     @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(filled ? SealTheme.brass : .white.opacity(0.5))
+                    .frame(width: 22)
+                Text(title).font(.headline).foregroundStyle(.white)
                 Spacer()
-                if !envelope.secrets.isEmpty {
+                Button(action: onAction) {
+                    Text(action).font(.subheadline.weight(.semibold))
+                }
+                .buttonStyle(.bordered).tint(SealTheme.brass)
+                .parentTapTarget(44)
+            }
+            content()
+        }
+        .padding(16)
+        .background(.white.opacity(filled ? 0.06 : 0.035), in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(filled ? SealTheme.brass.opacity(0.25) : .clear, lineWidth: 1))
+    }
+
+    private func invitation(_ line: String) -> some View {
+        Text(line)
+            .font(.callout).foregroundStyle(.white.opacity(0.55))
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    // The letter
+
+    private var letterCard: some View {
+        card("text.alignleft", "The letter", filled: hasLetter,
+             action: writingLetter ? "Close" : (hasLetter ? "Write more" : "Write"),
+             onAction: { withAnimation(.easeInOut(duration: 0.2)) { writingLetter.toggle() } }) {
+            if writingLetter {
+                TextEditor(text: $envelope.letter)
+                    .scrollContentBackground(.hidden)
+                    .font(.body).foregroundStyle(.white)
+                    .frame(minHeight: 180)
+                    .padding(10)
+                    .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
+                    .overlay(alignment: .topLeading) {
+                        if !hasLetter {
+                            Text("Say what you would say if \(recipientName) were in the room.")
+                                .foregroundStyle(.white.opacity(0.3)).padding(18).allowsHitTesting(false)
+                        }
+                    }
+                if let finding = secretInLetter { secretInLetterLine(finding) }
+                // The letter only. Deliberately NOT on the secrets,
+                // where a password read aloud in a kitchen is a worse
+                // idea than typing it. Secrets are typed, exactly as written.
+                DictationButton(text: $envelope.letter)
+                if LetterReview.isAvailable { reviewBlock }
+            } else if hasLetter {
+                Text(envelope.letter)
+                    .font(.callout).foregroundStyle(.white.opacity(0.75))
+                    .lineLimit(4)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("\(envelope.letter.split(whereSeparator: \.isWhitespace).count) words")
+                    .font(.caption).foregroundStyle(.white.opacity(0.4))
+            } else {
+                invitation("The part \(recipientName) will read first and keep longest. It does not have to be long.")
+            }
+        }
+    }
+
+    // What to do first
+
+    private var stepsCard: some View {
+        let steps = envelope.usableFirstSteps
+        return card("list.number", "What to do first", filled: hasSteps,
+                    action: hasSteps ? "Edit" : "Add",
+                    onAction: { showFirstSteps = true }) {
+            if hasSteps {
+                StepsTimelineMini(steps: steps, secrets: envelope.secrets)
+            } else {
+                invitation("On a hard day a list is worth more than a pile of passwords. Who to call, where the will is, what to cancel.")
+                HStack(spacing: 6) {
+                    ForEach(FirstStep.starters.prefix(3)) { starter in
+                        Text(starter.title)
+                            .font(.caption).foregroundStyle(.white.opacity(0.6))
+                            .padding(.horizontal, 8).padding(.vertical, 4)
+                            .background(.white.opacity(0.06), in: Capsule())
+                            .lineLimit(1)
+                    }
+                }
+            }
+        }
+    }
+
+    // The secrets
+
+    private var secretsCard: some View {
+        card("lock.fill", "The secrets", filled: hasSecrets,
+             action: "Add", onAction: { showSecretEditor = true }) {
+            if hasSecrets {
+                HStack {
+                    Text(envelope.secrets.count == 1 ? "One secret, sealed exactly as written."
+                                                     : "\(envelope.secrets.count) secrets, sealed exactly as written.")
+                        .font(.caption).foregroundStyle(.white.opacity(0.5))
+                    Spacer()
                     Button(revealSecrets ? "Hide" : "Show") {
                         if revealSecrets { revealSecrets = false; return }
                         Task {
                             if await AppLock.confirmSeal(ownerHash: estateEngine.ownerHash) { revealSecrets = true }
                         }
                     }
-                    .font(.caption).foregroundStyle(SealTheme.brass)
+                    .font(.caption.weight(.semibold)).foregroundStyle(SealTheme.brass)
+                    .parentTapTarget(40)
                 }
-                Button { showSecretEditor = true } label: { Label("Add", systemImage: "plus") }
-                    .buttonStyle(.bordered).tint(SealTheme.brass)
-                    .parentTapTarget()
-            }
-            if envelope.secrets.isEmpty {
-                Text("Passwords, where the safe deposit key is, the combination, the seed phrase. This is the part people buy this for.")
-                    .font(.callout).foregroundStyle(.white.opacity(0.5))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            ForEach(Array(envelope.secrets.enumerated()), id: \.offset) { index, card in
-                HStack(alignment: .top, spacing: 12) {
-                    Image(systemName: "lock.fill").foregroundStyle(SealTheme.brass).padding(.top, 2)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(card.title).font(.subheadline.weight(.semibold)).foregroundStyle(.white)
-                        Text(card.typeLine).font(.caption2).foregroundStyle(.white.opacity(0.5))
-                        // How long since the owner said this one is still
-                        // right. Plain words, no date arithmetic to do.
-                        Text(SecretAge.line(since: envelope.confirmedAt(card), now: estateEngine.now))
-                            .font(.caption2).foregroundStyle(.white.opacity(0.4))
-                        if revealSecrets {
-                            Text(card.displayValue)
-                                .font(.system(.body, design: .monospaced))
-                                .foregroundStyle(.white.opacity(0.9))
-                                .fixedSize(horizontal: false, vertical: true)
-                        } else {
-                            Text(String(repeating: "•", count: min(card.value.count, 24)))
-                                .font(.system(.body, design: .monospaced))
-                                .foregroundStyle(.white.opacity(0.35))
-                        }
-                    }
-                    Spacer()
-                    // Through the model, so a step that pointed at this
-                    // secret loses its link instead of pointing at the
-                    // wrong one.
-                    Button(role: .destructive) { envelope.removeSecret(at: index) } label: {
-                        Image(systemName: "trash").foregroundStyle(.orange.opacity(0.8))
-                    }
-                    .parentTapTarget()
+                ForEach(Array(envelope.secrets.enumerated()), id: \.offset) { index, card in
+                    secretRow(index: index, card: card)
                 }
-                .padding(14)
-                .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
-            }
-        }
-    }
-
-    // MARK: - What to do first
-
-    /// The door to the steps list (FirstStepsEditorView). The block shows
-    /// the first few steps so the owner can see at a glance that the
-    /// envelope has them, and a plain reason to add some when it does not.
-    private var firstStepsBlock: some View {
-        let steps = envelope.usableFirstSteps
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("What to do first").font(.headline).foregroundStyle(.white)
-                Spacer()
-                Button { showFirstSteps = true } label: {
-                    Label(steps.isEmpty ? "Add" : "Edit", systemImage: steps.isEmpty ? "plus" : "pencil")
-                }
-                .buttonStyle(.bordered).tint(SealTheme.brass)
-                .parentTapTarget()
-            }
-            if steps.isEmpty {
-                Text("A short numbered list for \(recipientName): who to call, where the will is, what to cancel. On a hard day a list is worth more than a pile of passwords.")
-                    .font(.callout).foregroundStyle(.white.opacity(0.5))
-                    .fixedSize(horizontal: false, vertical: true)
             } else {
-                ForEach(Array(steps.prefix(3).enumerated()), id: \.element.id) { index, step in
-                    HStack(alignment: .top, spacing: 10) {
-                        Text("\(index + 1).").font(.callout.weight(.semibold)).foregroundStyle(SealTheme.brass)
-                        Text(step.trimmedTitle).font(.callout).foregroundStyle(.white.opacity(0.85))
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                if steps.count > 3 {
-                    Text(steps.count == 4 ? "And one more." : "And \(steps.count - 3) more.")
-                        .font(.caption).foregroundStyle(.white.opacity(0.5))
-                }
+                invitation("Passwords, where the safe deposit key is, the combination, the seed phrase. This is the part people buy this for.")
             }
         }
-        .padding(14)
-        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
     }
 
-    // MARK: - Media
-
-    private var mediaBlock: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Photos and a voice message").font(.headline).foregroundStyle(.white)
-            HStack(spacing: 10) {
-                Button { showPhotoPicker = true } label: { Label("Add a photo", systemImage: "photo") }
-                    .buttonStyle(.bordered).tint(SealTheme.brass)
-                    .parentTapTarget()
-                Button { showVoice = true } label: {
-                    Label(envelope.voiceNote == nil ? "Record a message" : "Record again", systemImage: "mic.fill")
+    private func secretRow(index: Int, card: SealedCard) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "key.fill").foregroundStyle(SealTheme.brass.opacity(0.8)).padding(.top, 2)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(card.title).font(.subheadline.weight(.semibold)).foregroundStyle(.white)
+                Text(card.typeLine).font(.caption2).foregroundStyle(.white.opacity(0.5))
+                // How long since the owner said this one is still right.
+                Text(SecretAge.line(since: envelope.confirmedAt(card), now: estateEngine.now))
+                    .font(.caption2).foregroundStyle(.white.opacity(0.4))
+                if revealSecrets {
+                    Text(card.displayValue)
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.9))
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Text(String(repeating: "\u{2022}", count: min(card.value.count, 24)))
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.35))
                 }
-                .buttonStyle(.bordered).tint(SealTheme.brass)
-                .parentTapTarget()
             }
-            if !envelope.photos.isEmpty {
+            Spacer()
+            // Through the model, so a step that pointed at this secret
+            // loses its link instead of pointing at the wrong one.
+            Button(role: .destructive) { envelope.removeSecret(at: index) } label: {
+                Image(systemName: "trash").foregroundStyle(.orange.opacity(0.8))
+            }
+            .parentTapTarget()
+        }
+        .padding(12)
+        .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    // Photos
+
+    private var photosCard: some View {
+        card("photo.on.rectangle", "Photos", filled: hasPhotos,
+             action: "Add", onAction: { showPhotoPicker = true }) {
+            if hasPhotos {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
                         ForEach(envelope.photos) { item in
@@ -334,22 +466,54 @@ struct EnvelopeEditorView: View {
                         }
                     }
                 }
+            } else {
+                invitation("A picture of the two of you. The house. The dog. \(recipientName) will look at it more than once.")
             }
+        }
+    }
+
+    // Voice
+
+    private var voiceCard: some View {
+        card("waveform", "Your voice", filled: hasVoice,
+             action: hasVoice ? "Record again" : "Record", onAction: { showVoice = true }) {
             if let voice = envelope.voiceNote {
-                HStack {
-                    Image(systemName: "waveform").foregroundStyle(SealTheme.brass)
-                    Text("Voice message, \(ByteCountFormatter.string(fromByteCount: Int64(voice.byteCount), countStyle: .file))")
-                        .font(.callout).foregroundStyle(.white.opacity(0.8))
+                HStack(spacing: 12) {
+                    Button {
+                        play(voice)
+                    } label: {
+                        Image(systemName: player?.isPlaying == true ? "stop.circle.fill" : "play.circle.fill")
+                            .font(.system(size: 34)).foregroundStyle(SealTheme.brass)
+                    }
+                    .parentTapTarget(48)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Voice message").font(.subheadline.weight(.semibold)).foregroundStyle(.white)
+                        Text(ByteCountFormatter.string(fromByteCount: Int64(voice.byteCount), countStyle: .file))
+                            .font(.caption).foregroundStyle(.white.opacity(0.5))
+                    }
                     Spacer()
                     Button(role: .destructive) { envelope.voiceNote = nil } label: {
                         Image(systemName: "trash").foregroundStyle(.orange.opacity(0.8))
                     }
                     .parentTapTarget()
                 }
-                .padding(14)
-                .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
+            } else {
+                invitation("Thirty seconds is enough. \(recipientName) will want to hear you say their name.")
             }
         }
+    }
+
+    private func play(_ item: MediaItem) {
+        if let p = player, p.isPlaying { p.stop(); player = nil; return }
+        guard let data = estateEngine.mediaPlaintext(item, in: envelope) else {
+            error = "That recording is not on this phone."; return
+        }
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback)
+            let p = try AVAudioPlayer(data: data)
+            p.play()
+            player = p
+        } catch { self.error = error.localizedDescription }
     }
 
     // MARK: - What they see
@@ -502,16 +666,6 @@ struct EnvelopeEditorView: View {
         }
     }
 
-    private func field<T: View>(_ label: String, @ViewBuilder content: () -> T) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(label).font(.headline).foregroundStyle(.white)
-            content()
-                .font(.body)
-                .foregroundStyle(.white)
-                .padding(14)
-                .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
-        }
-    }
 }
 
 // MARK: - A secret

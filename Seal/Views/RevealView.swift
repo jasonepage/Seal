@@ -227,57 +227,15 @@ struct RevealPager: View {
 
     // MARK: - What to do first
 
-    /// The owner's numbered steps, each with a check circle. A tick is the
-    /// reader's own bookkeeping and changes nothing anywhere else. A step
-    /// that needs a secret names it; the secret itself stays below, behind
-    /// the Face ID check like every other one.
+    /// The owner's numbered steps as a checklist (StepsChecklist). A tick
+    /// is the reader's own bookkeeping, kept under the viewer's hash when
+    /// there is one, and changes nothing anywhere else.
     private func firstStepsView(_ e: Envelope.Payload) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("What to do first").font(.headline).foregroundStyle(.white).padding(.top, 6)
-            Text("\(ownerName) wrote these steps for you, in this order. Tap a circle when a step is done. The marks stay on this phone only.")
-                .font(.caption).foregroundStyle(.white.opacity(0.5))
-                .fixedSize(horizontal: false, vertical: true)
-            ForEach(Array(e.firstSteps.enumerated()), id: \.element.id) { index, step in
-                let isDone = done.contains(step.id)
-                Button { toggle(step.id) } label: {
-                    HStack(alignment: .top, spacing: 12) {
-                        Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
-                            .font(.title3)
-                            .foregroundStyle(isDone ? SealTheme.brass : .white.opacity(0.5))
-                            .padding(.top, 1)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("\(index + 1). \(step.title)")
-                                .font(.body.weight(.semibold))
-                                .foregroundStyle(.white.opacity(isDone ? 0.5 : 0.95))
-                                .strikethrough(isDone, color: .white.opacity(0.5))
-                                .fixedSize(horizontal: false, vertical: true)
-                            if !step.note.isEmpty {
-                                Text(step.note)
-                                    .font(.callout).foregroundStyle(.white.opacity(isDone ? 0.4 : 0.7))
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            if let s = step.secretIndex, e.secrets.indices.contains(s) {
-                                Label("Uses the secret \"\(e.secrets[s].title)\", below", systemImage: "lock.fill")
-                                    .font(.caption).foregroundStyle(SealTheme.brass.opacity(0.85))
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                        }
-                        Spacer(minLength: 0)
-                    }
-                    .padding(14)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(isDone ? "Done: \(step.title)" : "Not done: \(step.title)")
-                .parentTapTarget()
-            }
-        }
-    }
-
-    private func toggle(_ stepID: String) {
-        if done.contains(stepID) { done.remove(stepID) } else { done.insert(stepID) }
-        if let viewerHash { FirstStepsDone.save(done, viewerHash: viewerHash) }
+        StepsChecklist(steps: e.firstSteps, secrets: e.secrets, ownerName: ownerName,
+                       done: Binding(get: { done }, set: { new in
+                           done = new
+                           if let viewerHash { FirstStepsDone.save(done, viewerHash: viewerHash) }
+                       }))
     }
 
     private func secretCard(_ card: SealedCard) -> some View {
