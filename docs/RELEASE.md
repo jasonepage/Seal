@@ -204,7 +204,31 @@ would have to say that.
 envelopes with its own rule", in the batch after this TestFlight round.
 Stop here. The human decides.
 
-## 11. Known judgement calls, for review
+## 11. The owner deletes their account (built 2026-09-16, UNCOMPILED)
+
+The delete screen asks one question when anything is sealed: keep the
+envelopes for the family, or cancel them. The owner's phone then writes one
+signed `ownerDeparted` entry (`{ keepEnvelopes, departedAtEpoch }`) into
+each envelope set's record, before the delete marker and the wipe.
+
+- **Keep.** The machine is unchanged. Like every owner entry it is the
+  owner's last sign of life, so a claim can open once the silence period
+  has passed from it, and the warnings, grace and M taps still apply. Key
+  holders see the earliest claim date and the earliest opening date.
+- **Cancel.** The owner's phone deletes every sealed blob it uploaded
+  (epoch material, key tables, contents). `EstateEngine` refuses claims,
+  taps and releases on every key holder's phone. A cancel beats a keep.
+- **A later heartbeat voids the entry**: the delete did not finish.
+- A release that already happened is not undone (section 4 of PRODUCT.md,
+  "Undoing a release").
+- `ReleaseMachine` does not read the kind. `ReleaseFeed` lists it with the
+  kinds it passes over. `DepartureRules.swift` holds the meaning.
+- The owner's record stays readable for history: the delete flips the
+  tier but keeps the device endorsements, and key holders read it through
+  `fetchIdentityForHistory`, trusted only via the pinned root key. Before
+  this, the record froze on every other phone the day the owner left.
+
+## 12. Known judgement calls, for review
 
 - After a **veto**, a new claim may open immediately if the owner is still
   overdue; the objecting custodian must veto again. An alternative (the
@@ -217,3 +241,149 @@ Stop here. The human decides.
   verification** by default, because the UV policy is `.preferred` and a
   PIN-less key cannot produce UV. `WebAuthnAssertion.verify(with:requireUserVerification:)`
   exists for a policy that wants it.
+
+## 13. A rule per envelope (designed 2026-09-16, NOT BUILT, decision made)
+
+Jason's ask, in his words: move the rule into each envelope, so that when
+you are writing the letter, the steps, the secrets, the photos and the
+voice, you can also choose when that envelope opens; and get rid of the
+Letters versus Bills and medical picker, so envelopes live on the
+Envelopes tab and keys live on the Keys tab.
+
+Decided with Jason the same day: each rule has its own key holders; at
+most three rules per person; design first, then build, then the tour.
+
+### 13.1 The one thing this design cannot pretend
+
+A rule is not a setting on a letter. A rule is the lock on a box of keys.
+Every envelope's key sits in a box (the Estate Key), and the rule is what
+the key holders have to do to open that box: the silence, the warnings,
+the grace, and M taps. Once the box is open, every key in it is out. A
+rule "per envelope" with one box is a rule the app could only pretend to
+honour, and section 10 rejected exactly that. So:
+
+**An envelope picks a rule. Envelopes that share a rule share a box.
+Each rule is its own box, with its own Estate Key, shares, key holders,
+claim and taps.** This is what Bills and medical already is under the
+hood (`EstateEngine.Slot.urgent`: a second engine, second storage, no
+shared key material). This design takes the two fixed slots and makes
+them a short list of named rules. Nothing cryptographic changes.
+
+### 13.2 What the owner sees
+
+*Amended after step 1 was on a phone (Jason, 2026-09-16): the Keys tab
+is about people, not rules. Rules live on each envelope's "When it
+opens" card and under "Your rules" in the Envelopes menu; the Keys tab
+lists each person who holds a key, with the rules they hold it for.
+The paragraphs below describe the first cut and are kept for the
+reasoning.*
+
+- **Envelopes tab.** One inbox with every envelope, no picker. When more
+  than one rule exists, each row carries a small tag with its rule's
+  name. The Seal bar seals every box that has something unsealed, one
+  payment check, one pass.
+- **The editor.** A sixth card, "When it opens", after the voice card.
+  It shows the rule this envelope is on ("Your rule: after 90 quiet days,
+  21 days of warnings, 14 more, any 2 of 3 keys") and lets the owner pick
+  another rule or "Make a new rule" (up to three). Picking a different
+  rule moves the envelope into that rule's box, and the card says so:
+  "This moves the envelope to a different set of keys. Both sets need
+  sealing again." "Open on a date" (section 9) stays on this card and
+  works with any rule; it is a wish the recipient's phone honours, not a
+  lock.
+- **Keys tab.** One section per rule: its name, its numbers, its key
+  holders with their yearly standing, its seal state, and its own "The
+  rule" button. "Add a rule" at the bottom, hidden at three. Rename from
+  the section header. A rule can be deleted only when it holds no
+  envelopes and has never been sealed, or after its envelopes have been
+  moved; the button says why when it is off. "Set up with my partner"
+  stays where it is and works on the default rule.
+- **Names.** The default rule is called "Your rule" until renamed. A new
+  rule starts named "Sooner", with the short numbers Bills and medical
+  uses today (the shortest silence allowed, 7 warning days, no grace),
+  because that is the one people ask for. The owner can name it anything.
+- **Cost, said on screen.** When making a second or third rule: "Every
+  rule is its own set of keys. Your key holders tap once per rule, and
+  each rule shows on their phone as its own line."
+
+### 13.3 What a key holder or recipient sees
+
+Unchanged in shape. Each rule's box arrives on their phone as its own
+estate, named by the invite's `ownerName`: the default rule is "Karen";
+any other is "Karen (Sooner)", the way "Karen (bills and medical)" works
+today. `Slot.ownerLabel` becomes `RuleSlot.ownerLabel`, the suffix is the
+rule's name. No model change, no CloudKit change. `GuardedEstateView`,
+the For others tab, the claim, the taps and the capsule are untouched.
+
+### 13.4 What changes in code
+
+- `EstateEngine.Slot` (two cases) becomes `RuleSlot: Codable, Hashable
+  { id: String; name: String }`. `id` is `""` for the default rule and
+  `"urgent"` for the one Bills and medical made, so **no storage moves on
+  any phone**; new rules get `"r2"`, `"r3"`. `storeHash` is unchanged in
+  shape: the identity hash for `""`, `"\(id).\(hash)"` otherwise.
+- `RuleBook` (new, `Seal/Estate/RuleBook.swift`): the list of this
+  identity's rules, keychain JSON at `seal.rules.<hash>`, with `add`
+  (refuses a fourth), `rename`, `remove` (refuses while the engine has
+  envelopes or a published epoch), and the migration: on first load, if
+  an `urgent` estate exists on disk, the book lists it as a rule named
+  "Bills and medical"; otherwise the book holds only the default.
+- `ContentView` builds one `EstateEngine` per rule in the book, held in
+  an observable `EstateEngines` (the default first). `HomeView`
+  heartbeats every engine and schedules `OwnerNotices` per engine, as it
+  does for two today. `EstateHomeView` takes `engines` instead of
+  `lettersEngine` and `urgentEngine`; `estateEngine` for the inbox is
+  gone, replaced by a flat list of `(engine, envelope)` pairs; `runSeal`
+  loops the engines that need sealing after one purchase check.
+- The editor gets the "When it opens" card. Moving an envelope:
+  `EstateEngines.move(envelopeID, from:, to:)` = `removeEnvelope` on the
+  source engine and `updateEnvelope` (with the same content, media
+  re-filed under the new `storeHash`) on the target, and, if the
+  recipient is not yet in the target estate, `addRecipient` there. Both
+  engines mark themselves unsealed.
+- `EstateEngine.wipe` iterates the book's ids plus `""` and `"urgent"`.
+  `RuleBook.wipe` joins `wipeLocalAndEngines`.
+- The widget keeps showing the default rule's numbers (`shareCheckIn`
+  guards on `slot.id == ""`).
+- `FriendStore.refreshGone` and the unresponsive key holder box take the
+  full engine list, as they take two today.
+- `PolicyView` is unchanged; it edits one engine's estate.
+
+Untouched: `ReleaseMachine`, `ReleaseFeed`, `EstateLogVerifier`, the key
+hierarchy, `EstateEvent`, the capsule format, every CloudKit record type,
+the project file.
+
+### 13.5 Tests (`RuleBookTests`, registered)
+
+Loads an empty book as the default rule only; lists `urgent` as "Bills
+and medical" when that estate exists; refuses a fourth rule; refuses to
+remove a rule with envelopes or a published epoch; `ownerLabel` is the
+bare name for the default and "Name (Rule)" otherwise; `storeHash` for
+`""` and `"urgent"` equals what the code produced before this change;
+moving an envelope keeps its letter, steps, secrets and media and leaves
+nothing behind in the source; wipe covers every id in the book.
+
+### 13.6 Order of building
+
+1. `RuleSlot`, `RuleBook`, `EstateEngines`, N engines in `ContentView`
+   and `HomeView`, the Keys tab as one section per rule, the picker
+   removed, the inbox flat with rule tags, seal-all. Envelopes keep their
+   rule; nothing moves yet. Build. Check a phone that already has a
+   Bills and medical set: it must show as a rule with its envelopes.
+2. The editor card, "Make a new rule", moving an envelope. Build. Move
+   one envelope, seal, and check on Mom's phone that she sees two lines
+   from you and that the moved envelope opens under the new rule with
+   Time Travel.
+3. Tests, GOTCHAS, HANDOFF, PRODUCT.md section 3 (the word "rule" gets
+   "one or more per owner; each is its own box of keys"), and this
+   section marked built.
+
+### 13.7 Judgement calls, for review
+
+- Three rules, not more. Each is a round of taps for the family.
+- Own key holders per rule. A rule with no key holders cannot seal, and
+  the Keys tab says so under that rule.
+- Moving an envelope unseals both boxes. There is no cheaper honest
+  version: the envelope's key is in the old box and must come out.
+- The default rule keeps the bare owner name on other phones, so nothing
+  changes for anyone who set up before this.

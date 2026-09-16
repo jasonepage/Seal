@@ -47,6 +47,28 @@ from the outside.
   `CeremonyError.identityDeleted`. **Deleting the Identity record by hand in the
   console leaves no marker and can be republished.** Retire a stuck account
   through Profile → Delete identity on a current build.
+- **Revoking a device did nothing (fixed 2026-09-16, uncompiled).** Two
+  causes. The revoke request put the passkey and security key providers in
+  one request, so a passkey owner got the key sheet, cancelled, and the
+  error was swallowed. And the revocation was appended to the Identity
+  record, which only the iCloud account that CREATED it may modify. It is
+  now also written as a `GroupInvite` side record with a random name
+  (`recipient` = `revoke.<hash>`), found by query, and still only honoured
+  when the root credential signed it. Do not give it a predictable name: a
+  stranger could create that name first and block the revocation forever.
+- **Deleted people used to look alive on other phones.** Nothing tells the
+  people who met them. `GoneCheck.swift` asks the directory (daily, and on
+  pull to refresh in People) and marks them; the mark is never cleared.
+- **Delete markers must be signed (2026-09-16, uncompiled).** A
+  "tomb.<hash>" record now counts only when it carries the owner's tap over
+  `seal.identity.delete.v1` (TombstoneProof.swift), checked against the
+  pinned key or the live record's key. Before, anybody could create one for
+  anybody. Markers written by older builds count only on the phone that
+  wrote them, or where the live record's tier was flipped.
+- **A deleted owner's record used to freeze on key holders' phones.** The
+  delete scrubbed the device endorsements, so nothing the owner ever signed
+  could be checked again. It no longer scrubs them. Owners deleted before
+  this build stay frozen on phones that never saved their record.
 - Renaming is metadata only. A display name is in no signature, commitment or
   credential hash, so it never affects verification.
 
@@ -157,5 +179,12 @@ once and is not now. The em dashes inside user-visible strings are gone too
   payload.** A build from before it throws on decode when it meets an
   envelope with a video, and the recipient sees "nothing addressed to
   you". Every phone that will open envelopes must run a current build.
+- **One rule is one engine (2026-09-16, uncompiled).** `EstateEngine.Slot`
+  is gone; `RuleSlot` in `RuleBook.swift` has the same store keys (`""`
+  for the default, `"urgent"` for the old Bills and medical set), so
+  nothing on disk moves. Anything new that stores per rule must file
+  under the engine's `storeHash` and be covered by
+  `RuleBook.allStoreHashes` in the wipe. The guarded estates (what this
+  phone holds for others) live on the default rule's engine only.
 - **Demo mode seeds a sealed estate but publishes nothing.** Every engine
   method checks `DemoFixtures.isActive` and returns; the buttons are disabled.
