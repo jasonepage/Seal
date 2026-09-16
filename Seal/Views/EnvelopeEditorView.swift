@@ -29,6 +29,9 @@ struct EnvelopeEditorView: View {
     @State private var confirmDelete = false
     @State private var revealSecrets = false
     @State private var error: String?
+    /// Findings the owner chose to keep in the letter, by value, so the
+    /// line does not come back on the next keystroke.
+    @State private var keptInLetter: Set<String> = []
 
     /// The one row at the top of an envelope that has words but no person.
     /// It states the good news first (the writing is safe here) because the
@@ -80,6 +83,7 @@ struct EnvelopeEditorView: View {
                                 .scrollContentBackground(.hidden)
                                 .frame(minHeight: 160)
                         }
+                        if let finding = secretInLetter { secretInLetterLine(finding) }
                         // The letter only. Deliberately NOT on the secrets,
                         // where a password read aloud in a kitchen is a worse
                         // idea than typing it, and where a transcriber that
@@ -266,6 +270,52 @@ struct EnvelopeEditorView: View {
                 .padding(14)
                 .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
             }
+        }
+    }
+
+    // MARK: - A secret typed into the letter
+
+    /// The first thing in the letter that looks like a recovery phrase or a
+    /// private key, and that the owner has not already said to keep. Plain
+    /// string matching on the phone (LetterSecretScan); nothing is sent
+    /// anywhere and nothing is changed without a tap.
+    private var secretInLetter: LetterSecretScan.Finding? {
+        LetterSecretScan.scan(envelope.letter).first { !keptInLetter.contains($0.id) }
+    }
+
+    /// One quiet line and two small buttons. Not a warning colour, not a
+    /// blocker, and it is gone the moment the owner answers either way.
+    private func secretInLetterLine(_ finding: LetterSecretScan.Finding) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(finding.line)
+                .font(.callout).foregroundStyle(.white.opacity(0.75))
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 10) {
+                Button {
+                    moveIntoSecret(finding)
+                } label: {
+                    Label("Move it to a secret", systemImage: "lock.fill")
+                }
+                .buttonStyle(.bordered).tint(SealTheme.brass)
+                .parentTapTarget()
+                Button("Keep it in the letter") { keptInLetter.insert(finding.id) }
+                    .buttonStyle(.plain).foregroundStyle(.white.opacity(0.5))
+                    .parentTapTarget()
+            }
+        }
+        .padding(.horizontal, 4)
+    }
+
+    /// The same path a typed secret takes (SealedCard.validated), so the
+    /// moved value obeys the same rules as one entered by hand. The letter
+    /// loses exactly the matched text and nothing else.
+    private func moveIntoSecret(_ finding: LetterSecretScan.Finding) {
+        do {
+            let card = try SealedCard.validated(cardType: finding.cardType, title: finding.cardTitle, value: finding.value)
+            envelope.secrets.append(card)
+            envelope.letter = LetterSecretScan.removing(finding, from: envelope.letter)
+        } catch {
+            self.error = error.localizedDescription
         }
     }
 
