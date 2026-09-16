@@ -139,6 +139,7 @@ struct ContentView: View {
             AppLock.wipe(ownerHash: hash)
             CustodianNotices.wipe(ownerHash: hash)   // what this phone has already announced
             OwnerNotices.wipe(ownerHash: hash)       // the owner's own scheduled reminders
+            FirstStepsDone.wipe(ownerHash: hash)     // a recipient's check marks on "what to do first"
         }
         friendStore = nil
         estateEngine = nil

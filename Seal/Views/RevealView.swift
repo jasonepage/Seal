@@ -38,7 +38,10 @@ struct RevealView: View {
             emptyTitle: "Nothing addressed to you.",
             emptyLine: "The release went through, and none of the envelopes were written for this identity.",
             banner: nil,
-            onClose: onClose)
+            onClose: onClose,
+            // The recipient's own identity hash: their check marks on "what
+            // to do first" are kept on this phone under it and nowhere else.
+            viewerHash: estateEngine.ownerHash)
     }
 }
 
@@ -68,8 +71,14 @@ struct RevealPager: View {
     /// button in the toolbar. The real reveal passes nothing: a recipient
     /// reads in the owner's order.
     var onReorder: (() -> Void)? = nil
+    /// Whose phone this is. When set, the check marks on "what to do first"
+    /// are saved under this hash (FirstStepsDone) and survive closing the
+    /// screen. The owner's preview passes nil: ticks there last only as
+    /// long as the sheet is open, because they are not the recipient's.
+    var viewerHash: String? = nil
 
     @State private var index = 0
+    @State private var done: Set<String> = []
     @State private var photos: [String: UIImage] = [:]
     @State private var player: AVAudioPlayer?
     @State private var copied: String?
@@ -132,6 +141,9 @@ struct RevealPager: View {
                     }
                 }
             }
+            .task {
+                if let viewerHash { done = FirstStepsDone.load(viewerHash: viewerHash) }
+            }
             .onChange(of: pages.count) { _, count in
                 // The preview's reorder can shrink or shuffle the list under
                 // us; never point past the end.
@@ -180,6 +192,7 @@ struct RevealPager: View {
                     }
                 }
             }
+            if !e.firstSteps.isEmpty { firstStepsView(e) }
             if !e.secrets.isEmpty {
                 Text("The secrets").font(.headline).foregroundStyle(.white).padding(.top, 6)
                 if secretsShownFor.contains(page.id) {
@@ -210,6 +223,61 @@ struct RevealPager: View {
             Text("Everything above was sealed by \(ownerName)'s phone and could not be read by anyone, including Seal, until the custodians combined their keys. The letter is theirs. Check the secrets carefully before acting on them.")
                 .font(.caption2).foregroundStyle(.white.opacity(0.4)).fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    // MARK: - What to do first
+
+    /// The owner's numbered steps, each with a check circle. A tick is the
+    /// reader's own bookkeeping and changes nothing anywhere else. A step
+    /// that needs a secret names it; the secret itself stays below, behind
+    /// the Face ID check like every other one.
+    private func firstStepsView(_ e: Envelope.Payload) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("What to do first").font(.headline).foregroundStyle(.white).padding(.top, 6)
+            Text("\(ownerName) wrote these steps for you, in this order. Tap a circle when a step is done. The marks stay on this phone only.")
+                .font(.caption).foregroundStyle(.white.opacity(0.5))
+                .fixedSize(horizontal: false, vertical: true)
+            ForEach(Array(e.firstSteps.enumerated()), id: \.element.id) { index, step in
+                let isDone = done.contains(step.id)
+                Button { toggle(step.id) } label: {
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
+                            .font(.title3)
+                            .foregroundStyle(isDone ? SealTheme.brass : .white.opacity(0.5))
+                            .padding(.top, 1)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("\(index + 1). \(step.title)")
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(.white.opacity(isDone ? 0.5 : 0.95))
+                                .strikethrough(isDone, color: .white.opacity(0.5))
+                                .fixedSize(horizontal: false, vertical: true)
+                            if !step.note.isEmpty {
+                                Text(step.note)
+                                    .font(.callout).foregroundStyle(.white.opacity(isDone ? 0.4 : 0.7))
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            if let s = step.secretIndex, e.secrets.indices.contains(s) {
+                                Label("Uses the secret \"\(e.secrets[s].title)\", below", systemImage: "lock.fill")
+                                    .font(.caption).foregroundStyle(SealTheme.brass.opacity(0.85))
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(isDone ? "Done: \(step.title)" : "Not done: \(step.title)")
+                .parentTapTarget()
+            }
+        }
+    }
+
+    private func toggle(_ stepID: String) {
+        if done.contains(stepID) { done.remove(stepID) } else { done.insert(stepID) }
+        if let viewerHash { FirstStepsDone.save(done, viewerHash: viewerHash) }
     }
 
     private func secretCard(_ card: SealedCard) -> some View {

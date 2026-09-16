@@ -221,8 +221,12 @@ contentKey, title, revealOrder, blobIDs[] } ] }`. Each blob in
 `contentBlobsBase64` is AES-256-GCM under `contentKey` with AAD purpose
 `blob.<blobID>` at epoch 0. The first blob id of an entry is the envelope's
 payload JSON (`title, letter, secrets[], photos[], voiceNote, revealOrder,
-writtenAtEpoch`); the rest are photos and the voice note, whose SHA-256 the
-payload records.
+writtenAtEpoch`, and since 2026-09-16 an optional `firstSteps[]`, each
+`{ id, title, note, secretIndex }`, the owner's ordered "what to do first"
+list, where `secretIndex` is an index into `secrets` or null); the rest are
+photos and the voice note, whose SHA-256 the payload records. A reader that
+does not know `firstSteps` ignores it; a payload without it has none. This
+is additive and did not bump the version (section 11).
 
 ## 8. Timestamps
 

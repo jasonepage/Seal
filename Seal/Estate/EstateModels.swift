@@ -180,6 +180,11 @@ struct Envelope: Codable, Identifiable, Hashable {
     /// section 8 still holds: a recipient is a Seal identity met in person).
     var draftRecipientName: String? = nil
 
+    /// "What to do first": the owner's ordered steps for this person. Sealed
+    /// with the letter and the secrets under the same content key. See
+    /// FirstSteps.swift. Empty for envelopes written before it existed.
+    var firstSteps: [FirstStep] = []
+
     /// Unbound envelopes carry a made-up recipientHash with this prefix, so
     /// each one is still its own recipient for grouping and reveal order,
     /// and so no real identity hash can ever collide with one.
@@ -198,11 +203,15 @@ struct Envelope: Codable, Identifiable, Hashable {
         let voiceNote: MediaItem?
         let revealOrder: Int
         let writtenAtEpoch: Int64
+        /// Added 2026-09-16. A payload sealed before then has no key for it
+        /// and decodes as empty (see the Decodable extension below).
+        var firstSteps: [FirstStep] = []
     }
 
     var payload: Payload {
         Payload(title: title, letter: letter, secrets: secrets, photos: photos, voiceNote: voiceNote,
-                revealOrder: revealOrder, writtenAtEpoch: RecordEvent.epochSeconds(updatedAt))
+                revealOrder: revealOrder, writtenAtEpoch: RecordEvent.epochSeconds(updatedAt),
+                firstSteps: usableFirstSteps)
     }
 
     var blobIDs: [String] {
@@ -315,6 +324,87 @@ struct Estate: Codable, Hashable {
     /// leave the Seal button lit with nothing for it to do.
     var hasUnsealedChanges: Bool {
         needsNewEpoch || publishedPolicy != policy || addressedEnvelopes.contains { !$0.sealed }
+    }
+}
+
+// MARK: - Decoding older shapes
+
+//  A DEFAULT VALUE ON A STORED PROPERTY DOES NOT MAKE A MISSING KEY DECODE.
+//  Swift's synthesized `init(from:)` calls `decode`, not `decodeIfPresent`,
+//  for every non-optional property, so `var x: [T] = []` still throws
+//  keyNotFound when the JSON has no "x". The estate in the keychain and the
+//  payload blobs in CloudKit were written by older builds without the newer
+//  keys, so these three types decode by hand: every key added after the
+//  first release is read with `decodeIfPresent`. Encoding stays synthesized.
+//  These live in extensions so the memberwise initialisers survive.
+
+extension Envelope.Payload {
+    private enum Keys: String, CodingKey {
+        case title, letter, secrets, photos, voiceNote, revealOrder, writtenAtEpoch, firstSteps
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: Keys.self)
+        title = try c.decode(String.self, forKey: .title)
+        letter = try c.decode(String.self, forKey: .letter)
+        secrets = try c.decode([SealedCard].self, forKey: .secrets)
+        photos = try c.decode([MediaItem].self, forKey: .photos)
+        voiceNote = try c.decodeIfPresent(MediaItem.self, forKey: .voiceNote)
+        revealOrder = try c.decode(Int.self, forKey: .revealOrder)
+        writtenAtEpoch = try c.decode(Int64.self, forKey: .writtenAtEpoch)
+        firstSteps = try c.decodeIfPresent([FirstStep].self, forKey: .firstSteps) ?? []
+    }
+}
+
+extension Envelope {
+    private enum Keys: String, CodingKey {
+        case id, recipientHash, title, letter, photos, voiceNote, secrets, revealOrder
+        case createdAt, updatedAt, contentKey, payloadBlobID, sealed, draftRecipientName, firstSteps
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: Keys.self)
+        id = try c.decode(String.self, forKey: .id)
+        recipientHash = try c.decode(String.self, forKey: .recipientHash)
+        title = try c.decode(String.self, forKey: .title)
+        letter = try c.decode(String.self, forKey: .letter)
+        photos = try c.decode([MediaItem].self, forKey: .photos)
+        voiceNote = try c.decodeIfPresent(MediaItem.self, forKey: .voiceNote)
+        secrets = try c.decode([SealedCard].self, forKey: .secrets)
+        revealOrder = try c.decode(Int.self, forKey: .revealOrder)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        updatedAt = try c.decode(Date.self, forKey: .updatedAt)
+        contentKey = try c.decode(Data.self, forKey: .contentKey)
+        payloadBlobID = try c.decodeIfPresent(String.self, forKey: .payloadBlobID)
+        sealed = try c.decode(Bool.self, forKey: .sealed)
+        draftRecipientName = try c.decodeIfPresent(String.self, forKey: .draftRecipientName)
+        firstSteps = try c.decodeIfPresent([FirstStep].self, forKey: .firstSteps) ?? []
+    }
+}
+
+extension Estate {
+    private enum Keys: String, CodingKey {
+        case id, ownerHash, epoch, policy, custodians, recipients, envelopes, createdAt, tableKeys, epochPublished
+        case publishedCustodianHashes, publishedThreshold, publishedCustodianDevices, publishedTableIDs, publishedPolicy
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: Keys.self)
+        id = try c.decode(String.self, forKey: .id)
+        ownerHash = try c.decode(String.self, forKey: .ownerHash)
+        epoch = try c.decode(UInt64.self, forKey: .epoch)
+        policy = try c.decode(ReleasePolicy.self, forKey: .policy)
+        custodians = try c.decode([Custodian].self, forKey: .custodians)
+        recipients = try c.decode([Recipient].self, forKey: .recipients)
+        envelopes = try c.decode([Envelope].self, forKey: .envelopes)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        tableKeys = try c.decode([String: TableKeyRecord].self, forKey: .tableKeys)
+        epochPublished = try c.decode(Bool.self, forKey: .epochPublished)
+        publishedCustodianHashes = try c.decodeIfPresent([String].self, forKey: .publishedCustodianHashes) ?? []
+        publishedThreshold = try c.decodeIfPresent(Int.self, forKey: .publishedThreshold) ?? 0
+        publishedCustodianDevices = try c.decodeIfPresent([String: [String]].self, forKey: .publishedCustodianDevices) ?? [:]
+        publishedTableIDs = try c.decodeIfPresent([String].self, forKey: .publishedTableIDs) ?? []
+        publishedPolicy = try c.decodeIfPresent(ReleasePolicy.self, forKey: .publishedPolicy)
     }
 }
 

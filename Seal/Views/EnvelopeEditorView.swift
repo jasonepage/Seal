@@ -31,6 +31,7 @@ struct EnvelopeEditorView: View {
     @State private var showVoice = false
     @State private var confirmDelete = false
     @State private var showPreview = false
+    @State private var showFirstSteps = false
     @Environment(\.parentMode) private var parentMode
     @State private var revealSecrets = false
     @State private var error: String?
@@ -103,6 +104,7 @@ struct EnvelopeEditorView: View {
                         DictationButton(text: $envelope.letter)
                         if LetterReview.isAvailable { reviewBlock }
                         secretsBlock
+                        firstStepsBlock
                         mediaBlock
                         if envelope.isAddressed { previewRow }
                         Text(envelope.isAddressed
@@ -141,6 +143,12 @@ struct EnvelopeEditorView: View {
                 FamilyPreviewView(recipientHash: envelope.recipientHash, recipientName: recipientName,
                                   ownerName: ownerName, estateEngine: estateEngine,
                                   onClose: { showPreview = false })
+                    .environment(\.parentMode, parentMode)
+                    .parentTypeScale()
+            }
+            .sheet(isPresented: $showFirstSteps) {
+                FirstStepsEditorSheet(steps: $envelope.firstSteps, secrets: envelope.secrets,
+                                      recipientName: recipientName, onClose: { showFirstSteps = false })
                     .environment(\.parentMode, parentMode)
                     .parentTypeScale()
             }
@@ -231,7 +239,10 @@ struct EnvelopeEditorView: View {
                         }
                     }
                     Spacer()
-                    Button(role: .destructive) { envelope.secrets.remove(at: index) } label: {
+                    // Through the model, so a step that pointed at this
+                    // secret loses its link instead of pointing at the
+                    // wrong one.
+                    Button(role: .destructive) { envelope.removeSecret(at: index) } label: {
                         Image(systemName: "trash").foregroundStyle(.orange.opacity(0.8))
                     }
                     .parentTapTarget()
@@ -240,6 +251,45 @@ struct EnvelopeEditorView: View {
                 .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
             }
         }
+    }
+
+    // MARK: - What to do first
+
+    /// The door to the steps list (FirstStepsEditorView). The block shows
+    /// the first few steps so the owner can see at a glance that the
+    /// envelope has them, and a plain reason to add some when it does not.
+    private var firstStepsBlock: some View {
+        let steps = envelope.usableFirstSteps
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("What to do first").font(.headline).foregroundStyle(.white)
+                Spacer()
+                Button { showFirstSteps = true } label: {
+                    Label(steps.isEmpty ? "Add" : "Edit", systemImage: steps.isEmpty ? "plus" : "pencil")
+                }
+                .buttonStyle(.bordered).tint(SealTheme.brass)
+                .parentTapTarget()
+            }
+            if steps.isEmpty {
+                Text("A short numbered list for \(recipientName): who to call, where the will is, what to cancel. On a hard day a list is worth more than a pile of passwords.")
+                    .font(.callout).foregroundStyle(.white.opacity(0.5))
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                ForEach(Array(steps.prefix(3).enumerated()), id: \.element.id) { index, step in
+                    HStack(alignment: .top, spacing: 10) {
+                        Text("\(index + 1).").font(.callout.weight(.semibold)).foregroundStyle(SealTheme.brass)
+                        Text(step.trimmedTitle).font(.callout).foregroundStyle(.white.opacity(0.85))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                if steps.count > 3 {
+                    Text(steps.count == 4 ? "And one more." : "And \(steps.count - 3) more.")
+                        .font(.caption).foregroundStyle(.white.opacity(0.5))
+                }
+            }
+        }
+        .padding(14)
+        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
     }
 
     // MARK: - Media

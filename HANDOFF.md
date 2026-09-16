@@ -24,26 +24,48 @@ timestamps, custody receipts and sealed cards were kept and extended.
 - CloudKit container `iCloud.io.github.jasonepage.Seal`
 - WebAuthn relying party `sealmessenger.com`
 
-## STATUS 2026-09-16: it builds and runs on a phone
+## STATUS 2026-09-16 (evening): the improvements batch, phase by phase
 
-The 2026-09-15 blank white screen is gone; the build at `02ec1ee` ran clean.
-Everything committed after it on 2026-09-16 (fourteen commits, listed below)
-is **uncompiled again** and needs the same loop: build in Xcode, paste the
-errors, fix in place. Nothing in that batch is architectural, so expect
-typos and API spellings, not redesign.
+The whole tree through `e713868` (the pricing work and the brief itself)
+**built and ran clean on a phone** on the evening of 2026-09-16. The
+improvements brief is in `docs/IMPROVEMENTS_PROMPT.md`; this section tracks
+it. Each phase is committed on its own and is uncompiled until the line
+below says otherwise.
 
-Where the 2026-09-16 batch is most likely to fail to compile, in order:
+### Phase 1: "What to do first" (UNCOMPILED)
 
-- `Seal/Views/Interview/LetterReview.swift`: `@Generable` with an array
-  property (`[ReviewedGap]`). The drafter only ever used flat structs.
-- `Seal/Cards/Wordlists/*.swift`: twenty three large `Set<String>` literals.
-  Each is typed explicitly. If the type checker still times out on one, the
-  fix is `Set(["..."] as [String])`, not a project setting.
-- `Seal/Views/RevealView.swift`: `RevealPage` stores an `async throws`
-  closure in a struct that is `Identifiable`. Should be fine in Swift 5 mode.
-- `Seal/Estate/OwnerNotices.swift` and `NotificationsOffCard.swift`:
-  `UNTimeIntervalNotificationTrigger` and
-  `UIApplication.openNotificationSettingsURLString` (iOS 16+).
+An envelope carries an ordered list of steps (`FirstStep`: title, note,
+optional index of one of the envelope's secrets). It is a field on
+`Envelope` and on `Envelope.Payload`, so it is sealed under the envelope
+content key with the letter and the secrets and nothing new leaves the
+phone. The recipient sees numbered steps with check circles in
+`RevealPager`; ticks are kept in the keychain under the viewer's hash
+(`FirstStepsDone`) and nowhere else. The owner's preview shows the same
+view with ticks that do not persist. `FirstStep.starters` is the list the
+owner can pick from. Capsule format: additive, no version bump;
+`docs/CAPSULE.md` section 7 says so. `tools/verify_capsule.py` never reads
+a payload and did not change.
+
+Files: `Seal/Estate/FirstSteps.swift` (new), `Seal/Views/FirstStepsEditorView.swift`
+(new), `Seal/SelfTest/FirstStepsTests.swift` (new), `EstateModels.swift`,
+`EnvelopeEditorView.swift`, `RevealView.swift`, `ContentView.swift`,
+`SelfTestRegistry.swift`, `docs/CAPSULE.md`.
+
+**A bug found on the way, fixed in the same phase:** `Estate`, `Envelope`
+and `Envelope.Payload` relied on `var x: [T] = []` to decode JSON that has
+no `x`. Swift's synthesized decoder does not do that; it throws
+`keyNotFound`, `EstateStore.load` swallows it with `try?`, and the owner's
+estate would simply not be there. Every field added after the first save
+(`publishedCustodianHashes`, `publishedThreshold`,
+`publishedCustodianDevices`, `publishedTableIDs`, and now `firstSteps`) is
+now read with `decodeIfPresent` in hand written `init(from:)` extensions at
+the bottom of `EstateModels.swift`. `firststeps.oldEstateDecodes` proves it.
+**Any new stored property with a default on those three types must be added
+to the matching `init(from:)`, or it silently breaks loading.**
+
+Most likely to fail to compile, in order: the `Picker` over an `Int?`
+selection in `FirstStepEditSheet`; `steps.removeAll(where: \.isBlank)`;
+the `let isDone` inside the `ForEach` in `RevealPager.firstStepsView`.
 
 ## What landed on 2026-09-16
 
