@@ -39,6 +39,7 @@ struct ProfileView: View {
     @State private var showHowTo = false
     @State private var timestampsOn = false
     @State private var restored = false
+    @State private var showPaywall = false
     @Environment(SealPurchase.self) private var purchase
 
     /// Live name, reflects an in-session rename immediately (myRoot is a
@@ -182,6 +183,13 @@ struct ProfileView: View {
             }
             .fullScreenCover(isPresented: $showHowTo) {
                 WelcomeCarousel { showHowTo = false }
+            }
+            .sheet(isPresented: $showPaywall) {
+                SealPaywallView(purchase: purchase,
+                                onUnlocked: { showPaywall = false },
+                                onClose: { showPaywall = false })
+                    .environment(\.parentMode, parentMode?.isOn == true)
+                    .parentTypeScale()
             }
         }
         .preferredColorScheme(.dark)
@@ -376,6 +384,35 @@ struct ProfileView: View {
         .buttonStyle(.plain)
         .padding(.horizontal, 24)
         .parentTapTarget()
+
+        // The purchase, reachable on purpose and not only from the seal
+        // button. Somebody whose estate sealed before there was a price
+        // never meets the paywall, and somebody who wants to pay ahead of
+        // writing should be able to. Hidden once it is paid for.
+        if !purchase.isUnlocked && !DemoFixtures.isActive {
+            Button { showPaywall = true } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "seal")
+                        .foregroundStyle(SealTheme.silver)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(purchase.displayPrice.map { "Pay for your seal, \($0)" } ?? "Pay for your seal")
+                            .foregroundStyle(.white.opacity(0.9))
+                        Text("One payment, once. The people you choose never pay.")
+                            .font(.caption).foregroundStyle(.white.opacity(0.5))
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.3))
+                }
+                .font(.callout)
+                .padding(16)
+                .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 24)
+            .parentTapTarget()
+        }
     }
 
     @ViewBuilder
