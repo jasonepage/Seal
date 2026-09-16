@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 """Independent reference implementation of Shamir secret sharing over GF(256).
 
 Field: GF(2^8) with reducing polynomial 0x11B (the AES field). Share layout:

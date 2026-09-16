@@ -134,4 +134,15 @@ queryable, in both the development and production environments.
 
 ## License
 
-See [LICENSE](LICENSE).
+[Mozilla Public License 2.0](LICENSE). File level copyleft: you may read,
+audit, run and fork this, and you may build something larger around it under
+whatever terms you like, but changes to Seal's own files have to be published
+under the same license.
+
+MPL rather than GPL or AGPL on purpose. GPL family licenses conflict with the
+App Store's terms, which is why VLC was pulled in 2011 and why VideoLAN
+relicensed to MPL to come back. An estate product that cannot ship on the App
+Store is not a product.
+
+Every source file carries the notice from Exhibit A, because MPL is decided
+per file and a file without the notice is arguably not covered.
