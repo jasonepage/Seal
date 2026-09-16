@@ -22,11 +22,16 @@ struct EnvelopeEditorView: View {
     /// Opens the person picker for an envelope written to a typed name.
     /// Optional so nothing else that builds this view has to change.
     var onChoosePerson: (() -> Void)? = nil
+    /// The owner's own name, for the "From ..." line in the preview. The
+    /// preview shows the recipient's screen, and that line is on it.
+    var ownerName: String = ""
 
     @State private var showSecretEditor = false
     @State private var showPhotoPicker = false
     @State private var showVoice = false
     @State private var confirmDelete = false
+    @State private var showPreview = false
+    @Environment(\.parentMode) private var parentMode
     @State private var revealSecrets = false
     @State private var error: String?
     /// Findings the owner chose to keep in the letter, by value, so the
@@ -99,6 +104,7 @@ struct EnvelopeEditorView: View {
                         if LetterReview.isAvailable { reviewBlock }
                         secretsBlock
                         mediaBlock
+                        if envelope.isAddressed { previewRow }
                         Text(envelope.isAddressed
                              ? "Written for \(recipientName). Opens on their phone, in the order you choose, only after your custodians release it."
                              : "Written for \(recipientName), who is not in Seal yet. Nothing about this envelope is published or sealed until you meet them and choose them above.")
@@ -128,6 +134,15 @@ struct EnvelopeEditorView: View {
                     }
                     .foregroundStyle(SealTheme.brass)
                 }
+            }
+            .sheet(isPresented: $showPreview) {
+                // Save first, so the preview shows the letter as it is on
+                // screen and not as it was when the editor opened.
+                FamilyPreviewView(recipientHash: envelope.recipientHash, recipientName: recipientName,
+                                  ownerName: ownerName, estateEngine: estateEngine,
+                                  onClose: { showPreview = false })
+                    .environment(\.parentMode, parentMode)
+                    .parentTypeScale()
             }
             .sheet(isPresented: $showSecretEditor) {
                 SecretEditorSheet { card in
@@ -277,6 +292,34 @@ struct EnvelopeEditorView: View {
                 .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
             }
         }
+    }
+
+    // MARK: - What they see
+
+    /// The door to the preview. Saves the envelope on the way so what is
+    /// shown is what is on screen. Not brass: looking is not a trust moment.
+    private var previewRow: some View {
+        Button {
+            estateEngine.updateEnvelope(envelope)
+            showPreview = true
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: "eye").font(.title3).foregroundStyle(.white.opacity(0.7)).frame(width: 28)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("See it as \(recipientName) sees it")
+                        .font(.headline).foregroundStyle(.white)
+                    Text("Their screen, with everything you have written for them, in order.")
+                        .font(.caption).foregroundStyle(.white.opacity(0.55))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.white.opacity(0.3))
+            }
+            .padding(16)
+            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+        .parentTapTarget()
     }
 
     // MARK: - Would this help them?

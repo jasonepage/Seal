@@ -110,6 +110,17 @@ final class AppLock {
         return await authenticate(reason: "Confirm it's you to show what is inside")
     }
 
+    /// Called before a RECIPIENT is shown the secrets in an opened envelope,
+    /// and before the owner is shown the same thing in the preview. Always
+    /// asks, whatever the card lock setting: site/limits.html promises
+    /// "secrets are shown only after a Face ID check", and until this
+    /// existed the reveal screen showed them in the clear. A phone with no
+    /// passcode has nothing to check and proceeds. Demo mode skips.
+    static func confirmReveal() async -> Bool {
+        guard !DemoFixtures.isActive else { return true }
+        return await authenticate(reason: "Confirm it's you to show the secrets")
+    }
+
     private static func authenticate(reason: String) async -> Bool {
         let context = LAContext()
         guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: nil) else {

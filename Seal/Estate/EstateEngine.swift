@@ -348,6 +348,25 @@ final class EstateEngine {
         estate = e; saveEstate()
     }
 
+    /// A new reveal order for one person's envelopes, given as ids top to
+    /// bottom. Only an envelope whose place actually changed is touched, and
+    /// touching it marks it unsealed, because the order travels in the key
+    /// table and the next seal must publish it.
+    func reorderEnvelopes(_ orderedIDs: [String]) {
+        guard var e = estate else { return }
+        var changed = false
+        for (position, id) in orderedIDs.enumerated() {
+            guard let i = e.envelopes.firstIndex(where: { $0.id == id }) else { continue }
+            if e.envelopes[i].revealOrder != position {
+                e.envelopes[i].revealOrder = position
+                e.envelopes[i].updatedAt = clock.now
+                e.envelopes[i].sealed = false
+                changed = true
+            }
+        }
+        if changed { estate = e; saveEstate() }
+    }
+
     func removeEnvelope(_ id: String) {
         guard var e = estate else { return }
         if let env = e.envelopes.first(where: { $0.id == id }) {

@@ -48,6 +48,7 @@ struct EstateHomeView: View {
     @State private var sealError: String?
     @State private var sealedOK = false
     @State private var showTimeTravel = false
+    @State private var showFamilyPreview = false
     @State private var explain: ExplainRequest?
     @Environment(\.parentMode) private var parentMode
 
@@ -158,6 +159,12 @@ struct EstateHomeView: View {
                     .environment(\.parentMode, parentMode)
                     .parentTypeScale()
             }
+            .sheet(isPresented: $showFamilyPreview) {
+                FamilyPreviewPicker(ownerName: myRoot.displayName, estateEngine: estateEngine,
+                                    onClose: { showFamilyPreview = false })
+                    .environment(\.parentMode, parentMode)
+                    .parentTypeScale()
+            }
             .sheet(isPresented: $showPolicy) {
                 PolicyView(estateEngine: estateEngine, onClose: { showPolicy = false })
                     .environment(\.parentMode, parentMode)
@@ -169,7 +176,8 @@ struct EstateHomeView: View {
                                    onChoosePerson: {
                                        editing = nil
                                        bindingEnvelope = envelope
-                                   })
+                                   },
+                                   ownerName: myRoot.displayName)
                     .environment(\.parentMode, parentMode)
                     .parentTypeScale()
             }
@@ -603,6 +611,7 @@ struct EstateHomeView: View {
                         .buttonStyle(.plain)
                         .parentTapTarget()
                 }
+                familyPreviewRow
                 sealButton(estate)
             } else {
                 Text("An envelope holds a letter, a few photos, a voice message and the secrets: passwords, where the documents are, the combination, the words you never said out loud. If you do not know where to start, tap Help me write it and answer a few questions.")
@@ -611,6 +620,38 @@ struct EstateHomeView: View {
                     .padding(.horizontal, 24)
             }
         }
+    }
+
+    /// The way to see what is actually being left. The owner writes into a
+    /// form and taps Seal and hopes; this is the other side of the hope,
+    /// the recipient's own screen from local state. Not brass: looking is
+    /// not a trust moment.
+    private var familyPreviewRow: some View {
+        Button {
+            showFamilyPreview = true
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: "eye")
+                    .font(.title3)
+                    .foregroundStyle(.white.opacity(0.7))
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("What your family sees")
+                        .font(.headline).foregroundStyle(.white)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("Each person's envelopes, on their screen, in the order they open. Change the order here.")
+                        .font(.caption).foregroundStyle(.white.opacity(0.55))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.white.opacity(0.3))
+            }
+            .padding(16)
+            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+        .parentTapTarget()
+        .padding(.horizontal, 20)
     }
 
     /// The second way in. A blank page stops most people, and an empty
