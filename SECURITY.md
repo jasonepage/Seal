@@ -1,7 +1,11 @@
 # Reporting a vulnerability
 
-Email **jasonepage@gmail.com** with "Seal security" in the subject. A person
-reads it, usually the same day.
+Email **support@sealmessenger.com** with "Seal security" in the subject. A
+person reads it, usually the same day.
+
+If that bounces for any reason, open an issue saying only that you have a
+security report and how to reach you. Do not put the detail in a public
+issue.
 
 Please include what you found, how to reproduce it, and what you think it lets
 somebody do. If you would rather encrypt the report, say so in a first message

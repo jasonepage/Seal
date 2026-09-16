@@ -566,7 +566,7 @@ struct FriendsView: View {
         """
         let s = subject.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
         let b = body.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
-        return URL(string: "mailto:jasonepage@gmail.com?subject=\(s)&body=\(b)")
+        return URL(string: "mailto:support@sealmessenger.com?subject=\(s)&body=\(b)")
     }
 
     // MARK: - QR
