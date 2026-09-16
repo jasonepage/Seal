@@ -3,28 +3,24 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="icon" type="image/png" href="/favicon.png">
-<link rel="apple-touch-icon" href="/favicon.png">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="favicon.png">
+<link rel="stylesheet" href="seal.css">
 <title>Support: Seal</title>
 <meta name="description" content="Help for Seal: sealed envelopes for the people you leave behind.">
-<style>
-  :root { --ink:#0C0E12; --brass:#D9A441; --text:#EDE8DC; --dim:#9AA0AA; }
-  body { margin:0; background:var(--ink); color:var(--text);
-         font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; line-height:1.65; font-size:16.5px; }
-  .wrap { max-width:720px; margin:0 auto; padding:0 24px 64px; }
-  header { padding:28px 0 8px; }
-  .logo { font-weight:700; font-size:20px; color:var(--brass); text-decoration:none; }
-  h1 { font-size:32px; margin:28px 0 8px; }
-  .lede { color:var(--dim); margin:0 0 24px; }
-  h2 { font-size:19px; margin:30px 0 8px; color:var(--brass); }
-  p, li { color:#cfd2d8; }
-  a { color:var(--brass); }
-  .contact { background:#151A22; border:1px solid #232a35; border-radius:14px; padding:20px 22px; margin-top:36px; }
-</style>
 </head>
 <body>
 <div class="wrap">
-  <header><a class="logo" href="/">🔏 Seal</a></header>
+  <header class="site">
+    <a class="logo" href="/">Seal<span>.</span></a>
+    <nav>
+      <a href="how-it-works.html">How it works</a>
+      <a href="verify.html">Verify</a>
+      <a href="limits.html">Limits</a>
+      <a href="https://github.com/jasonepage/Seal">Source</a>
+      <a href="support.html" class="on">Support</a>
+    </nav>
+  </header>
   <h1>Support</h1>
   <p class="lede">Seal is sealed envelopes for the people you leave behind. If your question is not here, email us and a person answers, usually the same day.</p>
 
@@ -68,9 +64,18 @@
   <h2>What does it cost?</h2>
   <p>Nothing during the beta.</p>
 
-  <div class="contact">
+  <div class="note">
     <p><strong>Still stuck?</strong> Email <a href="mailto:jasonepage@gmail.com?subject=Seal%20support">jasonepage@gmail.com</a>. A person reads every message, usually the same day.</p>
   </div>
+  <footer class="site">
+    <p>Seal is built by Jason Page. The source is at
+    <a href="https://github.com/jasonepage/Seal">github.com/jasonepage/Seal</a>.
+    Questions, including the awkward ones, to
+    <a href="mailto:jasonepage@gmail.com">jasonepage@gmail.com</a>.</p>
+    <p>&copy; 2026 &middot; <a href="privacy.html">Privacy</a> &middot;
+    <a href="support.html">Support</a> &middot;
+    <a href="limits.html">What Seal does not do</a></p>
+  </footer>
 </div>
 </body>
 </html>

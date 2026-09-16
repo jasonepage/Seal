@@ -1,0 +1,99 @@
+/* Seal, one stylesheet for every page.
+   Paper, not a dark crypto landing page. The buyer is somebody putting their
+   affairs in order, and the visual language that earns that person's trust is
+   a notary's, not a wallet's: warm paper, a serif for anything that reads like
+   a document, restraint everywhere else. Brass appears where wax would. */
+:root {
+  --paper:#FBF8F3;
+  --paper2:#F4EFE6;
+  --ink:#1A1714;
+  --dim:#5C564E;
+  --faint:#8A8278;
+  --rule:#E3DBCE;
+  --brass:#8C6A2B;
+  --brass-bright:#C9982F;
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper:#14120F; --paper2:#1C1915; --ink:#EDE7DC; --dim:#A9A197;
+    --faint:#7E776D; --rule:#2C2721; --brass:#D9A441; --brass-bright:#E0B45C;
+  }
+}
+* { box-sizing:border-box; }
+html { -webkit-text-size-adjust:100%; }
+body {
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:var(--sans); font-size:18px; line-height:1.65;
+}
+.wrap { max-width:720px; margin:0 auto; padding:0 24px; }
+.wrap.wide { max-width:900px; }
+
+header.site { padding:26px 0; display:flex; justify-content:space-between;
+  align-items:baseline; flex-wrap:wrap; gap:12px 20px; border-bottom:1px solid var(--rule); }
+.logo { font-family:var(--serif); font-weight:600; font-size:21px; color:var(--ink);
+  text-decoration:none; letter-spacing:.01em; }
+.logo span { color:var(--brass); }
+nav a { color:var(--dim); text-decoration:none; margin-left:18px; font-size:15px; }
+nav a:hover, nav a.on { color:var(--ink); }
+
+h1 { font-family:var(--serif); font-weight:600; font-size:clamp(30px,5vw,44px);
+  line-height:1.15; letter-spacing:-.01em; margin:0 0 16px; }
+h2 { font-family:var(--serif); font-weight:600; font-size:26px; line-height:1.25;
+  margin:52px 0 12px; }
+h3 { font-size:17px; margin:28px 0 6px; color:var(--brass); font-weight:650;
+  letter-spacing:.02em; }
+p { margin:0 0 16px; }
+.lede { font-size:20px; color:var(--dim); margin-bottom:28px; }
+.dim { color:var(--dim); }
+small, .small { font-size:15px; color:var(--faint); }
+a { color:var(--brass); }
+hr { border:none; border-top:1px solid var(--rule); margin:52px 0; }
+
+.hero { padding:56px 0 8px; }
+.mark { display:block; margin:0 auto 26px; }
+.cta { display:inline-block; background:var(--brass); color:var(--paper);
+  font-weight:650; padding:14px 26px; border-radius:8px; text-decoration:none;
+  font-size:17px; margin:4px 10px 4px 0; }
+.cta.ghost { background:transparent; color:var(--brass);
+  border:1px solid var(--rule); }
+
+.card { background:var(--paper2); border:1px solid var(--rule); border-radius:10px;
+  padding:22px 24px; margin:26px 0; }
+.card h3 { margin-top:0; }
+.card p:last-child { margin-bottom:0; }
+
+.steps { list-style:none; padding:0; margin:22px 0; }
+.steps li { padding:16px 0 16px 46px; position:relative; border-top:1px solid var(--rule); }
+.steps li:first-child { border-top:none; }
+.steps b { font-weight:650; }
+.steps .n { position:absolute; left:0; top:16px; width:30px; height:30px; border-radius:50%;
+  border:1px solid var(--rule); background:var(--paper2); color:var(--brass);
+  font-size:14px; font-weight:700; display:flex; align-items:center; justify-content:center; }
+
+table { width:100%; border-collapse:collapse; margin:22px 0; font-size:16px; }
+th, td { text-align:left; vertical-align:top; padding:11px 12px 11px 0;
+  border-bottom:1px solid var(--rule); }
+th { font-size:14px; letter-spacing:.04em; text-transform:uppercase;
+  color:var(--faint); font-weight:650; }
+td code { font-size:14px; }
+
+pre { background:var(--paper2); border:1px solid var(--rule); border-radius:10px;
+  padding:18px 20px; overflow-x:auto; font-family:var(--mono); font-size:13.5px;
+  line-height:1.55; color:var(--ink); }
+code { font-family:var(--mono); font-size:15px; background:var(--paper2);
+  border:1px solid var(--rule); border-radius:5px; padding:1px 5px; }
+pre code { background:none; border:none; padding:0; font-size:inherit; }
+
+ul.plain { padding-left:22px; }
+ul.plain li { margin-bottom:10px; }
+
+.note { border-left:3px solid var(--brass); background:var(--paper2);
+  padding:16px 20px; border-radius:0 8px 8px 0; margin:26px 0; }
+.note p:last-child { margin-bottom:0; }
+
+footer.site { border-top:1px solid var(--rule); margin-top:72px; padding:26px 0 56px;
+  color:var(--faint); font-size:15px; }
+footer.site a { color:var(--dim); }

@@ -3,129 +3,106 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="icon" type="image/png" href="/favicon.png">
-<link rel="apple-touch-icon" href="/favicon.png">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="favicon.png">
+<link rel="stylesheet" href="seal.css">
 <title>Seal: the passwords you leave behind</title>
-<meta name="description" content="A will filed for probate becomes a public court record, so your passwords can never go in one. Seal is sealed envelopes for the people you leave behind. Nobody can open one early. Not Apple, not us.">
-<meta property="og:title" content="Seal: the passwords you leave behind">
-<meta property="og:description" content="A will becomes a public court record. Your passwords cannot go in one. Write a sealed envelope instead.">
-<meta property="og:type" content="website">
-<style>
-  :root { --ink:#0C0E12; --ink2:#151A22; --brass:#D9A441; --brass-d:#A87428; --text:#EDE8DC; --dim:#9AA0AA; }
-  * { box-sizing:border-box; }
-  body { margin:0; background:var(--ink); color:var(--text);
-         font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; line-height:1.6; font-size:17px; }
-  .wrap { max-width:820px; margin:0 auto; padding:0 24px; }
-  header { padding:28px 0; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; }
-  .logo { font-weight:700; font-size:20px; color:var(--brass); text-decoration:none; letter-spacing:.03em; }
-  nav a { color:var(--dim); text-decoration:none; margin-left:20px; font-size:15px; }
-  nav a:hover { color:var(--text); }
-  .invited { background:var(--ink2); border:1px solid #232a35; border-left:3px solid var(--brass);
-             border-radius:14px; padding:16px 20px; color:var(--dim); font-size:15.5px; }
-  .invited b { color:var(--text); font-weight:600; }
-  .invited a { color:var(--brass); }
-  .hero { padding:52px 0 48px; text-align:center; }
-  .hero h1 { font-size:clamp(30px,5.5vw,46px); line-height:1.12; margin:0 0 18px; letter-spacing:-.01em; }
-  .hero h1 em { color:var(--brass); font-style:normal; }
-  .hero p { color:var(--dim); font-size:19px; max-width:34em; margin:0 auto 30px; }
-  .cta { display:inline-block; background:var(--brass); color:var(--ink); font-weight:700;
-         padding:15px 30px; border-radius:14px; text-decoration:none; font-size:17px; }
-  .cta.ghost { background:transparent; color:var(--brass); border:1px solid var(--brass-d); margin-left:10px; }
-  .rule-box { background:var(--ink2); border:1px solid #232a35; border-radius:18px; padding:28px;
-              margin:56px 0; text-align:center; }
-  .rule-box .rule { font-size:22px; font-weight:700; color:var(--brass); margin:0 0 8px; }
-  section { padding:36px 0; }
-  h2 { font-size:24px; margin:0 0 14px; }
-  .cols { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:24px; margin-top:24px; }
-  .col h3 { font-size:17px; margin:0 0 6px; color:var(--brass); }
-  .col p { margin:0; color:var(--dim); font-size:15.5px; }
-  .steps { list-style:none; padding:0; margin:22px 0 0; }
-  .steps li { color:var(--dim); font-size:16px; padding:12px 0 12px 44px; position:relative;
-              border-top:1px solid #1d232c; }
-  .steps li:first-child { border-top:none; }
-  .steps li b { color:var(--text); font-weight:600; }
-  .steps .n { position:absolute; left:0; top:12px; width:28px; height:28px; border-radius:50%;
-              background:#232a35; color:var(--text); font-size:14px; font-weight:700;
-              display:flex; align-items:center; justify-content:center; }
-  .quiet { color:var(--dim); font-size:15px; }
-  .quiet + .quiet { margin-top:14px; }
-  footer { border-top:1px solid #232a35; margin-top:64px; padding:28px 0 48px; color:var(--dim); font-size:14px; }
-  footer a { color:var(--dim); }
-</style>
+<meta name="description" content="A will filed for probate becomes a public court record, so your passwords cannot go in one. Seal is sealed envelopes for the people you leave behind. Open source, and the record is checkable without us.">
 </head>
 <body>
 <div class="wrap">
-  <header>
-    <a class="logo" href="/">🔏 Seal</a>
-    <nav><a href="/support.html">Support</a><a href="/privacy.html">Privacy</a></nav>
+  <header class="site">
+    <a class="logo" href="/">Seal<span>.</span></a>
+    <nav>
+      <a href="how-it-works.html">How it works</a>
+      <a href="verify.html">Verify</a>
+      <a href="limits.html">Limits</a>
+      <a href="https://github.com/jasonepage/Seal">Source</a>
+      <a href="support.html">Support</a>
+    </nav>
   </header>
-
-  <p class="invited"><b>Somebody asked you to be part of their Seal?</b> Install it now, then set it up together the next time you are actually with them. That part takes about two minutes and it happens once. After that there is nothing to do, possibly for years. <a href="https://testflight.apple.com/join/cYp9JRCG">Install Seal</a></p>
+  <svg class="mark" width="96" height="96" viewBox="0 0 100 100" role="img" aria-label="A wax seal stamped with a closed envelope">
+    <defs>
+      <radialGradient id="wax" cx="38%" cy="32%" r="70%">
+        <stop offset="0%" stop-color="#F0C878"/>
+        <stop offset="55%" stop-color="#C9982F"/>
+        <stop offset="100%" stop-color="#8A6220"/>
+      </radialGradient>
+    </defs>
+    <path fill="url(#wax)" stroke="#7A551B" stroke-width="0.8" d="M 97.81 50.00 L 97.94 52.09 L 97.78 54.18 L 97.37 56.24 L 96.80 58.25 L 96.13 60.23 L 95.41 62.17 L 94.66 64.08 L 93.87 65.97 L 93.01 67.82 L 92.05 69.61 L 90.94 71.31 L 89.70 72.92 L 88.33 74.42 L 86.89 75.83 L 85.42 77.18 L 84.00 78.53 L 82.67 79.94 L 81.45 81.45 L 80.32 83.09 L 79.23 84.84 L 78.12 86.64 L 76.90 88.42 L 75.52 90.05 L 73.93 91.44 L 72.12 92.50 L 70.14 93.18 L 68.02 93.50 L 65.84 93.53 L 63.67 93.36 L 61.56 93.13 L 59.52 92.96 L 57.57 92.94 L 55.68 93.12 L 53.81 93.51 L 51.92 94.04 L 50.00 94.64 L 48.03 95.20 L 46.01 95.63 L 43.96 95.86 L 41.91 95.88 L 39.87 95.67 L 37.86 95.29 L 35.88 94.78 L 33.92 94.18 L 31.97 93.52 L 30.04 92.80 L 28.13 92.00 L 26.28 91.08 L 24.52 90.00 L 22.89 88.72 L 21.43 87.24 L 20.14 85.58 L 19.01 83.82 L 18.00 82.00 L 17.02 80.22 L 16.00 78.53 L 14.86 76.97 L 13.54 75.53 L 12.06 74.17 L 10.43 72.84 L 8.76 71.47 L 7.15 69.98 L 5.74 68.33 L 4.64 66.51 L 3.91 64.53 L 3.58 62.44 L 3.61 60.28 L 3.93 58.12 L 4.42 56.00 L 4.96 53.94 L 5.44 51.95 L 5.81 50.00 L 6.03 48.08 L 6.13 46.16 L 6.16 44.23 L 6.20 42.28 L 6.31 40.31 L 6.54 38.36 L 6.92 36.42 L 7.42 34.50 L 8.01 32.61 L 8.66 30.73 L 9.34 28.83 L 10.03 26.92 L 10.74 24.99 L 11.52 23.06 L 12.43 21.17 L 13.53 19.39 L 14.84 17.78 L 16.40 16.40 L 18.16 15.26 L 20.09 14.36 L 22.11 13.65 L 24.13 13.06 L 26.09 12.46 L 27.93 11.77 L 29.64 10.89 L 31.25 9.80 L 32.81 8.51 L 34.38 7.08 L 36.01 5.62 L 37.74 4.26 L 39.61 3.14 L 41.60 2.33 L 43.67 1.91 L 45.79 1.86 L 47.91 2.13 L 50.00 2.64 L 52.04 3.28 L 54.03 3.98 L 55.97 4.65 L 57.89 5.27 L 59.79 5.85 L 61.68 6.43 L 63.55 7.03 L 65.39 7.73 L 67.18 8.52 L 68.92 9.42 L 70.61 10.40 L 72.28 11.41 L 73.95 12.41 L 75.66 13.36 L 77.43 14.25 L 79.28 15.11 L 81.17 15.99 L 83.05 16.95 L 84.85 18.07 L 86.47 19.39 L 87.84 20.96 L 88.91 22.76 L 89.65 24.74 L 90.11 26.84 L 90.36 28.99 L 90.53 31.10 L 90.74 33.13 L 91.09 35.05 L 91.65 36.87 L 92.44 38.63 L 93.43 40.37 L 94.54 42.15 L 95.63 43.99 L 96.61 45.92 L 97.36 47.93 L 97.81 50.00 Z"/>
+    <circle cx="50" cy="50" r="30" fill="none" stroke="#6B4A17" stroke-opacity="0.35" stroke-width="2.2"/>
+    <circle cx="50" cy="50" r="27.5" fill="none" stroke="#F3D79A" stroke-opacity="0.45" stroke-width="0.9"/>
+    <g fill="none" stroke="#5E4114" stroke-opacity="0.8" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="35" y="40" width="30" height="20" rx="2"/>
+      <path d="M35 40 L50 52 L65 40"/>
+    </g>
+  </svg>
 
   <div class="hero">
-    <h1>Some things can't go in a <em>will</em>.</h1>
-    <p>A will filed for probate becomes a public court record. Anyone can read it. So the password to your bank, the phrase that opens your crypto wallet, where the safe deposit key is, the combination, the thing you never told anybody: none of it can go in one. Seal is where those things go instead.</p>
+    <h1>Some things cannot go in a will.</h1>
+    <p class="lede">A will filed for probate becomes a public court record. Anyone can read it. So the password to your bank, the phrase that opens your wallet, where the safe deposit key is, the combination: none of it can go in one. Seal is where those things go instead.</p>
     <a class="cta" href="https://testflight.apple.com/join/cYp9JRCG">Join the beta, free</a>
-    <a class="cta ghost" href="#how">How it works</a>
-    <p class="quiet" style="margin-top:14px">iPhone only for now. Installs through Apple TestFlight.</p>
+    <a class="cta ghost" href="how-it-works.html">Read the technical version</a>
+    <p class="small" style="margin-top:14px">iPhone only, through Apple TestFlight. Open source. No account, no server of ours, no subscription.</p>
   </div>
 
-  <div class="rule-box">
-    <p class="rule">Nobody can open one early. Not Apple, not us.</p>
-    <p class="quiet">This is not a policy we could change our minds about. An envelope is encrypted on your phone before it leaves it, and the key that opens it is split into pieces so that no one person holds it. We do not have a copy. Neither does Apple.</p>
+  <div class="note">
+    <p><b>Somebody asked you to be part of their Seal?</b> Install it, then set it up together the next time you are actually with them. Two minutes, once. After that there is nothing to do, possibly for years. <a href="https://testflight.apple.com/join/cYp9JRCG">Install Seal</a></p>
   </div>
 
-  <section id="how">
-    <h2>What you do, once</h2>
-    <div class="cols">
-      <div class="col">
-        <h3>1 · Write the envelopes</h3>
-        <p>One for each person. A letter, a few photos, a voice message, and the secrets: passwords, where the documents are, the combination, the seed phrase. You do not need anyone else to start. Type a name and write tonight.</p>
-      </div>
-      <div class="col">
-        <h3>2 · Choose who can open them</h3>
-        <p>A few people you trust, added face to face. They hold pieces of one key. One piece on its own is no clue at all, not even a hint, so no single person can act alone unless you decide they can.</p>
-      </div>
-      <div class="col">
-        <h3>3 · Set the rule, then tap Seal</h3>
-        <p>How long the silence has to be, how many warnings you get, how many of them it takes. After that, opening the app now and then is the whole ongoing job.</p>
-      </div>
-    </div>
-  </section>
+  <h2>Do not take our word for any of this</h2>
+  <p>Everything below is a claim, and a claim about secrets is worth what you can check. So three things are public, and they are the reason to keep reading rather than close the tab.</p>
+  <table>
+    <tr>
+      <th style="width:9em">The source</th>
+      <td>Every line, at <a href="https://github.com/jasonepage/Seal">github.com/jasonepage/Seal</a>. No third party code, no analytics library, nothing that phones home. You or somebody you trust can read what the app does with what you type.</td>
+    </tr>
+    <tr>
+      <th>The record</th>
+      <td>Anybody holding part of your key can export the whole signed history as one file, and <a href="verify.html">a short script with no Seal in it</a> checks every signature and every timestamp. If this project ends, that still works.</td>
+    </tr>
+    <tr>
+      <th>The limits</th>
+      <td><a href="limits.html">What breaks Seal</a>, written by us, in public. Including the parts that are not finished and the fact that nobody independent has audited it yet.</td>
+    </tr>
+  </table>
 
-  <section>
-    <h2>What happens after</h2>
-    <ul class="steps">
-      <li><span class="n">1</span><b>You go quiet.</b> Opening the app is your check-in, and nobody else sees a thing. Nothing starts until you have been silent past the limit you chose, ninety days by default.</li>
-      <li><span class="n">2</span><b>Somebody starts a claim.</b> One of the people you chose says they believe you are gone. Everyone else is told the same day.</li>
-      <li><span class="n">3</span><b>You are warned, every day, for weeks.</b> Three weeks of daily warnings by default, then a further quiet period. One tap from you stops all of it, cold, at any point. You do not need a key for that.</li>
-      <li><span class="n">4</span><b>Only then do the envelopes open.</b> The people you chose act together, and each envelope opens on the phone of the person it was written for. Nobody reads anybody else's.</li>
-    </ul>
-    <p class="quiet" style="margin-top:20px">A long stay in hospital looks exactly like death from the outside. The warnings exist for precisely that, and they are loud on purpose.</p>
-  </section>
+  <h2>What you do, once</h2>
+  <ul class="steps">
+    <li><span class="n">1</span><b>Write the envelopes.</b> One for each person. A letter, a few photos, a voice message, and the secrets. You do not need anybody else to start: type a name and write tonight.</li>
+    <li><span class="n">2</span><b>Choose who can open them.</b> A few people you trust, added face to face. They hold pieces of one key, and one piece on its own is no clue at all, not even a hint.</li>
+    <li><span class="n">3</span><b>Set the rule, then seal.</b> How long the silence, how many warnings, how many of them it takes. Ninety days, twenty one, fourteen, any two of three, by default.</li>
+    <li><span class="n">4</span><b>Open the app now and then.</b> That is the entire ongoing job. Opening it is the check-in that keeps everything closed.</li>
+  </ul>
 
-  <section>
-    <h2>Writing it is the hard part, so Seal helps</h2>
-    <p class="quiet">The way this goes wrong is not the mathematics. It is an empty vault that opens perfectly. Every ceremony worked, every warning ran, the envelopes opened, and there was nothing in them.</p>
-    <p class="quiet">So Seal asks you questions, one at a time, and turns your answers into a draft you then edit. You can talk instead of typing, which most people find easier for the part that matters. Nothing you write or say in that part leaves your phone. There is no account and no server in it. Your voice becomes words on the phone itself, or not at all.</p>
-  </section>
+  <h2>What happens after</h2>
+  <ul class="steps">
+    <li><span class="n">1</span><b>You go quiet.</b> Nothing begins until you have been silent past the limit you chose. Nobody else sees your check-ins.</li>
+    <li><span class="n">2</span><b>Somebody starts a claim.</b> One of the people you chose says they believe you are gone. Everybody else is told the same day.</li>
+    <li><span class="n">3</span><b>You are warned, every day, for weeks.</b> Then a further quiet period. One tap from you ends all of it, cold, at any point, and that tap needs no key.</li>
+    <li><span class="n">4</span><b>Only then do the envelopes open.</b> The people you chose act together, and each envelope opens on the phone of the person it was written for. Nobody reads anybody else's, including the people holding the keys.</li>
+  </ul>
+  <p class="dim">A long stay in hospital looks exactly like death from the outside. The warnings exist for precisely that, and they are loud on purpose.</p>
 
-  <section>
-    <h2>What Seal does not promise</h2>
-    <p class="quiet"><b>That silence means death.</b> Silence is silence. That is the entire reason the warnings run for weeks rather than hours.</p>
-    <p class="quiet"><b>That we can vouch for who anybody is.</b> Seal proves that the person acting later is the same person you stood next to. Binding a face to a passport is what notaries are for.</p>
-    <p class="quiet"><b>That everything is hidden.</b> The record shows how many people you wrote to and roughly how much you wrote. It does not show the titles, the letters, the secrets, or who is who.</p>
-    <p class="quiet"><b>That a letter can reach a child with no phone.</b> An envelope is written to a specific person's device, so that person has to have Seal and to have met you. A grandchild who is four years old today is a real gap, and we would rather say so than pretend.</p>
-  </section>
+  <h2>Writing it is the hard part</h2>
+  <p>The way this goes wrong is not the mathematics. It is an empty vault that opens perfectly. So Seal asks questions, one at a time, and turns your answers into a draft you then edit. You can talk instead of typing.</p>
+  <p>Nothing you write or say in that part leaves your phone. Your voice becomes words on the phone itself, or not at all: a phone that cannot do that work alone gets no microphone button rather than a server.</p>
 
-  <section>
-    <h2>Built to outlive us</h2>
-    <p class="quiet">There is no Seal server. The record of who did what, and when, is signed and hash linked, and anyone holding a piece of your key can export an archive of the whole thing. A short script with no Seal in it checks every signature in that archive. If this company disappears tomorrow, the envelopes still open.</p>
-    <p class="quiet">On iPhones running iOS 26 the wrapping is hybrid, classical elliptic curve plus ML-KEM-768, so a recording made today is not readable by a quantum computer later. On older phones it is the classical half only, and the app says which you have.</p>
-  </section>
+  <h2>Built to outlive whoever built it</h2>
+  <p>There is no Seal server. The record of who did what, and when, is signed and hash linked, and the verifier is a single Python file you can read in an afternoon. <a href="verify.html">See how to check a capsule.</a></p>
 
-  <footer>
-    <p>© 2026 Seal · <a href="/privacy.html">Privacy</a> · <a href="/support.html">Support</a> · <a href="mailto:jasonepage@gmail.com">Contact</a></p>
+  <div class="card">
+    <h3>The short technical answer</h3>
+    <p class="dim">X25519 plus ML-KEM-768 for wrapping, HKDF-SHA256, AES-256-GCM for content, P-256 ECDSA through WebAuthn for identity, Shamir over GF(256) for the key split, RFC 3161 for timestamps. Apple CryptoKit throughout. No third party dependencies, no backend of ours. <a href="how-it-works.html">The long answer is here.</a></p>
+  </div>
+  <footer class="site">
+    <p>Seal is built by Jason Page. The source is at
+    <a href="https://github.com/jasonepage/Seal">github.com/jasonepage/Seal</a>.
+    Questions, including the awkward ones, to
+    <a href="mailto:jasonepage@gmail.com">jasonepage@gmail.com</a>.</p>
+    <p>&copy; 2026 &middot; <a href="privacy.html">Privacy</a> &middot;
+    <a href="support.html">Support</a> &middot;
+    <a href="limits.html">What Seal does not do</a></p>
   </footer>
 </div>
 </body>

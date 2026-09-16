@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="favicon.png">
+<link rel="stylesheet" href="seal.css">
+<title>How Seal works, in full</title>
+<meta name="description" content="The key hierarchy, the primitives, the ceremony, and what each layer does and does not protect. Written for somebody who owns a hardware wallet.">
+</head>
+<body>
+<div class="wrap">
+  <header class="site">
+    <a class="logo" href="/">Seal<span>.</span></a>
+    <nav>
+      <a href="how-it-works.html" class="on">How it works</a>
+      <a href="verify.html">Verify</a>
+      <a href="limits.html">Limits</a>
+      <a href="https://github.com/jasonepage/Seal">Source</a>
+      <a href="support.html">Support</a>
+    </nav>
+  </header>
+
+  <h1>How Seal works, in full</h1>
+  <p class="lede">Written for somebody who already owns a hardware wallet and has been trained, correctly, to distrust anything that asks for a seed phrase. Every claim here points at a file you can read.</p>
+
+  <div class="note">
+    <p><b>Before anything else, the honest advice.</b> If you own a hardware wallet, do not put a live seed phrase into any beta software, including this one. Seal has not been audited by anybody independent. What your family genuinely cannot reconstruct without you is <i>where the steel plate is, which wallet it belongs to, and who to call first</i>, and none of that requires typing the twelve words. Start there. The words can come later, after somebody other than us has read the code.</p>
+  </div>
+
+  <h2>The primitives, named</h2>
+  <p>All from Apple's CryptoKit and AuthenticationServices. No third party cryptography, no rolled-our-own anything, no external dependencies at all.</p>
+  <table>
+    <tr><th style="width:12em">Identity</th><td>WebAuthn credential, P-256 ECDSA with SHA-256. A hardware security key or a platform passkey. The private key never leaves the authenticator.</td></tr>
+    <tr><th>Per device key</th><td>P-256 in the Secure Enclave, non-exportable, endorsed by a signature from the identity credential.</td></tr>
+    <tr><th>Wrapping</th><td>Hybrid: X25519 ECDH plus ML-KEM-768. The two shared secrets are combined through HKDF-SHA256. On iOS below 26 the ML-KEM half is absent and the classical half runs alone.</td></tr>
+    <tr><th>Content</th><td>AES-256-GCM, with a domain separated AAD naming the estate, the epoch and the purpose, so a ciphertext made for one slot cannot be replayed into another.</td></tr>
+    <tr><th>The key split</th><td>Shamir's Secret Sharing over GF(256), M of N. Checked against independently generated Python test vectors.</td></tr>
+    <tr><th>Time</th><td>RFC 3161 timestamp tokens from a public authority, optional and off until you turn it on.</td></tr>
+    <tr><th>Storage</th><td>Apple CloudKit public database, holding ciphertext and public keys. There is no Seal server.</td></tr>
+  </table>
+
+  <h2>The key hierarchy</h2>
+  <p>This is the diagram at the top of <code>Seal/Estate/EstateKeys.swift</code>, unchanged. It is the whole design in twenty lines.</p>
+<pre><code>Envelope Content Key   random 256 bit, AES-256-GCM, one per envelope
+    listed in
+Key Table              one per RECIPIENT, encrypted under that table's own
+                       random Key Table Key (KTK)
+    KTK reachable two ways
+    ├─ wrapped directly to the OWNER's devices (owner always reads)
+    └─ encrypted under the Estate Key, THEN wrapped to the recipient's
+       devices (recipient reads only once the Estate Key is released)
+Estate Key             one per owner per epoch
+    reachable two ways
+    ├─ wrapped directly to the OWNER's devices
+    └─ split by Shamir into N shares, threshold M, each share wrapped
+       to one custodian's devices</code></pre>
+
+  <p>Read it from the bottom. To open one envelope you need its content key. That is in a key table. That table is locked under a key reachable either by the owner's own phone, or by the Estate Key plus the recipient's own phone. The Estate Key is reachable either by the owner's phone, or by combining M of N Shamir shares, each of which is locked to one key holder's phone.</p>
+
+  <h3>The consequence people miss</h3>
+  <p>The people holding your keys, acting together, recover the Estate Key and <b>nothing else</b>. The Estate Key alone opens no envelope. Each key table still needs the phone of the person that table was written for. So the two key holders who release your estate cannot read your wife's letter, or your children's, or each other's. They hold the inner key of every table and the outer key of none of them.</p>
+
+  <h2>What each person actually holds</h2>
+  <p>This is the part most descriptions get wrong, including ours until recently. Everybody who takes part holds <b>two separate secrets</b>, not one.</p>
+  <table>
+    <tr><th style="width:12em">Their credential</th><td>The passkey or security key they registered with. It signs "I authorise this claim", bound to the estate, the epoch, the claim and the record's current head, so the signature means that one claim and nothing else.</td></tr>
+    <tr><th>Their phone</th><td>A separate key pair held in that phone's keychain, marked this-device-only. It does not sync to iCloud and does not restore onto a new phone. <b>This is what opens their Shamir share.</b></td></tr>
+  </table>
+  <p>Both are required. A passkey syncs through iCloud, so somebody who takes over a key holder's Apple account can produce the signature. They cannot produce the share, because the share can only be opened on the physical phone it was wrapped to. In practice the bar is <b>M unlocked phones, in M different people's hands.</b></p>
+  <p class="dim">The direct consequence, which we would rather you read here than discover in a decade: a key holder who replaces their phone loses their share until the owner seals again. The owner's app is meant to notice and say so.</p>
+
+  <h2>Why meeting in person is not a gimmick</h2>
+  <p>Every remote identity system eventually trusts a channel: a phone number, an email address, a recovery code, a support agent. Each of those is a thing a stranger can take from you without being anywhere near you.</p>
+  <p>Seal trusts one event instead. Two people stand together, and each phone records the other's public key in that moment. From then on, a directory that later serves a different key under the same name is refused on both phones, every fetch, permanently. Key holders learn each other's keys the same way, from the owner's signed statement, so the directory cannot insert a stranger between them either.</p>
+  <p>There is no password, no email, no recovery code, no support agent who can be talked into anything. There is nothing to phish because there is nothing a phishing message could ask you for.</p>
+
+  <h2>The countdown, precisely</h2>
+  <ul class="plain">
+    <li>Opening the app writes one signed line saying you were here. That is the heartbeat, and it needs your phone and at most Face ID. It never needs the hardware key, because a living person who lost their key must not be declared dead by their own software.</li>
+    <li>After the silence you chose, ninety days by default, a key holder may start a claim. Not before, and the machine that decides this is a pure state machine with an exhaustive test suite.</li>
+    <li>A claim starts weeks of daily warnings, then a further quiet period. Any key holder may object, which pauses or kills the claim depending on your rule.</li>
+    <li>One tap from you at any point in that cancels everything, and every key holder sees that it was cancelled and by whom.</li>
+    <li>Only after all of it can keys be tapped. Each tap re-wraps that person's share to whoever started the claim, and the claimant's phone combines them.</li>
+  </ul>
+
+  <h2>Rotation is cheap, on purpose</h2>
+  <p>Removing somebody who holds a key means a new epoch: a fresh Estate Key, fresh shares, and the small inner ciphertext of each key table re-encrypted. The tables themselves and the media blobs are never touched, so changing your mind about a person costs the same whether you wrote two envelopes or two hundred. The old shares stop working the moment the new epoch is published.</p>
+
+  <h2>Read it yourself</h2>
+  <p>The files that matter, if you would rather check than trust:</p>
+  <table>
+    <tr><th style="width:16em"><code>Seal/Estate/EstateKeys.swift</code></th><td>The hierarchy above, and every wrap and unwrap in it.</td></tr>
+    <tr><th><code>Seal/Crypto/KEMBundle.swift</code></th><td>The hybrid X25519 plus ML-KEM-768 construction.</td></tr>
+    <tr><th><code>Seal/Crypto/Shamir.swift</code></th><td>The split, with the Python vectors it is checked against in <code>tools/</code>.</td></tr>
+    <tr><th><code>Seal/Estate/ReleaseMachine.swift</code></th><td>The countdown, as a pure function with no clock and no network in it.</td></tr>
+    <tr><th><code>docs/SDS.md</code></th><td>The security design, including the threat model table.</td></tr>
+    <tr><th><code>docs/CAPSULE.md</code></th><td>The archive format, written for somebody who has never seen Seal.</td></tr>
+  </table>
+  <p><a href="https://github.com/jasonepage/Seal">github.com/jasonepage/Seal</a></p>
+  <footer class="site">
+    <p>Seal is built by Jason Page. The source is at
+    <a href="https://github.com/jasonepage/Seal">github.com/jasonepage/Seal</a>.
+    Questions, including the awkward ones, to
+    <a href="mailto:jasonepage@gmail.com">jasonepage@gmail.com</a>.</p>
+    <p>&copy; 2026 &middot; <a href="privacy.html">Privacy</a> &middot;
+    <a href="support.html">Support</a> &middot;
+    <a href="limits.html">What Seal does not do</a></p>
+  </footer>
+</div>
+</body>
+</html>

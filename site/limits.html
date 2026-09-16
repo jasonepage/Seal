@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="favicon.png">
+<link rel="stylesheet" href="seal.css">
+<title>What Seal does not do</title>
+<meta name="description" content="The threat model, the accepted limits, and what has not been done yet. Published by us, in public, including the absence of a third party audit.">
+</head>
+<body>
+<div class="wrap">
+  <header class="site">
+    <a class="logo" href="/">Seal<span>.</span></a>
+    <nav>
+      <a href="how-it-works.html">How it works</a>
+      <a href="verify.html">Verify</a>
+      <a href="limits.html" class="on">Limits</a>
+      <a href="https://github.com/jasonepage/Seal">Source</a>
+      <a href="support.html">Support</a>
+    </nav>
+  </header>
+
+  <h1>What Seal does not do</h1>
+  <p class="lede">A product that holds secrets and lists only its strengths is telling you something about itself. This page is the other half, and it is the same page we keep internally.</p>
+
+  <h2>Not done yet, as of September 2026</h2>
+  <table>
+    <tr><th style="width:15em">No independent audit</th><td>Nobody outside this project has reviewed the cryptography or the code. That is the single biggest reason to keep a live seed phrase out of it for now. The source is open so that this can change.</td></tr>
+    <tr><th>Beta</th><td>Seal is in TestFlight, not on the App Store. It is used by a handful of people.</td></tr>
+    <tr><th>One person</th><td>Built by one developer. There is no company, no team and no funding, which means nobody to be acquired by and also nobody to review a mistake before you see it.</td></tr>
+    <tr><th>Security keys partly untested</th><td>A fix for a PIN handling conflict with FIDO2.1 keys is in, and has not yet been verified on real hardware over both NFC and USB-C. Passkeys are the better tested path today.</td></tr>
+    <tr><th>iPhone only</th><td>No Android, and no second owner device: your working copy of drafts and media lives on one phone.</td></tr>
+  </table>
+
+  <h2>What Seal does not promise</h2>
+  <h3>That silence means death</h3>
+  <p>Silence is silence. A long stay in hospital looks identical from the outside. That is the entire reason the countdown runs for months rather than days, with weeks of daily warnings that one tap ends.</p>
+
+  <h3>That the people are who you think</h3>
+  <p>Seal proves that the credential acting later is the same one you stood next to. It cannot bind a credential to a passport. That is what notaries do, and we are not one.</p>
+
+  <h3>That nothing at all is visible</h3>
+  <p>An onlooker with access to the stored records can work out how many people you wrote to, roughly how much you wrote, that a given identity has some part in some estate, and when things happened. They cannot work out titles, letters, secrets, or who any envelope is for.</p>
+
+  <h3>That a stolen unlocked phone is harmless</h3>
+  <p>Secrets are shown only after a Face ID check, and key material is bound to the device. But a thief with your unlocked phone can keep sending heartbeats, which keeps you looking alive. That is a known limit and it is written down rather than hidden.</p>
+
+  <h3>That a letter can reach a child with no phone</h3>
+  <p>An envelope is wrapped to a specific person's devices, so that person has to have Seal and to have met you. A grandchild who is four today is a real gap. The honest fixes each weaken the isolation promise, so none has been built without a decision.</p>
+
+  <h3>That one key holder can never act alone</h3>
+  <p>That depends entirely on the rule the owner set. If they chose a threshold of one, one person can release the estate by themselves after the countdown. The app says so in those words, to that person, on the day they accept and every time they look.</p>
+
+  <h3>That a release can be undone</h3>
+  <p>Once the Estate Key is published the seal is broken. A check-in after that changes nothing.</p>
+
+  <h2>The threat model</h2>
+  <p>From <code>docs/SDS.md</code> section 7, unedited.</p>
+  <table>
+    <tr><th style="width:17em">Threat</th><th>Defence</th></tr>
+    <tr><td>Apple or anyone reads an envelope</td><td>Content keys sit inside encrypted tables; a table needs the recipient's device key plus the Estate Key; the Estate Key needs the owner's device or M shares.</td></tr>
+    <tr><td>The directory swaps somebody's key</td><td>Pinned when you met; enforced on every single fetch; key holders pin each other from the owner's signed statement.</td></tr>
+    <tr><td>The directory forges or hides events</td><td>Every event is device signed and hash linked. Hiding is detectable through capsules held by several people and through timestamp tokens.</td></tr>
+    <tr><td>A signature from another site is replayed</td><td>Relying party hash, user presence bit and type are all enforced.</td></tr>
+    <tr><td>A key holder submits a bad share</td><td>A per share commitment in the signed record names them.</td></tr>
+    <tr><td>Key holders collude early</td><td>They cannot: shares are useless until the state machine reaches the point where keys may be tapped. Beyond that, M colluding key holders is the trust the owner chose, and the record shows exactly who tapped and when.</td></tr>
+    <tr><td>The owner is declared dead while alive</td><td>Silence, then weeks of warnings, then grace, with a one tap cancel that needs no hardware key, plus objections.</td></tr>
+    <tr><td>A phone's clock lies</td><td>Timestamp tokens on heartbeats, claims, taps and releases; the record prefers the authority's time.</td></tr>
+    <tr><td>Harvest now, decrypt later</td><td>ML-KEM-768 in every estate wrap, on iOS 26 and above.</td></tr>
+    <tr><td>The company disappears</td><td>The capsule and its verifier. <a href="verify.html">See for yourself.</a></td></tr>
+  </table>
+
+  <h2>One key, one identity, is deterrence only</h2>
+  <p>Registration excludes every credential already in the directory, so an authenticator refuses to mint a second identity. A FIDO2 reset or a modified client gets around that. It is a speed bump, described as a speed bump, and the design does not depend on it.</p>
+
+  <div class="note">
+    <p>If you find something wrong here, or something missing, email <a href="mailto:jasonepage@gmail.com">jasonepage@gmail.com</a>. A report that costs us a rewrite of this page is worth more than a compliment.</p>
+  </div>
+  <footer class="site">
+    <p>Seal is built by Jason Page. The source is at
+    <a href="https://github.com/jasonepage/Seal">github.com/jasonepage/Seal</a>.
+    Questions, including the awkward ones, to
+    <a href="mailto:jasonepage@gmail.com">jasonepage@gmail.com</a>.</p>
+    <p>&copy; 2026 &middot; <a href="privacy.html">Privacy</a> &middot;
+    <a href="support.html">Support</a> &middot;
+    <a href="limits.html">What Seal does not do</a></p>
+  </footer>
+</div>
+</body>
+</html>

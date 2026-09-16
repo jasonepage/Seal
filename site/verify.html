@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="favicon.png">
+<link rel="stylesheet" href="seal.css">
+<title>Check the record yourself</title>
+<meta name="description" content="Anybody holding part of a Seal estate can export the whole signed record as one file, and a short Python script with no Seal in it checks every signature and every timestamp.">
+</head>
+<body>
+<div class="wrap">
+  <header class="site">
+    <a class="logo" href="/">Seal<span>.</span></a>
+    <nav>
+      <a href="how-it-works.html">How it works</a>
+      <a href="verify.html" class="on">Verify</a>
+      <a href="limits.html">Limits</a>
+      <a href="https://github.com/jasonepage/Seal">Source</a>
+      <a href="support.html">Support</a>
+    </nav>
+  </header>
+
+  <h1>Check the record yourself</h1>
+  <p class="lede">The promise that matters least is the one you have to take on faith. This page is the one you do not.</p>
+
+  <h2>What a capsule is</h2>
+  <p>Anybody holding part of somebody's estate can export a <b>capsule</b>: one JSON file carrying the entire signed history. Every public key involved, every event in order, each one signed and hash linked to the one before it, the timestamp tokens where they were obtained, the wrapped key material with its commitments, and optionally the encrypted envelopes themselves.</p>
+  <p>Nothing in a capsule is readable without private keys that live in people's phones. <b>A capsule can be posted on a public website without harm.</b> That is deliberate. It is the archive of record and it has to survive being copied around, emailed to a lawyer, and sitting on a hard drive for twenty years.</p>
+
+  <h2>What the verifier checks</h2>
+  <p><code>tools/verify_capsule.py</code> is a single Python file with no Seal in it and no network access. It checks:</p>
+  <ul class="plain">
+    <li>Every event's signature, against the device key that signed it, using P-256 ECDSA with SHA-256.</li>
+    <li>That every device key was endorsed by the identity that claims it, and that the endorsement is itself a valid WebAuthn assertion with the right relying party and the user presence bit set.</li>
+    <li>That the hash link from each event to the one before it holds, so nothing has been removed from the middle.</li>
+    <li>Every RFC 3161 timestamp token against the authority's certificate, and that the token covers the digest it claims to.</li>
+    <li>That each key holder's share matches the commitment published for it in the signed epoch statement, so a bad share names the person who submitted it.</li>
+  </ul>
+
+  <h2>Run it</h2>
+<pre><code>git clone https://github.com/jasonepage/Seal
+cd Seal
+python3 tools/verify_capsule.py seal-capsule-XXXX.json</code></pre>
+  <p>Add <code>--strict</code> to fail on anything it would otherwise warn about, including a missing timestamp token. The script reads the file, prints a line per check, and exits non-zero if anything does not hold.</p>
+  <p>There is also <code>tools/make_test_capsule.py</code>, which builds a synthetic capsule so you can watch the verifier pass, then change one byte and watch it fail. That is a more convincing five minutes than anything on this website.</p>
+
+  <div class="card">
+    <h3>Why this is the important page</h3>
+    <p class="dim">Every other claim here is a sentence. This one is a file, a script, and an exit code. If this project ends tomorrow, the capsule format is documented in <code>docs/CAPSULE.md</code> in enough detail to write a fresh verifier from scratch, and the document is written for somebody who has never seen Seal and has only the file and a laptop.</p>
+  </div>
+
+  <h2>What the verifier cannot tell you</h2>
+  <p>It proves that a particular credential did a particular thing at a particular time, and that the record has not been edited. It does not prove that the person holding that credential was who you think. Binding a credential to a human being is what standing next to them does, and after that it is what notaries are for.</p>
+  <p>It also cannot prove that nothing is <i>missing</i> from the record on its own. Hiding an event is detectable, but only by comparing capsules held by several different people, or through the timestamp tokens. That limit is stated in the threat model rather than glossed over. <a href="limits.html">The limits are here.</a></p>
+  <footer class="site">
+    <p>Seal is built by Jason Page. The source is at
+    <a href="https://github.com/jasonepage/Seal">github.com/jasonepage/Seal</a>.
+    Questions, including the awkward ones, to
+    <a href="mailto:jasonepage@gmail.com">jasonepage@gmail.com</a>.</p>
+    <p>&copy; 2026 &middot; <a href="privacy.html">Privacy</a> &middot;
+    <a href="support.html">Support</a> &middot;
+    <a href="limits.html">What Seal does not do</a></p>
+  </footer>
+</div>
+</body>
+</html>
