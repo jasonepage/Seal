@@ -1,6 +1,6 @@
 # Where Seal stands
 
-**Updated:** 2026-09-15 · **Owner:** Nathan (Jason Page) · natepage67@gmail.com
+**Updated:** 2026-09-16 · **Owner:** Nathan (Jason Page) · natepage67@gmail.com
 **Repo:** `~/Documents/GitHub/Seal` · iOS 26.5+, SwiftUI, no backend
 
 New Swift files under `Seal/` join the target automatically (file system
@@ -24,51 +24,54 @@ timestamps, custody receipts and sealed cards were kept and extended.
 - CloudKit container `iCloud.io.github.jasonepage.Seal`
 - WebAuthn relying party `sealmessenger.com`
 
-## STATUS 2026-09-15 1:42 PM: it builds, it launches, it shows a blank white screen
+## STATUS 2026-09-16: it builds and runs on a phone
 
-The build succeeded after three rounds of fixes (see git log). Run on a
-phone from Xcode, the app shows a plain white screen and stays there. Not
-diagnosed yet. The two most likely causes, in order:
+The 2026-09-15 blank white screen is gone; the build at `02ec1ee` ran clean.
+Everything committed after it on 2026-09-16 (fourteen commits, listed below)
+is **uncompiled again** and needs the same loop: build in Xcode, paste the
+errors, fix in place. Nothing in that batch is architectural, so expect
+typos and API spellings, not redesign.
 
-1. `SelfTest.runAtLaunchIfDebug()` in `SealApp.init` runs every self-test on
-   the main thread before the first frame. A test that hangs, or an `assert`
-   that fires with the debugger attached, would look exactly like this.
-   Comment that one line out first. If the app then shows the dark screen,
-   the problem is in a test (run them from the Time Travel screen instead,
-   or read the `selftest` os-log line in the Xcode console).
-2. `ContentView` renders nothing until `setupEngines()` has run in
-   `.onAppear`; a blank Group may not fire `onAppear`. If step 1 does not
-   fix it, move `setupEngines()` into `ContentView`'s `init` or wrap the
-   Group's else-branch in a `Color(SealTheme.ink)` so something is on screen.
+Where the 2026-09-16 batch is most likely to fail to compile, in order:
 
-Also check the Xcode console for a purple runtime warning or a crash log.
+- `Seal/Views/Interview/LetterReview.swift`: `@Generable` with an array
+  property (`[ReviewedGap]`). The drafter only ever used flat structs.
+- `Seal/Cards/Wordlists/*.swift`: twenty three large `Set<String>` literals.
+  Each is typed explicitly. If the type checker still times out on one, the
+  fix is `Set(["..."] as [String])`, not a project setting.
+- `Seal/Views/RevealView.swift`: `RevealPage` stores an `async throws`
+  closure in a struct that is `Identifiable`. Should be fine in Swift 5 mode.
+- `Seal/Estate/OwnerNotices.swift` and `NotificationsOffCard.swift`:
+  `UNTimeIntervalNotificationTrigger` and
+  `UIApplication.openNotificationSettingsURLString` (iOS 16+).
 
-## THE FIRST THING TO DO: BUILD IT
+## What landed on 2026-09-16
 
-**Nothing written on 2026-09-15 has been compiled.** The conversion was done
-in an environment with no Xcode and no Swift toolchain of any kind. It was
-written carefully, but a job this size without a compiler will have typos and
-a few API mismatches. Expect an hour of fixing before it runs.
+The five features from the handoff brief, then the known-problem list:
 
-1. `xcodebuild -project Seal.xcodeproj -scheme Seal -destination 'generic/platform=iOS' build`
-2. Fix what it reports, in place. The design does not hinge on any of it.
-3. Run a DEBUG build on a phone. The self-tests run at launch and `assert`
-   on failure (`Seal/SelfTest`). Read the `selftest` os-log category.
-4. Open the Time Travel screen (clock icon, DEBUG only) and run the story:
-   seal, travel 91 days, claim from a custodian phone, travel 21 and 14, tap
-   keys, combine. The owner opening the app at any point must cancel.
+1. `OwnerNotices`: the owner is reminded to open the app at half, four
+   fifths, and a few days before their silence window. Scheduled after
+   every heartbeat and replaced on the next; nothing is posted while the
+   app is open.
+2. `Estate.publishedCustodianDevices`: a key holder who replaces their
+   phone is noticed on refresh and named on the home screen, with "Seal
+   again" one tap away. Only for estates sealed after this landed.
+3. `LetterSecretScan` plus `Seal/Cards/Wordlists`: a recovery phrase or a
+   private key typed into the letter gets one quiet line and one tap to
+   move it into a secret. Every BIP39 language, SLIP39 (Trezor), Monero.
+4. `LetterReview`: on-device "Check the letter for gaps". Letter only, by
+   type. Suggests, never edits. Fail closed without the model.
+5. `FamilyPreviewView`: "What your family sees" from the home screen and
+   "See it as Karen sees it" from the editor. It IS `RevealPager`, the
+   recipient's real screen, so it cannot drift. Drag to reorder is in its
+   toolbar. Reading it exposed that the reveal showed secrets in the
+   clear; `AppLock.confirmReveal` now gates them, as the site promised.
 
-Where compile errors are most likely, in order:
-
-- `Seal/Crypto/KEMBundle.swift` and `IdentityManager.mintMLKEMIfMissing`:
-  the CryptoKit `MLKEM768` API (`encapsulate()`, `decapsulate(_:)`,
-  `seedRepresentation`, `EncapsulationResult` member names). Confined there.
-- `Seal/Sync/EstateDirectory.swift`: the labelled tuple returned by
-  `CKDatabase.records(matching:resultsLimit:)` and `records(continuingMatchFrom:)`.
-- `Seal/Views/*`: SwiftUI view builder edge cases (`#if DEBUG` inside a
-  toolbar, `switch` over an optional enum in a `VStack`).
-- `Seal/Time/Clock.swift`: the module `Clock` protocol shadows Swift's. If
-  anything complains, it wants `Swift.Clock`.
+Then: the interview sheet trap (present from `onDismiss`), the follow-up
+gated on the letter target, `keepEdges` for split secrets, two more
+scrolling screens, no mascot on the People or History screens, the
+messenger's dead code removed, `NotificationsOffCard` when a phone that
+matters has notifications denied, and the stale ML-KEM warning in GOTCHAS.
 
 ## What is blocking (besides the build)
 
@@ -77,8 +80,8 @@ Where compile errors are most likely, in order:
    [docs/CLOUDKIT_DEPLOY.md](docs/CLOUDKIT_DEPLOY.md). Only Nathan can do this.
 2. **Every phone must sign in once** on the new build so its endorsement is
    republished with the hybrid KEM bundle.
-3. **The site and the store listing** still describe a messenger
-   (`site/*.html`, `docs/archive/STORE_COPY.md`). Not rewritten in this pass.
+3. ~~The site and the store listing still describe a messenger.~~ Rewritten
+   2026-09-15 evening (`20beefc`, `37274d1`, `71a1921`).
 4. **A timestamp authority** is still FreeTSA, chosen for being free. See
    [docs/RECORD.md](docs/RECORD.md) section 13.
 5. **The domain says "messenger", and the window to change it closes at
@@ -142,34 +145,17 @@ Listed in the final report of the conversion session and repeated here:
 - **The invite record is addressed by hash in the clear**, so the directory
   can see that a hash has some part in some estate.
 - **`Message`, `SealGroup`, `SenderChain` and the message transport in
-  `SyncEngine`** were left in place as dead code rather than deleted, to keep
-  the phase 7 diff to what the brief listed. Safe to remove later.
+  `SyncEngine`** were left as dead code after phase 7 and removed on
+  2026-09-16 (`a9a12a7`).
 
-## Known UI debt: the You screen is cluttered
+## The You screen: done
 
-Raised 2026-09-15 after the first screenshots, and agreed. Flattening the
-Advanced drawer into one screen was right, but every row kept its full weight,
-so the screen is now a wall of paragraphs. The fix is not to hide things
-again. It is to make each row one line and put the explanation behind an
-info button the person taps when they want it.
-
-The specific work, none of it done:
-
-1. **Setting rows are a title and a switch.** If the subtitle runs past about
-   six words it goes behind an (i) that expands in place. "Independent
-   timestamps" is five lines of standing text today. "Bigger text" is three.
-2. **The Seal, Directory and This device card goes behind a closed
-   disclosure** called something like "Technical details". Nobody reads a
-   truncated hex hash, and the fingerprint phrase at the top of the same
-   screen ("juniper evergreen dell") is already the readable form of it. Show
-   the phrase, put the hex behind the disclosure with a copy button.
-3. **The backup keys card is two long paragraphs.** Both go behind the (i).
-   The card becomes a heading and "Add a backup key".
-4. **The no-backup-key alarm and the backup keys section now say the same
-   thing twice** on one screen, which they did not when one of them was a
-   drawer away. Keep the alarm, shrink the section.
-
-The rest of the app reads clean. This is one screen.
+The 2026-09-15 note about a wall of paragraphs is resolved in the code as
+it stands: `SettingRow` puts the long text behind an (i), the hex hashes sit
+in a closed "Technical details" disclosure, and the backup keys card is a
+heading and a button with its paragraphs behind "What it does". Verified by
+reading `ProfileView.swift` and `BackupKeysView.swift` on 2026-09-16, not on
+a phone.
 
 ## Ideas that are written down, not built
 
