@@ -340,7 +340,10 @@ struct EnvelopeInterviewView: View {
         let question = current
         let typed = (answers[question.id] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
 
-        if question.allowsFollowUp && !followUpHandled {
+        // The flag says WHICH question gets the follow-up. The target says
+        // whether the answer may go near a model at all. Both, always, so a
+        // future question flagged by mistake on a secret still never does.
+        if question.allowsFollowUp && question.target.isLetter && !followUpHandled {
             followUpHandled = true
             if !typed.isEmpty && InterviewHelper.isAvailable {
                 askingFollowUp = true

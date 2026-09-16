@@ -41,6 +41,11 @@ struct EstateHomeView: View {
     /// editor, as it always was, or the interview.
     @State private var pickerMode: PickerMode = .blank
     @State private var interviewFor: InterviewSubject?
+    /// The envelope the interview drafted, held until its sheet has fully
+    /// gone. Dismissing one sheet and presenting another in the same turn
+    /// is the classic SwiftUI trap: the second never shows. So the draft
+    /// waits here and the interview sheet's onDismiss opens the editor.
+    @State private var draftedEnvelope: Envelope?
     /// Set when the picker is choosing a person for an envelope that was
     /// written to a typed name and is waiting to be bound.
     @State private var bindingEnvelope: Envelope?
@@ -223,13 +228,18 @@ struct EstateHomeView: View {
                 .environment(\.parentMode, parentMode)
                 .parentTypeScale()
             }
-            .sheet(item: $interviewFor) { subject in
+            .sheet(item: $interviewFor, onDismiss: {
+                if let drafted = draftedEnvelope {
+                    draftedEnvelope = nil
+                    editing = drafted
+                }
+            }) { subject in
                 EnvelopeInterviewView(
                     recipientName: subject.name,
                     onCancel: { interviewFor = nil },
                     onDraft: { draft in
+                        draftedEnvelope = envelopeFromDraft(draft, for: subject)
                         interviewFor = nil
-                        editing = envelopeFromDraft(draft, for: subject)
                     })
                     .environment(\.parentMode, parentMode)
                     .parentTypeScale()
@@ -708,7 +718,7 @@ struct EstateHomeView: View {
         // secret editor uses. One that cannot be built is dropped rather
         // than altered, and the owner sees the letter and can add it by hand.
         envelope.secrets = draft.secrets.compactMap {
-            try? SealedCard.validated(cardType: $0.kind, title: $0.label, value: $0.value)
+            try? SealedCard.validated(cardType: $0.kind, title: $0.label, value: $0.value, keepEdges: $0.keepEdges)
         }
         estateEngine.updateEnvelope(envelope)
         return envelope

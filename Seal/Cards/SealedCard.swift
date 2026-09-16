@@ -174,10 +174,13 @@ struct SealedCard: Codable, Hashable {
                           title: String,
                           value: String,
                           asset: String? = nil,
-                          note: String? = nil) throws -> SealedCard {
+                          note: String? = nil,
+                          keepEdges: Bool = false) throws -> SealedCard {
         let cleanTitle = String(title.trimmingCharacters(in: .whitespacesAndNewlines)
             .prefix(maxTitleCharacters))
-        let cleanValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        // keepEdges: one part of a split answer keeps its leading and
+        // trailing whitespace so the parts reassemble byte for byte.
+        let cleanValue = keepEdges ? value : value.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanNote = note.map {
             String($0.trimmingCharacters(in: .whitespacesAndNewlines).prefix(maxNoteCharacters))
         }

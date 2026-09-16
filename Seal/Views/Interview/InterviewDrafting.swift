@@ -37,6 +37,12 @@ struct InterviewDraftSecret: Hashable {
     let kind: SealedCardType
     let label: String
     let value: String
+    /// True for one part of a long answer that was split to card size. The
+    /// card validator trims surrounding whitespace, which is right for a
+    /// typed secret and wrong for a part: a split landing on a newline
+    /// would lose it, and the parts would no longer reassemble byte for
+    /// byte. The part asks to be kept exactly.
+    var keepEdges: Bool = false
 }
 
 /// What the interview hands back. A plain value, owned by the caller.
@@ -91,7 +97,8 @@ enum InterviewDraftingShared {
                 for (index, part) in parts.enumerated() {
                     out.append(InterviewDraftSecret(kind: kind,
                                                     label: "\(label) (part \(index + 1))",
-                                                    value: part))
+                                                    value: part,
+                                                    keepEdges: true))
                 }
             }
         }
