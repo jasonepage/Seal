@@ -528,7 +528,7 @@ struct FriendsView: View {
                 estateEngine.removeCustodian(friend.identity.credentialIDHash)
                 friendStore.remove(friend.identity.credentialIDHash)
                 moderationTitle = "Removed"
-                moderationMessage = "\(friend.identity.displayName) has been removed. If they were a custodian, your envelopes will be re-keyed the next time you seal them. Meet in person to add them again."
+                moderationMessage = "\(friend.identity.displayName) has been removed. If they were a custodian, your envelopes are re-keyed the next time you seal them. Meet in person to add them again."
                 showModerationAlert = true
             } label: {
                 Label("Remove \(friend.identity.displayName)", systemImage: "person.badge.minus")

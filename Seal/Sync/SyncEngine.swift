@@ -188,7 +188,7 @@ final class SyncEngine {
                 return .failed
             }
         }
-        status = .error("Couldn't publish this device's key, others won't be able to read your messages. It'll retry.")
+        status = .error("Couldn't publish this device's key, so others cannot read what you send. Seal tries again.")
         WebAuthnDiag.log.error("publishIdentity: gave up after 3 attempts")
         return .failed
     }
@@ -641,7 +641,7 @@ final class SyncEngine {
         guard let ck = error as? CKError else { return error.localizedDescription }
         switch ck.code {
         case .notAuthenticated: return "Sign in to iCloud in Settings to go online."
-        case .networkUnavailable, .networkFailure: return "No connection, will retry."
+        case .networkUnavailable, .networkFailure: return "No connection. Seal tries again."
         case .quotaExceeded: return "iCloud storage is full."
         default: return "iCloud error \(ck.code.rawValue): \(ck.localizedDescription)"
         }

@@ -151,7 +151,7 @@ struct GuardedEstateView: View {
                 let now = estateEngine.now
                 if ReleaseMachine.custodianCanClaim(s, now: now) {
                     action("Start a claim", icon: "exclamationmark.triangle.fill", tint: .orange,
-                           note: "\(live.ownerName) will be warned every day for \(s.policy.warningDays) days. If they open Seal once, this stops.") {
+                           note: "\(live.ownerName) gets a warning every day for \(s.policy.warningDays) days. If they open Seal once, this stops.") {
                         showClaimSheet = true
                     }
                 }
@@ -317,7 +317,7 @@ struct GuardedEstateView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Start a claim on \(live.ownerName)'s envelopes")
                         .font(.system(.title3, design: .rounded, weight: .semibold)).foregroundStyle(.white)
-                    Text("Do this only if you believe \(live.ownerName) has died or cannot ever come back. They will be warned every day. Every other custodian is told today. If \(live.ownerName) opens Seal once, the claim ends and everyone sees that you started it.")
+                    Text("Do this only if you believe \(live.ownerName) has died or cannot ever come back. They get a warning every day. Every other custodian is told today. If \(live.ownerName) opens Seal once, the claim ends and everyone sees that you started it.")
                         .font(.callout).foregroundStyle(.white.opacity(0.75)).fixedSize(horizontal: false, vertical: true)
                     TextField("Why (kept in the record)", text: $claimReason)
                         .padding(14).background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 14)).foregroundStyle(.white)

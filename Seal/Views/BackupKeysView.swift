@@ -30,7 +30,7 @@ enum BackupKeyCopy {
     /// Said after a recovery, where it cannot be mistaken for reassurance.
     /// The state is survivable but not stable, and the honest instruction is
     /// to leave it, so the copy gives the instruction, not just the fact.
-    static let recoveredBody = "You signed in with your backup key, so you are still you: same name, same seal, and your family can check it's really you. Your envelopes and your people are not here: they were on the phone you lost. Your family will need to add you again, in person, and you will seal your envelopes again.\n\nYour main key is gone too, and this phone can't add another backup key or replace the one you used. Both need the main key. So one more loss would take this identity for good."
+    static let recoveredBody = "You signed in with your backup key, so you are still you: same name, same seal, and your family can check it's really you. Your envelopes and your people are not here: they were on the phone you lost. Your family needs to add you again, in person, and you seal your envelopes again.\n\nYour main key is gone too, and this phone can't add another backup key or replace the one you used. Both need the main key. So one more loss would take this identity for good."
 
     /// Same reasoning as promptTitle: the flag no longer knows whether
     /// anyone else is involved, so the copy stops assuming one.
