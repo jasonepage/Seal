@@ -185,6 +185,11 @@ struct Envelope: Codable, Identifiable, Hashable {
     /// FirstSteps.swift. Empty for envelopes written before it existed.
     var firstSteps: [FirstStep] = []
 
+    /// When the owner last said each secret is still right, keyed by
+    /// `SealedCard.confirmationKey`. Owner's working copy only, never in
+    /// the payload, so confirming never forces a re-seal (SecretReview.swift).
+    var secretConfirmations: [String: Date] = [:]
+
     /// Unbound envelopes carry a made-up recipientHash with this prefix, so
     /// each one is still its own recipient for grouping and reveal order,
     /// and so no real identity hash can ever collide with one.
@@ -360,6 +365,7 @@ extension Envelope {
     private enum Keys: String, CodingKey {
         case id, recipientHash, title, letter, photos, voiceNote, secrets, revealOrder
         case createdAt, updatedAt, contentKey, payloadBlobID, sealed, draftRecipientName, firstSteps
+        case secretConfirmations
     }
 
     init(from decoder: Decoder) throws {
@@ -379,6 +385,7 @@ extension Envelope {
         sealed = try c.decode(Bool.self, forKey: .sealed)
         draftRecipientName = try c.decodeIfPresent(String.self, forKey: .draftRecipientName)
         firstSteps = try c.decodeIfPresent([FirstStep].self, forKey: .firstSteps) ?? []
+        secretConfirmations = try c.decodeIfPresent([String: Date].self, forKey: .secretConfirmations) ?? [:]
     }
 }
 

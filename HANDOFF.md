@@ -63,9 +63,102 @@ the bottom of `EstateModels.swift`. `firststeps.oldEstateDecodes` proves it.
 **Any new stored property with a default on those three types must be added
 to the matching `init(from:)`, or it silently breaks loading.**
 
-Most likely to fail to compile, in order: the `Picker` over an `Int?`
-selection in `FirstStepEditSheet`; `steps.removeAll(where: \.isBlank)`;
-the `let isDone` inside the `ForEach` in `RevealPager.firstStepsView`.
+Built and ran clean on the phone on 2026-09-16 (evening). Phase 1 is done.
+
+### Phase 2: easier check-ins, and secrets that go stale (UNCOMPILED)
+
+**Part A, the quick check-in.**
+
+- `Seal/CheckIn/CheckInIntent.swift`: the App Intent "Check in with Seal"
+  for Siri, Shortcuts and the Action button. **It opens the app.** The
+  heartbeat is signed by a Secure Enclave key that is "when unlocked, this
+  device only", the engine that writes the log lives in the running app,
+  and if the app lock is on the Face ID check is the gate PRODUCT.md
+  section 7 promises; a background heartbeat would fail on the first, race
+  on the second and go around the third. Opening the app IS the heartbeat.
+  The intent leaves a flag (`CheckInRequest`) and `HomeView` answers with
+  one line after the heartbeat lands ("You are checked in...").
+- `Seal/CheckIn/CheckInShared.swift`: after every heartbeat the engine
+  writes exactly two numbers into the App Group
+  `group.io.github.jasonepage.Seal`: the last check-in time and the silence
+  days. Nothing else ever goes through it. Wiped on sign out.
+- `SealWidget/` (new folder, NOT in the app target): the Lock Screen and
+  Home Screen widget. "Last check-in: 12 days ago. 78 of 90 quiet days
+  left. Tap to check in." It reads the two numbers and nothing else. This
+  is a new target and needs the Xcode steps below.
+- `Seal/Seal.entitlements` now carries the App Group.
+
+**Xcode steps for the widget (only Nathan or Jason can do these):**
+
+1. File > New > Target. Pick iOS > Widget Extension. Product Name exactly
+   `SealWidget`. Untick "Include Configuration App Intent" and "Include
+   Live Activity". Team 8C4BM6A82T. Finish. When Xcode offers to activate
+   the SealWidget scheme, say Activate (it does not matter either way).
+2. Xcode makes a `SealWidget` folder and template files. The folder
+   already holds four files from this commit. If Xcode asks about the
+   existing folder, keep it. Then move Xcode's own template files to the
+   trash: `SealWidget.swift` and `SealWidgetBundle.swift` (and
+   `AppIntent.swift` if it made one). Keep `Info.plist`, `Assets.xcassets`
+   and the four files that were already there (`CheckInWidgetBundle.swift`,
+   `CheckInWidget.swift`, `CheckInShared.swift`, `SealWidget.entitlements`).
+3. Select the SealWidget target > Signing & Capabilities. Set the team.
+   Tap "+ Capability" and add App Groups. Tick
+   `group.io.github.jasonepage.Seal` (tap + and type it if it is not
+   listed). If Xcode points the target at a different entitlements file,
+   that is fine as long as the group is ticked.
+4. Select the Seal target > Signing & Capabilities. Add App Groups the
+   same way and tick the same group. The entitlements file already lists
+   it, so it should show as ticked.
+5. SealWidget target > General: set the minimum deployment to match the
+   app (iOS 26.5).
+6. Build and run the Seal scheme on the phone. The widget ships inside the
+   app. On the phone, hold the Lock Screen, Customize, add "Check in with
+   Seal"; or hold the Home Screen, +, search Seal.
+7. For the Action button: Settings > Action Button > Shortcut > pick
+   "Check in" under Seal. For Siri, say "Check in with Seal".
+
+**Apple Watch: design only, not built.** A Watch app would be one button,
+"I am here", that writes the heartbeat. It cannot, for the same three
+reasons the intent cannot: the signing key is on the phone. The honest
+Watch version is a complication showing the same two numbers as the
+widget (through Watch Connectivity or the App Group on a paired watch,
+which does not share app groups, so it would need
+`WCSession.transferCurrentComplicationUserInfo`), and a tap that opens the
+phone app. That is a mirror of the widget with a paired-device transport
+on top, for a group of users who mostly do not wear one. Not worth a
+target until somebody asks.
+
+**Part B, secrets that go stale.**
+
+- `Seal/Estate/SecretReview.swift`: `SealedCard.confirmationKey` (SHA-256
+  of type, title and value), `Envelope.secretConfirmations` (owner's copy
+  only, never in the payload), `SecretAge.line` ("Checked 7 months ago"),
+  and the `SecretReview` schedule: every 3, 6 (default) or 12 months, one
+  local notification that never names a secret.
+- `EstateEngine.confirmSecret` writes the date and nothing else: not
+  `updatedAt`, not `sealed`. `secretreview.confirmDoesNotTouchPayload`
+  proves the payload is byte for byte unchanged. `updateEnvelope` stamps
+  newly added secrets, so adding is confirming.
+- `Seal/Views/SecretReviewView.swift`: the list. "Still right" or "Update"
+  per secret, and the interval picker. Reached from a row on the home
+  screen under the envelopes, which turns orange when a review is owed.
+- The editor shows the age under each secret.
+
+Files: `Seal/CheckIn/CheckInIntent.swift`, `Seal/CheckIn/CheckInShared.swift`,
+`SealWidget/*` (all new), `Seal/Estate/SecretReview.swift` (new),
+`Seal/Views/SecretReviewView.swift` (new), `Seal/SelfTest/SecretReviewTests.swift`
+(new), `EstateEngine.swift`, `EstateModels.swift`, `HomeView.swift`,
+`EstateHomeView.swift`, `EnvelopeEditorView.swift`, `ContentView.swift`,
+`SelfTestRegistry.swift`, `Seal.entitlements`.
+
+Most likely to fail to compile, in order: `AppShortcutsProvider`
+(`appShortcuts` must be a `static var` with `@AppShortcutsBuilder`
+semantics; if it complains, wrap the single `AppShortcut` in `[ ]`);
+`static var description = IntentDescription(...)` on the intent; the
+widget's `containerBackground(for: .widget)`; `Picker` with
+`.pickerStyle(.segmented)` on the dark sheet is a look problem, not a
+build problem. The App Group will fail at RUNTIME (widget shows "Not
+sealed yet" forever) if step 3 or 4 above was skipped.
 
 ## What landed on 2026-09-16
 

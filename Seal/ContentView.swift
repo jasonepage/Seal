@@ -140,6 +140,8 @@ struct ContentView: View {
             CustodianNotices.wipe(ownerHash: hash)   // what this phone has already announced
             OwnerNotices.wipe(ownerHash: hash)       // the owner's own scheduled reminders
             FirstStepsDone.wipe(ownerHash: hash)     // a recipient's check marks on "what to do first"
+            CheckInShared.wipe()                     // the widget's two numbers
+            SecretReview.wipe(ownerHash: hash)       // the "still right?" schedule
         }
         friendStore = nil
         estateEngine = nil

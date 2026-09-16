@@ -31,6 +31,9 @@ struct HomeView: View {
     /// identity, so it is rebuilt whenever the signed-in identity changes.
     @State private var parentMode: ParentMode?
     @State private var showProfile = false
+    /// Set after a heartbeat that the person asked for by name (Siri, the
+    /// Action button, a Shortcut: CheckInIntent). One plain line, then gone.
+    @State private var checkInLine: String?
 
     var body: some View {
         shell
@@ -74,6 +77,22 @@ struct HomeView: View {
                 }
             }
         }
+        .alert("Seal", isPresented: Binding(get: { checkInLine != nil }, set: { if !$0 { checkInLine = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: { Text(checkInLine ?? "") }
+    }
+
+    /// What to say after a check-in the person asked for. Only the true
+    /// thing: a phone with nothing sealed has nothing to check in to.
+    private func answerCheckInRequest() {
+        guard CheckInRequest.consume() else { return }
+        if let estate = estateEngine.estate, estate.epochPublished {
+            checkInLine = estateEngine.lastError == nil
+                ? "You are checked in. The people holding your keys can see you are still here."
+                : "Seal could not reach the record just now. Open the app again when you have a signal, and it will check you in."
+        } else {
+            checkInLine = "Nothing to check in to yet. Seal your envelopes first, and then a check-in means something."
+        }
     }
 
     /// Anything addressed to this phone that arrives through the directory
@@ -98,10 +117,16 @@ struct HomeView: View {
     /// the estates this phone guards.
     private func refreshEverything() async {
         await estateEngine.heartbeat()
+        answerCheckInRequest()
         // The heartbeat just moved, so the owner's own reminders are measured
         // again from now (OwnerNotices). Nothing is posted here; three
         // reminders are scheduled for later and replaced on the next open.
         await OwnerNotices.schedule(engine: estateEngine, ownerHash: myRoot.credentialIDHash)
+        // The "still right?" reminder, at the next due date (SecretReview).
+        await SecretReview.schedule(ownerHash: myRoot.credentialIDHash,
+                                    hasSecrets: !estateEngine.allSecrets.isEmpty,
+                                    estateCreatedAt: estateEngine.estate?.createdAt ?? estateEngine.now,
+                                    now: estateEngine.now)
         await estateEngine.refreshGuarded()
         // The CloudKit push for a guarded estate is silent now, because it
         // fires on the owner's heartbeat too. This is what the person

@@ -155,7 +155,11 @@ struct EnvelopeEditorView: View {
             .sheet(isPresented: $showSecretEditor) {
                 SecretEditorSheet { card in
                     showSecretEditor = false
-                    if let card { envelope.secrets.append(card) }
+                    if let card {
+                        envelope.secrets.append(card)
+                        // Adding is confirming (SecretReview).
+                        envelope.secretConfirmations[card.confirmationKey] = estateEngine.now
+                    }
                 }
             }
             .sheet(isPresented: $showPhotoPicker) {
@@ -227,6 +231,10 @@ struct EnvelopeEditorView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(card.title).font(.subheadline.weight(.semibold)).foregroundStyle(.white)
                         Text(card.typeLine).font(.caption2).foregroundStyle(.white.opacity(0.5))
+                        // How long since the owner said this one is still
+                        // right. Plain words, no date arithmetic to do.
+                        Text(SecretAge.line(since: envelope.confirmedAt(card), now: estateEngine.now))
+                            .font(.caption2).foregroundStyle(.white.opacity(0.4))
                         if revealSecrets {
                             Text(card.displayValue)
                                 .font(.system(.body, design: .monospaced))
@@ -487,6 +495,7 @@ struct EnvelopeEditorView: View {
         do {
             let card = try SealedCard.validated(cardType: finding.cardType, title: finding.cardTitle, value: finding.value)
             envelope.secrets.append(card)
+            envelope.secretConfirmations[card.confirmationKey] = estateEngine.now
             envelope.letter = LetterSecretScan.removing(finding, from: envelope.letter)
         } catch {
             self.error = error.localizedDescription

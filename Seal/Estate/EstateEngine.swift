@@ -344,8 +344,23 @@ final class EstateEngine {
         var updated = envelope
         updated.updatedAt = clock.now
         updated.sealed = false
+        updated.stampNewSecrets(now: clock.now)
         e.envelopes[i] = updated
         estate = e; saveEstate()
+    }
+
+    /// "Still right." Records the date on the owner's copy and nothing
+    /// else: not `updatedAt`, not `sealed`, not the payload. This is the
+    /// one write to an envelope that must never cost a re-seal.
+    func confirmSecret(envelopeID: String, key: String) {
+        guard var e = estate, let i = e.envelopes.firstIndex(where: { $0.id == envelopeID }) else { return }
+        e.envelopes[i].secretConfirmations[key] = clock.now
+        estate = e; saveEstate()
+    }
+
+    /// Every secret on this phone, for the review list.
+    var allSecrets: [(envelope: Envelope, card: SealedCard)] {
+        (estate?.envelopes ?? []).flatMap { envelope in envelope.secrets.map { (envelope, $0) } }
     }
 
     /// A new reveal order for one person's envelopes, given as ids top to
@@ -574,10 +589,19 @@ final class EstateEngine {
             }
             let hb = try sign(.heartbeat, estateID: e.id, previous: previous)
             try await publish(hb, into: e.id, mine: true)
+            shareCheckIn()
         } catch {
             lastError = error.localizedDescription
             Self.log.error("heartbeat: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    /// The two numbers the widget may know (CheckInShared): when the last
+    /// heartbeat landed and the silence limit. Nothing else leaves the
+    /// engine this way.
+    private func shareCheckIn() {
+        guard let e = estate, let snapshot = ownerSnapshot else { return }
+        CheckInShared.record(lastCheckIn: snapshot.silenceAnchor, silenceDays: e.policy.silenceDays)
     }
 
     /// The explicit "stop this" button. Same as a heartbeat, but the owner
@@ -593,6 +617,7 @@ final class EstateEngine {
         try await publish(cancel, into: e.id, mine: true)
         let hb = try sign(.heartbeat, estateID: e.id, previous: cancel.digest)
         try await publish(hb, into: e.id, mine: true)
+        shareCheckIn()
     }
 
     func refreshOwner() async {

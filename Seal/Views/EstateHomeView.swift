@@ -54,6 +54,7 @@ struct EstateHomeView: View {
     @State private var sealedOK = false
     @State private var showTimeTravel = false
     @State private var showFamilyPreview = false
+    @State private var showSecretReview = false
     @State private var showPaywall = false
     @Environment(SealPurchase.self) private var purchase
     @State private var explain: ExplainRequest?
@@ -183,6 +184,16 @@ struct EstateHomeView: View {
                 // seal the person was in the middle of. Presented from the
                 // dismissal, not from inside the sheet, for the usual reason.
                 if was, !now, purchase.isUnlocked { runSeal() }
+            }
+            .sheet(isPresented: $showSecretReview) {
+                SecretReviewView(estateEngine: estateEngine, ownerHash: myRoot.credentialIDHash,
+                                 onEdit: { envelope in
+                                     showSecretReview = false
+                                     editing = envelope
+                                 },
+                                 onClose: { showSecretReview = false })
+                    .environment(\.parentMode, parentMode)
+                    .parentTypeScale()
             }
             .sheet(isPresented: $showFamilyPreview) {
                 FamilyPreviewPicker(ownerName: myRoot.displayName, estateEngine: estateEngine,
@@ -649,6 +660,7 @@ struct EstateHomeView: View {
                         .parentTapTarget()
                 }
                 familyPreviewRow
+                if !estateEngine.allSecrets.isEmpty { secretReviewRow(estate) }
                 sealButton(estate)
             } else {
                 Text("An envelope holds a letter, a few photos, a voice message and the secrets: passwords, where the documents are, the combination, the words you never said out loud. If you do not know where to start, tap Help me write it and answer a few questions.")
@@ -677,6 +689,50 @@ struct EstateHomeView: View {
                         .font(.headline).foregroundStyle(.white)
                         .fixedSize(horizontal: false, vertical: true)
                     Text("Each person's envelopes, on their screen, in the order they open. Change the order here.")
+                        .font(.caption).foregroundStyle(.white.opacity(0.55))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.white.opacity(0.3))
+            }
+            .padding(16)
+            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+        .parentTapTarget()
+        .padding(.horizontal, 20)
+    }
+
+    /// "Are your saved passwords still right?" One row, two moods. When a
+    /// review is owed it says so in orange with the plain next step; the
+    /// rest of the time it says when the last look was and when the next
+    /// reminder comes. Confirming never costs a re-seal (SecretReview).
+    private func secretReviewRow(_ estate: Estate) -> some View {
+        let settings = SecretReview.load(ownerHash: myRoot.credentialIDHash)
+        let due = SecretReview.isDue(settings, fallback: estate.createdAt, now: estateEngine.now)
+        let count = estateEngine.allSecrets.count
+        let detail: String
+        if due {
+            detail = "It has been a while. Read each one and tap Still right, or Update. A minute, and nothing needs a new seal."
+        } else if let last = settings.lastReviewedAt {
+            detail = "Last looked over \(SecretAge.ago(since: last, now: estateEngine.now)). Seal will remind you every \(settings.intervalMonths == 12 ? "year" : "\(settings.intervalMonths) months")."
+        } else {
+            detail = "Seal will remind you every \(settings.intervalMonths == 12 ? "year" : "\(settings.intervalMonths) months") to check them. Or look now."
+        }
+        return Button {
+            showSecretReview = true
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: due ? "exclamationmark.lock.fill" : "lock.rotation")
+                    .font(.title3)
+                    .foregroundStyle(due ? .orange : .white.opacity(0.7))
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(due ? "Are your saved passwords still right?"
+                             : (count == 1 ? "Your saved secret" : "Your \(count) saved secrets"))
+                        .font(.headline).foregroundStyle(due ? .orange : .white)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(detail)
                         .font(.caption).foregroundStyle(.white.opacity(0.55))
                         .fixedSize(horizontal: false, vertical: true)
                 }
