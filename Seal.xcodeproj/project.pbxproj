@@ -274,7 +274,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Seal/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Seal;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Seal uses the camera to scan a friend's seal.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Seal uses Face ID to unlock the app.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -313,7 +313,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Seal/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Seal;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Seal uses the camera to scan a friend's seal.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Seal uses Face ID to unlock the app.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
