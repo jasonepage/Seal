@@ -247,6 +247,14 @@ struct Estate: Codable, Hashable {
     /// A difference from the current values means the next seal rotates.
     var publishedCustodianHashes: [String] = []
     var publishedThreshold: Int = 0
+    /// Per custodian hash: a digest of each endorsed device KEM bundle the
+    /// share was wrapped to at the last seal. `publishedCustodianHashes` is
+    /// the set of PEOPLE. This is the set of PHONES, and it is the only
+    /// thing that can notice a key holder who replaced theirs: device KEM
+    /// keys are ThisDeviceOnly, so a new phone signs in, gets endorsed,
+    /// and has no way to unwrap a share made for the old one. A stored
+    /// property with a default, so estates saved before it existed decode.
+    var publishedCustodianDevices: [String: [String]] = [:]
     /// Table ids published in the last vault statement, for the record.
     var publishedTableIDs: [String] = []
     /// The rule as last published, so a change to silence, warning or grace
@@ -281,6 +289,13 @@ struct Estate: Codable, Hashable {
             KeyTableEntry(envelopeID: $0.id, contentKey: $0.contentKey, title: $0.title,
                           revealOrder: $0.revealOrder, blobIDs: $0.blobIDs)
         })
+    }
+
+    /// The digests recorded in `publishedCustodianDevices`: SHA-256 of each
+    /// bundle, hex, sorted, so two fetches of the same directory record
+    /// compare equal whatever order the endorsements came back in.
+    static func deviceDigests(_ kemBundles: [Data]) -> [String] {
+        kemBundles.map { Data(SHA256.hash(data: $0)).map { String(format: "%02x", $0) }.joined() }.sorted()
     }
 
     var isReadyToSeal: Bool {

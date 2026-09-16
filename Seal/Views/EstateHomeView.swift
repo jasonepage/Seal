@@ -113,6 +113,7 @@ struct EstateHomeView: View {
                             guardedSection
                         } else {
                             statusCard
+                            if !estateEngine.custodiansWithNewPhones.isEmpty { newPhoneCard }
                             envelopesSection
                             custodiansSection
                             guardedSection
@@ -529,6 +530,55 @@ struct EstateHomeView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(18)
         .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 20))
+        .padding(.horizontal, 20)
+    }
+
+    // MARK: - A key holder on a new phone
+
+    /// The silent failure this card exists for: a key holder replaces their
+    /// phone, signs in, is endorsed, and everything reports fine. But their
+    /// piece was wrapped to keys that never leave the old phone, so a
+    /// two-of-three estate quietly became one-of-three. The engine noticed
+    /// on refresh (custodiansWithNewPhones); this names the person and makes
+    /// the fix one tap. Orange, not brass: nothing here is a trust moment,
+    /// it is a repair.
+    private var newPhoneCard: some View {
+        let people = estateEngine.custodiansWithNewPhones
+        let names = people.map(\.displayName)
+        let who: String
+        switch names.count {
+        case 1: who = names[0]
+        case 2: who = "\(names[0]) and \(names[1])"
+        default: who = names.dropLast().joined(separator: ", ") + ", and " + (names.last ?? "")
+        }
+        return VStack(alignment: .leading, spacing: 10) {
+            Label(names.count == 1 ? "\(who) has a new phone." : "\(who) have new phones.",
+                  systemImage: "iphone.gen3.badge.exclamationmark")
+                .font(.system(.title3, design: .rounded, weight: .semibold))
+                .foregroundStyle(.orange)
+            Text(names.count == 1
+                 ? "Their piece of the key is on a phone they no longer have, so right now it cannot be used. Sealing again gives them a fresh piece on the phone they have now. Your envelopes themselves are not touched."
+                 : "Their pieces of the key are on phones they no longer have, so right now those pieces cannot be used. Sealing again gives each of them a fresh piece on the phone they have now. Your envelopes themselves are not touched.")
+            Button {
+                runSeal()
+            } label: {
+                HStack {
+                    if sealing { ProgressView().tint(SealTheme.ink) }
+                    Text("Seal again")
+                        .font(.system(.headline, design: .rounded))
+                }
+                .frame(maxWidth: .infinity).padding(.vertical, 8)
+            }
+            .buttonStyle(.borderedProminent).tint(.orange)
+            .disabled(sealing || DemoFixtures.isActive)
+            .parentTapTarget(60)
+        }
+        .font(.callout)
+        .foregroundStyle(.white.opacity(0.85))
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(18)
+        .background(.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 20))
         .padding(.horizontal, 20)
     }
 

@@ -39,6 +39,12 @@ final class EstateEngine {
     private(set) var guardedSnapshots: [String: ReleaseSnapshot] = [:]
     private(set) var isWorking = false
     private(set) var lastError: String?
+    /// Custodians whose endorsed phones no longer match the ones their share
+    /// was wrapped to at the last seal. Found by `refreshOwner`, shown on the
+    /// home screen, and cleared by the next epoch. Empty for an estate
+    /// sealed before `publishedCustodianDevices` existed, because there is
+    /// nothing to compare against until it seals once more.
+    private(set) var custodiansWithNewPhones: [Custodian] = []
 
     private var directoryCache: [String: (RootIdentity, [DeviceEndorsement])] = [:]
 
@@ -406,13 +412,19 @@ final class EstateEngine {
 
         // 1. The epoch.
         let estateKey: Data
-        if e.needsNewEpoch {
+        // A key holder on a new phone is the same person with a share they
+        // cannot open, so it forces a fresh epoch exactly as a new person
+        // would. The check is by directory record, not by the stale list, so
+        // it is done again here rather than trusting what refreshOwner saw.
+        if e.needsNewEpoch || !custodiansWithNewPhones.isEmpty {
             var custodians: [EstateKeyHierarchy.Custodian] = []
             var custodianKeys: [Data] = []
+            var devices: [String: [String]] = [:]
             for c in e.custodians {
-                custodians.append(.init(hash: c.rootHash,
-                                        kemBundles: try await kemBundles(of: c.rootHash, named: c.displayName)))
+                let bundles = try await kemBundles(of: c.rootHash, named: c.displayName)
+                custodians.append(.init(hash: c.rootHash, kemBundles: bundles))
                 custodianKeys.append(try await lookup(c.rootHash, named: c.displayName).0.publicKey)
+                devices[c.rootHash] = Estate.deviceDigests(bundles)
             }
             let newKey = EstateCrypto.randomKey()
             let epoch = e.epoch + 1
@@ -439,6 +451,8 @@ final class EstateEngine {
             e.epochPublished = true
             e.publishedCustodianHashes = e.custodians.map(\.rootHash)
             e.publishedThreshold = e.policy.threshold
+            e.publishedCustodianDevices = devices
+            custodiansWithNewPhones = []
             estate = e; saveEstate()
             estateKey = newKey
         } else {
@@ -568,9 +582,24 @@ final class EstateEngine {
             let fetched = try await sync.fetchEstateEvents(estateID: e.id)
             var directory = EstateLogVerifier.Directory(identities: [:])
             directory.identities[ownerHash] = try await lookup(ownerHash, forceRefresh: true)
+            // Fresh, not cached, for the custodians too: the one thing this
+            // loop now watches for is a phone that changed since last time.
+            var newPhones: [Custodian] = []
             for c in e.custodians {
-                if let found = try? await lookup(c.rootHash) { directory.identities[c.rootHash] = found }
+                guard let found = try? await lookup(c.rootHash, forceRefresh: true) else { continue }
+                directory.identities[c.rootHash] = found
+                // Compare the phones their share was wrapped to against the
+                // phones the directory vouches for now. A phone that is gone
+                // held a share nobody can use; a phone that is new holds
+                // none. Either way the fix is one more seal. Nothing recorded
+                // means the estate predates the record, and says nothing.
+                if let recorded = e.publishedCustodianDevices[c.rootHash] {
+                    let current = Estate.deviceDigests(
+                        IdentityManager.verifiedDevices(root: found.0, endorsements: found.1).map(\.kemBundlePublicKeys))
+                    if current != recorded { newPhones.append(c) }
+                }
             }
+            custodiansWithNewPhones = newPhones
             let admitted = EstateLogVerifier.admitted(fetched, ownerHash: ownerHash,
                                                       custodianHashes: Set(e.custodians.map(\.rootHash)),
                                                       directory: directory)
