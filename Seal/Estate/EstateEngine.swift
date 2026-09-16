@@ -448,18 +448,20 @@ final class EstateEngine {
 
     /// Encrypts media under the envelope's content key and stores the
     /// ciphertext locally. The blob goes to CloudKit at the next seal.
-    func attachMedia(_ plaintext: Data, kind: MediaItem.Kind, to envelopeID: String) throws -> MediaItem {
+    func attachMedia(_ plaintext: Data, kind: MediaItem.Kind, to envelopeID: String, fileName: String? = nil) throws -> MediaItem {
         guard var e = estate, let i = e.envelopes.firstIndex(where: { $0.id == envelopeID }) else { throw EngineError.noEstate }
         let blobID = UUID().uuidString
         let ciphertext = try EstateKeyHierarchy.sealContent(plaintext, contentKey: e.envelopes[i].contentKey,
                                                             estateID: e.id, blobID: blobID)
         try EstateMediaStore.write(ciphertext, blobID: blobID, ownerHash: storeHash)
-        let item = MediaItem(blobID: blobID, kind: kind, sha256: Data(SHA256.hash(data: plaintext)),
+        var item = MediaItem(blobID: blobID, kind: kind, sha256: Data(SHA256.hash(data: plaintext)),
                              byteCount: plaintext.count, localName: blobID)
+        item.fileName = kind == .file ? fileName : nil
         switch kind {
         case .photo: e.envelopes[i].photos.append(item)
         case .voice: e.envelopes[i].voiceNote = item
         case .video: e.envelopes[i].videoNote = item
+        case .file: e.envelopes[i].files.append(item)
         }
         e.envelopes[i].sealed = false
         e.envelopes[i].updatedAt = clock.now

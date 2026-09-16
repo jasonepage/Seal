@@ -134,7 +134,7 @@ struct MediaItem: Codable, Identifiable, Hashable {
     /// `video` was added 2026-09-16. A build older than that cannot decode
     /// an envelope or a payload that carries one; every phone must run a
     /// current build, as with every other format change.
-    enum Kind: String, Codable { case photo, voice, video }
+    enum Kind: String, Codable { case photo, voice, video, file }
     var id: String { blobID }
     let blobID: String
     let kind: Kind
@@ -143,6 +143,16 @@ struct MediaItem: Codable, Identifiable, Hashable {
     /// Local file name under the owner's estate media directory. The
     /// encrypted copy in CloudKit is `MediaAsset` record `blobID`.
     let localName: String
+    /// For `.file` only: the name the owner attached it under ("policy.pdf"),
+    /// so the reader knows what it is. Nil for photos, voice and video.
+    /// Added 2026-09-16; an older item has no key and decodes as nil.
+    var fileName: String? = nil
+
+    /// The part after the last dot, lowercased, or "" for none.
+    var fileExtension: String {
+        guard let fileName, let dot = fileName.lastIndex(of: ".") else { return "" }
+        return String(fileName[fileName.index(after: dot)...]).lowercased()
+    }
 }
 
 /// Everything the owner wrote for one person. Kept in the clear on the
@@ -157,6 +167,9 @@ struct Envelope: Codable, Identifiable, Hashable {
     var voiceNote: MediaItem?
     /// One short video message, up to about a minute. Sealed like a photo.
     var videoNote: MediaItem? = nil
+    /// Attached files: the policy PDF, the deed, an export. Sealed like a
+    /// photo, one blob each (PRODUCT.md section 12). Added 2026-09-16.
+    var files: [MediaItem] = []
     /// "Open no earlier than." A letter for a child's eighteenth birthday.
     /// It does NOT open anything: the envelope still needs the release
     /// (silence, warnings, grace, M taps). After the release, the
@@ -236,6 +249,8 @@ struct Envelope: Codable, Identifiable, Hashable {
         var videoNote: MediaItem? = nil
         /// Whole seconds since 1970, or nil. See Envelope.openNoEarlierThan.
         var openNoEarlierThanEpoch: Int64? = nil
+        /// Attached files. Added 2026-09-16; decodes as empty when absent.
+        var files: [MediaItem] = []
 
         var openNoEarlierThan: Date? {
             openNoEarlierThanEpoch.map { Date(timeIntervalSince1970: TimeInterval($0)) }
@@ -252,14 +267,15 @@ struct Envelope: Codable, Identifiable, Hashable {
         Payload(title: title, letter: letter, secrets: secrets, photos: photos, voiceNote: voiceNote,
                 revealOrder: revealOrder, writtenAtEpoch: RecordEvent.epochSeconds(updatedAt),
                 firstSteps: usableFirstSteps, videoNote: videoNote,
-                openNoEarlierThanEpoch: openNoEarlierThan.map { RecordEvent.epochSeconds($0) })
+                openNoEarlierThanEpoch: openNoEarlierThan.map { RecordEvent.epochSeconds($0) },
+                files: files)
     }
 
     /// Every media item in the envelope: photos, then the voice message,
     /// then the video. The engine encrypts, uploads and removes exactly
     /// this list, so adding a kind means adding it here and nowhere else.
     var allMedia: [MediaItem] {
-        photos + [voiceNote, videoNote].compactMap { $0 }
+        photos + [voiceNote, videoNote].compactMap { $0 } + files
     }
 
     var blobIDs: [String] {
@@ -412,7 +428,7 @@ extension ReleasePolicy {
 extension Envelope.Payload {
     private enum Keys: String, CodingKey {
         case title, letter, secrets, photos, voiceNote, revealOrder, writtenAtEpoch, firstSteps, videoNote
-        case openNoEarlierThanEpoch
+        case openNoEarlierThanEpoch, files
     }
 
     init(from decoder: Decoder) throws {
@@ -427,6 +443,7 @@ extension Envelope.Payload {
         firstSteps = try c.decodeIfPresent([FirstStep].self, forKey: .firstSteps) ?? []
         videoNote = try c.decodeIfPresent(MediaItem.self, forKey: .videoNote)
         openNoEarlierThanEpoch = try c.decodeIfPresent(Int64.self, forKey: .openNoEarlierThanEpoch)
+        files = try c.decodeIfPresent([MediaItem].self, forKey: .files) ?? []
     }
 }
 
@@ -434,7 +451,7 @@ extension Envelope {
     private enum Keys: String, CodingKey {
         case id, recipientHash, title, letter, photos, voiceNote, secrets, revealOrder
         case createdAt, updatedAt, contentKey, payloadBlobID, sealed, draftRecipientName, firstSteps
-        case secretConfirmations, videoNote, openNoEarlierThan
+        case secretConfirmations, videoNote, openNoEarlierThan, files
     }
 
     init(from decoder: Decoder) throws {
@@ -457,6 +474,7 @@ extension Envelope {
         secretConfirmations = try c.decodeIfPresent([String: Date].self, forKey: .secretConfirmations) ?? [:]
         videoNote = try c.decodeIfPresent(MediaItem.self, forKey: .videoNote)
         openNoEarlierThan = try c.decodeIfPresent(Date.self, forKey: .openNoEarlierThan)
+        files = try c.decodeIfPresent([MediaItem].self, forKey: .files) ?? []
     }
 }
 

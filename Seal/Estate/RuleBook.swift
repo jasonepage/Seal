@@ -305,16 +305,23 @@ final class EstateEngines {
             video = data
         }
 
+        var files: [(Data, String?)] = []
+        for item in old.files {
+            guard let data = source.mediaPlaintext(item, in: old) else { throw MoveError.media("a file") }
+            files.append((data, item.fileName))
+        }
+
         let recipient = source.estate?.recipients.first { $0.rootHash == old.recipientHash }
         target.adopt(moved, recipient: recipient)
         do {
             for data in photos { _ = try target.attachMedia(data, kind: .photo, to: moved.id) }
             if let voice { _ = try target.attachMedia(voice, kind: .voice, to: moved.id) }
             if let video { _ = try target.attachMedia(video, kind: .video, to: moved.id) }
+            for (data, name) in files { _ = try target.attachMedia(data, kind: .file, to: moved.id, fileName: name) }
         } catch {
             // Undo the landing so the owner is not left with two copies.
             target.removeEnvelope(moved.id)
-            throw MoveError.media("the photos, voice or video")
+            throw MoveError.media("the photos, voice, video or files")
         }
 
         source.removeEnvelope(old.id)
