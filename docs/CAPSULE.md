@@ -223,8 +223,10 @@ contentKey, title, revealOrder, blobIDs[] } ] }`. Each blob in
 payload JSON (`title, letter, secrets[], photos[], voiceNote, revealOrder,
 writtenAtEpoch`, and since 2026-09-16 an optional `firstSteps[]`, each
 `{ id, title, note, secretIndex }`, the owner's ordered "what to do first"
-list, where `secretIndex` is an index into `secrets` or null); the rest are
-photos and the voice note, whose SHA-256 the payload records. A reader that
+list, where `secretIndex` is an index into `secrets` or null, and an
+optional `videoNote`, a media item like `voiceNote` whose `kind` is
+`"video"`); the rest are photos, the voice note and the video, whose SHA-256
+the payload records. A reader that
 does not know `firstSteps` ignores it; a payload without it has none. This
 is additive and did not bump the version (section 11).
 

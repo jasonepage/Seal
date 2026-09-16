@@ -20,6 +20,7 @@ enum FirstStepsTests {
         .init(name: "firststeps.secretLinks", run: secretLinks),
         .init(name: "firststeps.oldEstateDecodes", run: oldEstateDecodes),
         .init(name: "firststeps.starters", run: starters),
+        .init(name: "firststeps.videoInMedia", run: videoInMedia),
     ] }
 
     static let t0 = Date(timeIntervalSince1970: 1_800_000_000)
@@ -57,6 +58,21 @@ enum FirstStepsTests {
         t.check(payload.firstSteps.isEmpty, "a payload without the key decodes as no steps")
         t.equal(payload.title, "For Karen", "the rest of the old payload is intact")
         t.check(payload.voiceNote == nil, "a missing voice note is still nil")
+        t.check(payload.videoNote == nil, "a payload without a video decodes with none")
+    }
+
+    /// The video rides in the media list the engine encrypts and uploads.
+    static func videoInMedia(_ t: SelfTest.Context) throws {
+        var envelope = Envelope.new(recipientHash: "R", title: "x", now: t0, revealOrder: 0)
+        let photo = MediaItem(blobID: "p", kind: .photo, sha256: Data(repeating: 1, count: 32), byteCount: 1, localName: "p")
+        let voice = MediaItem(blobID: "a", kind: .voice, sha256: Data(repeating: 2, count: 32), byteCount: 1, localName: "a")
+        let video = MediaItem(blobID: "v", kind: .video, sha256: Data(repeating: 3, count: 32), byteCount: 1, localName: "v")
+        envelope.photos = [photo]; envelope.voiceNote = voice; envelope.videoNote = video
+        t.equal(envelope.allMedia.map(\.blobID), ["p", "a", "v"], "photos, then voice, then video")
+        t.check(envelope.blobIDs.contains("v"), "the video blob is in the key table's list")
+        let back = try JSONDecoder().decode(Envelope.Payload.self, from: try EstateEvent.encodeBody(envelope.payload))
+        t.equal(back.videoNote, video, "the video survives the payload round trip")
+        t.check(envelope.contentsSummary.contains("a video"), "the summary names it: \(envelope.contentsSummary)")
     }
 
     static func secretLinks(_ t: SelfTest.Context) throws {

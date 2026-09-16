@@ -81,6 +81,7 @@ extension Envelope {
         if steps > 0 { parts.append(steps == 1 ? "one step" : "\(steps) steps") }
         if !secrets.isEmpty { parts.append(secrets.count == 1 ? "one secret" : "\(secrets.count) secrets") }
         if !photos.isEmpty { parts.append(photos.count == 1 ? "a photo" : "\(photos.count) photos") }
+        if videoNote != nil { parts.append("a video") }
         if voiceNote != nil { parts.append("your voice") }
         switch parts.count {
         case 0: return "empty"

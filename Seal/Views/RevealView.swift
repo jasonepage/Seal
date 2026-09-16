@@ -81,6 +81,12 @@ struct RevealPager: View {
     @State private var done: Set<String> = []
     @State private var photos: [String: UIImage] = [:]
     @State private var player: AVAudioPlayer?
+    /// The voice message as a file, once loaded, so the share sheet has
+    /// something to hand over. Keyed by blob id.
+    @State private var voiceFiles: [String: URL] = [:]
+    @State private var videoData: [String: Data] = [:]
+    @State private var showVideo: String?
+    @State private var saved: String?
     @State private var copied: String?
     @State private var error: String?
     /// Secrets are hidden until the person confirms it is them
@@ -152,6 +158,12 @@ struct RevealPager: View {
             .alert("Copied", isPresented: Binding(get: { copied != nil }, set: { if !$0 { copied = nil } })) {
                 Button("OK", role: .cancel) {}
             } message: { Text(copied ?? "") }
+            .alert("Seal", isPresented: Binding(get: { saved != nil }, set: { if !$0 { saved = nil } })) {
+                Button("OK", role: .cancel) {}
+            } message: { Text(saved ?? "") }
+            .onDisappear {
+                for url in voiceFiles.values { try? FileManager.default.removeItem(at: url) }
+            }
             .alert("Seal", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
                 Button("OK", role: .cancel) {}
             } message: { Text(error ?? "") }
@@ -171,27 +183,9 @@ struct RevealPager: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(16).background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
             }
-            if let voice = e.voiceNote {
-                Button {
-                    Task { await play(voice, page: page) }
-                } label: {
-                    Label(player?.isPlaying == true ? "Playing" : "Play the voice message", systemImage: "play.circle.fill")
-                        .frame(maxWidth: .infinity).padding(.vertical, 6)
-                }
-                .buttonStyle(.bordered).tint(SealTheme.brass)
-                .parentTapTarget()
-            }
-            ForEach(e.photos) { item in
-                Group {
-                    if let image = photos[item.blobID] {
-                        Image(uiImage: image).resizable().scaledToFit().clipShape(RoundedRectangle(cornerRadius: 16))
-                    } else {
-                        RoundedRectangle(cornerRadius: 16).fill(.white.opacity(0.06)).frame(height: 180)
-                            .overlay(ProgressView().tint(SealTheme.brass))
-                            .task { await load(item, page: page) }
-                    }
-                }
-            }
+            if let voice = e.voiceNote { voiceView(voice, page: page) }
+            if let video = e.videoNote { videoView(video, page: page) }
+            ForEach(e.photos) { item in photoView(item, page: page) }
             if !e.firstSteps.isEmpty { firstStepsView(e) }
             if !e.secrets.isEmpty {
                 Text("The secrets").font(.headline).foregroundStyle(.white).padding(.top, 6)
@@ -220,8 +214,96 @@ struct RevealPager: View {
                     .parentTapTarget()
                 }
             }
-            Text("Everything above was sealed by \(ownerName)'s phone and could not be read by anyone, including Seal, until the custodians combined their keys. The letter is theirs. Check the secrets carefully before acting on them.")
+            Text("Everything above was sealed by \(ownerName)'s phone and could not be read by anyone, including Seal, until the key holders combined their keys. The letter is theirs. Photos and the video can be saved to your Photos. Check the secrets carefully before acting on them.")
                 .font(.caption2).foregroundStyle(.white.opacity(0.4)).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    // MARK: - Voice, video, photos
+
+    /// Play, and Share once the bytes are here. The share sheet is the
+    /// person's own choice; Seal hands over the file and nothing else.
+    private func voiceView(_ voice: MediaItem, page: RevealPage) -> some View {
+        HStack(spacing: 10) {
+            Button {
+                Task { await play(voice, page: page) }
+            } label: {
+                Label(player?.isPlaying == true ? "Playing" : "Play the voice message", systemImage: "play.circle.fill")
+                    .frame(maxWidth: .infinity).padding(.vertical, 6)
+            }
+            .buttonStyle(.bordered).tint(SealTheme.brass)
+            .parentTapTarget()
+            if let url = voiceFiles[voice.blobID] {
+                ShareLink(item: url) {
+                    Image(systemName: "square.and.arrow.up").padding(.vertical, 6).padding(.horizontal, 4)
+                }
+                .buttonStyle(.bordered).tint(SealTheme.brass)
+                .accessibilityLabel("Share the voice message")
+                .parentTapTarget()
+            }
+        }
+        .task(id: voice.blobID) {
+            guard voiceFiles[voice.blobID] == nil, let data = try? await page.loadMedia(voice),
+                  let url = try? MediaSaving.tempFile(data, extension: "m4a", name: "voice-\(voice.blobID)") else { return }
+            voiceFiles[voice.blobID] = url
+        }
+    }
+
+    private func videoView(_ video: MediaItem, page: RevealPage) -> some View {
+        Button {
+            Task {
+                if videoData[video.blobID] == nil {
+                    do { videoData[video.blobID] = try await page.loadMedia(video) }
+                    catch { self.error = error.localizedDescription; return }
+                }
+                showVideo = video.blobID
+            }
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: "video.fill").font(.title2).foregroundStyle(SealTheme.brass).frame(width: 32)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("A video from \(ownerName)").font(.headline).foregroundStyle(.white)
+                    Text("Tap to watch. You can save it to your Photos from there.")
+                        .font(.caption).foregroundStyle(.white.opacity(0.55))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                Image(systemName: "play.fill").foregroundStyle(.white.opacity(0.6))
+            }
+            .padding(16)
+            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+        .parentTapTarget()
+        .sheet(isPresented: Binding(get: { showVideo == video.blobID }, set: { if !$0 { showVideo = nil } })) {
+            if let data = videoData[video.blobID] {
+                VideoPlaySheet(data: data, onClose: { showVideo = nil })
+            }
+        }
+    }
+
+    private func photoView(_ item: MediaItem, page: RevealPage) -> some View {
+        VStack(alignment: .trailing, spacing: 6) {
+            if let image = photos[item.blobID] {
+                Image(uiImage: image).resizable().scaledToFit().clipShape(RoundedRectangle(cornerRadius: 16))
+                Button {
+                    Task {
+                        do {
+                            let data = try await page.loadMedia(item)
+                            try await MediaSaving.savePhoto(data)
+                            saved = "Saved to your Photos."
+                        } catch { self.error = error.localizedDescription }
+                    }
+                } label: {
+                    Label("Save to Photos", systemImage: "square.and.arrow.down").font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.bordered).tint(SealTheme.brass)
+                .parentTapTarget(40)
+            } else {
+                RoundedRectangle(cornerRadius: 16).fill(.white.opacity(0.06)).frame(height: 180)
+                    .overlay(ProgressView().tint(SealTheme.brass))
+                    .task { await load(item, page: page) }
+            }
         }
     }
 

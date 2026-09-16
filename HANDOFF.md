@@ -84,12 +84,26 @@ menu, which it was. Rebuilt on 2026-09-16 evening (`bda513c`):
   `StepsChecklist` with "2 of 5 done" and the next step lit.
 - `Envelope.contentsSummary` feeds the home screen row.
 
+**Video and saving (same evening, UNCOMPILED):** `Envelope.videoNote` and
+`Payload.videoNote`, `MediaItem.Kind.video`, `Envelope.allMedia` (the one
+list the engine encrypts, uploads and removes). `VideoRecorderPicker`
+(system camera, front, one minute, medium quality, 80 MB ceiling),
+`VideoPlaySheet` (AVKit, with Save), `MediaSaving` (Photos add-only for
+photos and video, temp files for the player and the share sheet). The
+reveal now has Save under each photo, Save on the video, Share on the
+voice message, and its order is the editor's: letter, voice, video,
+photos, steps, secrets. `NSPhotoLibraryAddUsageDescription` is in
+Info.plist; the camera usage string in the project file now mentions
+video. GOTCHAS: an old build cannot decode a payload with a video.
+
 Most likely to fail to compile: `TextField(..., axis: .vertical)` with
 `.lineLimit(2...6)`; the `@FocusState` keyed by a String; the generic
 `card(...)` helper with a `@ViewBuilder` closure containing if/else
 chains (if the type checker times out, split the branch bodies into
-their own `private var`s). Video is the next step after this is seen on
-a phone (task list), and is not started.
+their own `private var`s). In the video code: `AVAssetImageGenerator.image(at:)`
+(async, iOS 16), `PHPhotoLibrary.requestAuthorization(for:)` async form,
+`ShareLink(item: URL)`, and `UTType.movie.identifier` needing
+`UniformTypeIdentifiers`.
 
 ### Phase 2: easier check-ins, and secrets that go stale (built clean 2026-09-16)
 

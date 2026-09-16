@@ -153,5 +153,9 @@ once and is not now. The em dashes inside user-visible strings are gone too
   away. If someone genuinely re-registers, remove and re-meet them.
 - **`EstateEvent` needs its `estate` field QUERYABLE** in every environment,
   same class of silent failure as the `Identity` index.
+- **`MediaItem.Kind.video` (2026-09-16) is a new enum case in the sealed
+  payload.** A build from before it throws on decode when it meets an
+  envelope with a video, and the recipient sees "nothing addressed to
+  you". Every phone that will open envelopes must run a current build.
 - **Demo mode seeds a sealed estate but publishes nothing.** Every engine
   method checks `DemoFixtures.isActive` and returns; the buttons are disabled.

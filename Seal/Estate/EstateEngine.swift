@@ -385,7 +385,7 @@ final class EstateEngine {
     func removeEnvelope(_ id: String) {
         guard var e = estate else { return }
         if let env = e.envelopes.first(where: { $0.id == id }) {
-            for blob in env.photos.map(\.blobID) + [env.voiceNote?.blobID].compactMap({ $0 }) {
+            for blob in env.allMedia.map(\.blobID) {
                 try? FileManager.default.removeItem(at: EstateMediaStore.directory(ownerHash: ownerHash).appendingPathComponent(blob))
             }
         }
@@ -406,6 +406,7 @@ final class EstateEngine {
         switch kind {
         case .photo: e.envelopes[i].photos.append(item)
         case .voice: e.envelopes[i].voiceNote = item
+        case .video: e.envelopes[i].videoNote = item
         }
         e.envelopes[i].sealed = false
         e.envelopes[i].updatedAt = clock.now
@@ -518,7 +519,7 @@ final class EstateEngine {
             let payload = try EstateEvent.encodeBody(env.payload)
             let sealed = try EstateKeyHierarchy.sealContent(payload, contentKey: env.contentKey, estateID: e.id, blobID: payloadBlobID)
             try await sync.saveEstateBlob(sealed, name: EstateNames.contentBlob(e.id, payloadBlobID))
-            for item in env.photos + [env.voiceNote].compactMap({ $0 }) {
+            for item in env.allMedia {
                 guard let ciphertext = EstateMediaStore.read(blobID: item.blobID, ownerHash: ownerHash) else { continue }
                 try await sync.saveEstateBlob(ciphertext, name: EstateNames.contentBlob(e.id, item.blobID))
             }

@@ -122,7 +122,10 @@ struct Recipient: Codable, Identifiable, Hashable {
 // MARK: - Envelopes
 
 struct MediaItem: Codable, Identifiable, Hashable {
-    enum Kind: String, Codable { case photo, voice }
+    /// `video` was added 2026-09-16. A build older than that cannot decode
+    /// an envelope or a payload that carries one; every phone must run a
+    /// current build, as with every other format change.
+    enum Kind: String, Codable { case photo, voice, video }
     var id: String { blobID }
     let blobID: String
     let kind: Kind
@@ -143,6 +146,8 @@ struct Envelope: Codable, Identifiable, Hashable {
     var letter: String
     var photos: [MediaItem]
     var voiceNote: MediaItem?
+    /// One short video message, up to about a minute. Sealed like a photo.
+    var videoNote: MediaItem? = nil
     /// The secrets. A `SealedCard` already carries a title, a value and a
     /// note and refuses to be summarised; that is exactly a secret field.
     var secrets: [SealedCard]
@@ -208,19 +213,27 @@ struct Envelope: Codable, Identifiable, Hashable {
         let voiceNote: MediaItem?
         let revealOrder: Int
         let writtenAtEpoch: Int64
-        /// Added 2026-09-16. A payload sealed before then has no key for it
-        /// and decodes as empty (see the Decodable extension below).
+        /// Added 2026-09-16. A payload sealed before then has no key for
+        /// these and decodes as empty (see the Decodable extension below).
         var firstSteps: [FirstStep] = []
+        var videoNote: MediaItem? = nil
     }
 
     var payload: Payload {
         Payload(title: title, letter: letter, secrets: secrets, photos: photos, voiceNote: voiceNote,
                 revealOrder: revealOrder, writtenAtEpoch: RecordEvent.epochSeconds(updatedAt),
-                firstSteps: usableFirstSteps)
+                firstSteps: usableFirstSteps, videoNote: videoNote)
+    }
+
+    /// Every media item in the envelope: photos, then the voice message,
+    /// then the video. The engine encrypts, uploads and removes exactly
+    /// this list, so adding a kind means adding it here and nowhere else.
+    var allMedia: [MediaItem] {
+        photos + [voiceNote, videoNote].compactMap { $0 }
     }
 
     var blobIDs: [String] {
-        [payloadBlobID].compactMap { $0 } + photos.map(\.blobID) + [voiceNote?.blobID].compactMap { $0 }
+        [payloadBlobID].compactMap { $0 } + allMedia.map(\.blobID)
     }
 
     static func new(recipientHash: String, title: String, now: Date, revealOrder: Int) -> Envelope {
@@ -345,7 +358,7 @@ struct Estate: Codable, Hashable {
 
 extension Envelope.Payload {
     private enum Keys: String, CodingKey {
-        case title, letter, secrets, photos, voiceNote, revealOrder, writtenAtEpoch, firstSteps
+        case title, letter, secrets, photos, voiceNote, revealOrder, writtenAtEpoch, firstSteps, videoNote
     }
 
     init(from decoder: Decoder) throws {
@@ -358,6 +371,7 @@ extension Envelope.Payload {
         revealOrder = try c.decode(Int.self, forKey: .revealOrder)
         writtenAtEpoch = try c.decode(Int64.self, forKey: .writtenAtEpoch)
         firstSteps = try c.decodeIfPresent([FirstStep].self, forKey: .firstSteps) ?? []
+        videoNote = try c.decodeIfPresent(MediaItem.self, forKey: .videoNote)
     }
 }
 
@@ -365,7 +379,7 @@ extension Envelope {
     private enum Keys: String, CodingKey {
         case id, recipientHash, title, letter, photos, voiceNote, secrets, revealOrder
         case createdAt, updatedAt, contentKey, payloadBlobID, sealed, draftRecipientName, firstSteps
-        case secretConfirmations
+        case secretConfirmations, videoNote
     }
 
     init(from decoder: Decoder) throws {
@@ -386,6 +400,7 @@ extension Envelope {
         draftRecipientName = try c.decodeIfPresent(String.self, forKey: .draftRecipientName)
         firstSteps = try c.decodeIfPresent([FirstStep].self, forKey: .firstSteps) ?? []
         secretConfirmations = try c.decodeIfPresent([String: Date].self, forKey: .secretConfirmations) ?? [:]
+        videoNote = try c.decodeIfPresent(MediaItem.self, forKey: .videoNote)
     }
 }
 

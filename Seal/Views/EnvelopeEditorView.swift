@@ -10,13 +10,14 @@ import AVFoundation
 //
 //  WRITE AN ENVELOPE. Not a form: a box being packed for one person.
 //
-//  Karen will see, in this order: the letter, what to do first, the
-//  secrets, the photos, your voice. So the editor is those five cards in
-//  that order. A card with something in it shows that something small
+//  Karen will see, in this order: the letter, your voice, a video, the
+//  photos, what to do first, the secrets. The person first, then the
+//  tasks. So the editor is those six cards in that order (RevealPager
+//  draws them in the same order; keep the two together). A card with something in it shows that something small
 //  (the first lines of the letter, the numbered steps, the photo strip);
 //  a card with nothing in it says, in one line, why she would want it.
 //  At the top, one sentence says what the box holds and what it is
-//  missing, and five dots fill in as it fills. When all five are lit it
+//  missing, and six dots fill in as it fills. When all six are lit it
 //  says so.
 //
 //  Every edit un-seals the envelope; the home screen's Seal button
@@ -39,6 +40,9 @@ struct EnvelopeEditorView: View {
     @State private var showSecretEditor = false
     @State private var showPhotoPicker = false
     @State private var showVoice = false
+    @State private var showVideo = false
+    @State private var showVideoPlayer = false
+    @State private var videoThumbnail: UIImage?
     @State private var confirmDelete = false
     @State private var showPreview = false
     @State private var showFirstSteps = false
@@ -70,35 +74,26 @@ struct EnvelopeEditorView: View {
     private var hasSecrets: Bool { !envelope.secrets.isEmpty }
     private var hasPhotos: Bool { !envelope.photos.isEmpty }
     private var hasVoice: Bool { envelope.voiceNote != nil }
-    private var filled: [Bool] { [hasLetter, hasSteps, hasSecrets, hasPhotos, hasVoice] }
+    private var hasVideo: Bool { envelope.videoNote != nil }
+    /// In Karen's order.
+    private var filled: [Bool] { [hasLetter, hasVoice, hasVideo, hasPhotos, hasSteps, hasSecrets] }
+    private static let dotNames = ["Letter", "Voice", "Video", "Photos", "Steps", "Secrets"]
 
-    /// "A letter and 2 secrets. No steps, no photos, no voice yet."
+    /// "A letter and 2 secrets. No voice, video, photos or steps yet."
     private var packingLine: String {
-        var have: [String] = []
-        if hasLetter { have.append("a letter") }
-        if hasSteps { have.append(envelope.usableFirstSteps.count == 1 ? "one step" : "\(envelope.usableFirstSteps.count) steps") }
-        if hasSecrets { have.append(envelope.secrets.count == 1 ? "one secret" : "\(envelope.secrets.count) secrets") }
-        if hasPhotos { have.append(envelope.photos.count == 1 ? "a photo" : "\(envelope.photos.count) photos") }
-        if hasVoice { have.append("your voice") }
         var missing: [String] = []
         if !hasLetter { missing.append("letter") }
+        if !hasVoice { missing.append("voice") }
+        if !hasVideo { missing.append("video") }
+        if !hasPhotos { missing.append("photos") }
         if !hasSteps { missing.append("steps") }
         if !hasSecrets { missing.append("secrets") }
-        if !hasPhotos { missing.append("photos") }
-        if !hasVoice { missing.append("voice") }
-        if missing.isEmpty { return "Everything is here. A letter, the steps, the secrets, photos and your voice." }
-        if have.isEmpty { return "Empty so far. Start anywhere below." }
-        let haveLine = join(have).prefix(1).uppercased() + join(have).dropFirst() + "."
-        return haveLine + " No " + missing.joined(separator: ", ") + " yet."
-    }
-
-    private func join(_ parts: [String]) -> String {
-        switch parts.count {
-        case 0: return ""
-        case 1: return parts[0]
-        case 2: return "\(parts[0]) and \(parts[1])"
-        default: return parts.dropLast().joined(separator: ", ") + ", and " + parts.last!
-        }
+        if missing.isEmpty { return "Everything is here. A letter, your voice, a video, photos, the steps and the secrets." }
+        if missing.count == 6 { return "Empty so far. Start anywhere below." }
+        let have = envelope.contentsSummary
+        let haveLine = have.prefix(1).uppercased() + have.dropFirst() + "."
+        let missingLine = missing.count == 1 ? missing[0] : missing.dropLast().joined(separator: ", ") + " or " + missing[missing.count - 1]
+        return haveLine + " No " + missingLine + " yet."
     }
 
     var body: some View {
@@ -111,10 +106,11 @@ struct EnvelopeEditorView: View {
                         titleRow
                         packingCard
                         letterCard
+                        voiceCard
+                        videoCard
+                        photosCard
                         stepsCard
                         secretsCard
-                        photosCard
-                        voiceCard
                         if envelope.isAddressed { previewRow }
                         Text(envelope.isAddressed
                              ? "Written for \(recipientName). Opens on their phone, in the order you choose, only after your key holders release it."
@@ -148,6 +144,25 @@ struct EnvelopeEditorView: View {
                 }
             }
             .onAppear { writingLetter = !hasLetter }
+            .task(id: envelope.videoNote?.blobID) { await loadVideoThumbnail() }
+            .sheet(isPresented: $showVideo) {
+                VideoRecorderPicker { data, problem in
+                    showVideo = false
+                    if let problem { self.error = problem }
+                    guard let data else { return }
+                    estateEngine.updateEnvelope(envelope)
+                    do {
+                        let item = try estateEngine.attachMedia(data, kind: .video, to: envelope.id)
+                        envelope.videoNote = item
+                    } catch { self.error = error.localizedDescription }
+                }
+                .ignoresSafeArea()
+            }
+            .sheet(isPresented: $showVideoPlayer) {
+                if let video = envelope.videoNote, let data = estateEngine.mediaPlaintext(video, in: envelope) {
+                    VideoPlaySheet(data: data, onClose: { showVideoPlayer = false })
+                }
+            }
             .sheet(isPresented: $showPreview) {
                 // Save first, so the preview shows the letter as it is on
                 // screen and not as it was when the editor opened.
@@ -260,12 +275,12 @@ struct EnvelopeEditorView: View {
         .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
     }
 
-    /// One sentence and five dots. The dots are in Karen's order.
+    /// One sentence and six dots. The dots are in Karen's order.
     private var packingCard: some View {
         let all = filled.allSatisfy { $0 }
         return VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                ForEach(Array(["Letter", "Steps", "Secrets", "Photos", "Voice"].enumerated()), id: \.offset) { i, name in
+            HStack(spacing: 6) {
+                ForEach(Array(Self.dotNames.enumerated()), id: \.offset) { i, name in
                     VStack(spacing: 4) {
                         Circle()
                             .fill(filled[i] ? SealTheme.brass : .white.opacity(0.08))
@@ -285,7 +300,7 @@ struct EnvelopeEditorView: View {
         .animation(.easeInOut(duration: 0.2), value: filled)
     }
 
-    // MARK: - The five cards
+    // MARK: - The six cards
 
     /// The shell every card uses: an icon, a title, what is in it or the
     /// invitation, and one action on the right.
@@ -500,6 +515,58 @@ struct EnvelopeEditorView: View {
             } else {
                 invitation("Thirty seconds is enough. \(recipientName) will want to hear you say their name.")
             }
+        }
+    }
+
+    // Video
+
+    private var videoCard: some View {
+        card("video.fill", "A video", filled: hasVideo,
+             action: hasVideo ? "Record again" : "Record", onAction: { showVideo = true }) {
+            if let video = envelope.videoNote {
+                HStack(spacing: 12) {
+                    Button { showVideoPlayer = true } label: {
+                        ZStack {
+                            if let thumb = videoThumbnail {
+                                Image(uiImage: thumb).resizable().scaledToFill()
+                            } else {
+                                Rectangle().fill(.white.opacity(0.08))
+                            }
+                            Image(systemName: "play.fill").font(.title2).foregroundStyle(.white)
+                                .shadow(radius: 4)
+                        }
+                        .frame(width: 96, height: 96).clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+                    .buttonStyle(.plain)
+                    .parentTapTarget(96)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Video message").font(.subheadline.weight(.semibold)).foregroundStyle(.white)
+                        Text(ByteCountFormatter.string(fromByteCount: Int64(video.byteCount), countStyle: .file))
+                            .font(.caption).foregroundStyle(.white.opacity(0.5))
+                        Text("Tap to watch").font(.caption).foregroundStyle(SealTheme.brass.opacity(0.8))
+                    }
+                    Spacer()
+                    Button(role: .destructive) { envelope.videoNote = nil } label: {
+                        Image(systemName: "trash").foregroundStyle(.orange.opacity(0.8))
+                    }
+                    .parentTapTarget()
+                }
+            } else {
+                invitation("Up to a minute, from the front camera. Your face, your voice, in your kitchen. Nothing else in the envelope will be looked at more.")
+            }
+        }
+    }
+
+    /// The first frame, for the card. Read from the owner's local copy.
+    private func loadVideoThumbnail() async {
+        videoThumbnail = nil
+        guard let video = envelope.videoNote, let data = estateEngine.mediaPlaintext(video, in: envelope),
+              let url = try? MediaSaving.tempFile(data, extension: "mov", name: "thumb-\(video.blobID)") else { return }
+        defer { try? FileManager.default.removeItem(at: url) }
+        let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+        generator.appliesPreferredTrackTransform = true
+        if let result = try? await generator.image(at: .init(seconds: 0.5, preferredTimescale: 600)) {
+            videoThumbnail = UIImage(cgImage: result.image)
         }
     }
 
