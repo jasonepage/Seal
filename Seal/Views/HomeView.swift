@@ -20,12 +20,12 @@ struct HomeView: View {
     @Bindable var ceremony: CeremonyManager
     let sync: SyncEngine
     @Bindable var friendStore: FriendStore
-    @Bindable var estateEngine: EstateEngine
-    /// "Bills and medical": the second set with the short rule. Its
-    /// heartbeat is written beside the letters' on every open; the guarded
-    /// estates (what this phone holds for others) live on the letters
-    /// engine only, so they are not fetched twice.
-    @Bindable var urgentEngine: EstateEngine
+    /// One engine per rule (RuleBook.swift). Every rule's heartbeat is
+    /// written on every open; the guarded estates (what this phone holds
+    /// for others) live on the default rule's engine only, so they are not
+    /// fetched once per rule.
+    @Bindable var engines: EstateEngines
+    private var estateEngine: EstateEngine { engines.main }
     @Bindable var appLock: AppLock
     let onSignOut: () -> Void
     let onDelete: () -> Void
@@ -121,17 +121,18 @@ struct HomeView: View {
     /// The heartbeat first, because it is the line that matters most, then
     /// the estates this phone guards.
     private func refreshEverything() async {
-        await estateEngine.heartbeat()
-        await urgentEngine.heartbeat()
+        for engine in engines.all { await engine.heartbeat() }
         answerCheckInRequest()
         // The heartbeat just moved, so the owner's own reminders are measured
         // again from now (OwnerNotices). Nothing is posted here; three
         // reminders are scheduled for later and replaced on the next open.
-        await OwnerNotices.schedule(engine: estateEngine, ownerHash: myRoot.credentialIDHash)
-        await OwnerNotices.schedule(engine: urgentEngine, ownerHash: urgentEngine.storeHash)
+        // One set per rule, filed under that rule's store key.
+        for engine in engines.all {
+            await OwnerNotices.schedule(engine: engine, ownerHash: engine.storeHash)
+        }
         // The "still right?" reminder, at the next due date (SecretReview).
         await SecretReview.schedule(ownerHash: myRoot.credentialIDHash,
-                                    hasSecrets: !(estateEngine.allSecrets.isEmpty && urgentEngine.allSecrets.isEmpty),
+                                    hasSecrets: engines.all.contains { !$0.allSecrets.isEmpty },
                                     estateCreatedAt: estateEngine.estate?.createdAt ?? estateEngine.now,
                                     now: estateEngine.now)
         await estateEngine.refreshGuarded()
@@ -150,7 +151,7 @@ struct HomeView: View {
 
     private var shell: some View {
         EstateHomeView(myRoot: myRoot, identity: identity, ceremony: ceremony, sync: sync,
-                       friendStore: friendStore, lettersEngine: estateEngine, urgentEngine: urgentEngine,
+                       friendStore: friendStore, engines: engines,
                        appLock: appLock,
                        onOpenProfile: { showProfile = true })
             .sheet(isPresented: $showProfile) {
@@ -158,6 +159,7 @@ struct HomeView: View {
                             ceremony: ceremony, appLock: appLock,
                             friendStore: friendStore,
                             estateEngine: estateEngine,
+                            allEngines: engines.all,
                             parentMode: parentMode,
                             onSignOut: onSignOut, onDelete: onDelete,
                             onClose: { showProfile = false })

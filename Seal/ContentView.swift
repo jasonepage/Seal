@@ -14,10 +14,10 @@ struct ContentView: View {
     @State private var ceremony: CeremonyManager?
     @State private var sync = SyncEngine()
     @State private var friendStore: FriendStore?
-    @State private var estateEngine: EstateEngine?
-    /// The second set of envelopes, "bills and medical", with its own
-    /// short rule (EstateEngine.Slot.urgent). Same engine, own storage.
-    @State private var urgentEngine: EstateEngine?
+    /// One engine per rule (RuleBook.swift, RELEASE.md section 13). The
+    /// default rule first; "Bills and medical" from an older build shows
+    /// up as the second rule; up to three.
+    @State private var engines: EstateEngines?
     @State private var appLock: AppLock?
     @State private var showBackupPrompt = false
     @State private var showRecoveryNotice = false
@@ -39,10 +39,9 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            if let root = identity.rootIdentity, let ceremony, let estateEngine, let urgentEngine, let friendStore, let appLock {
+            if let root = identity.rootIdentity, let ceremony, let engines, let friendStore, let appLock {
                 HomeView(myRoot: root, identity: identity, ceremony: ceremony,
-                         sync: sync, friendStore: friendStore, estateEngine: estateEngine,
-                         urgentEngine: urgentEngine,
+                         sync: sync, friendStore: friendStore, engines: engines,
                          appLock: appLock,
                          onSignOut: performSignOut, onDelete: performDelete)
                     // Blocking, by design (FR-3, UI.md §3.1): this is the one
@@ -124,11 +123,8 @@ struct ContentView: View {
         if friendStore?.ownerHash != hash {
             friendStore = FriendStore(ownerHash: hash)
         }
-        if estateEngine?.ownerHash != hash {
-            estateEngine = EstateEngine(ownerHash: hash, identity: identity, sync: sync)
-        }
-        if urgentEngine?.ownerHash != hash {
-            urgentEngine = EstateEngine(ownerHash: hash, identity: identity, sync: sync, slot: .urgent)
+        if engines?.ownerHash != hash {
+            engines = EstateEngines(ownerHash: hash, identity: identity, sync: sync)
         }
         if appLock?.ownerHash != hash {
             appLock = AppLock(ownerHash: hash)
@@ -140,21 +136,23 @@ struct ContentView: View {
     private func wipeLocalAndEngines() {
         if let hash = identity.rootIdentity?.credentialIDHash {
             FriendStore.wipe(ownerHash: hash)
-            EstateEngine.wipe(ownerHash: hash)   // the estate, its logs, the guarded index and the media
+            EstateEngine.wipe(ownerHash: hash)   // every rule's estate, logs, guarded index and media
+            RuleBook.wipe(ownerHash: hash)       // the list of rules itself
             ReceiptStore.wipe(ownerHash: hash)   // receipts are evidence, never leave them behind
             TimestampStore.wipe(ownerHash: hash)
             AppLock.wipe(ownerHash: hash)
             CustodianNotices.wipe(ownerHash: hash)   // what this phone has already announced
             OwnerNotices.wipe(ownerHash: hash)       // the owner's own scheduled reminders
-            OwnerNotices.wipe(ownerHash: "urgent.\(hash)")   // and the urgent set's
+            for storeHash in RuleBook.allStoreHashes(ownerHash: hash) where storeHash != hash {
+                OwnerNotices.wipe(ownerHash: storeHash)   // and every other rule's
+            }
             FirstStepsDone.wipe(ownerHash: hash)     // a recipient's check marks on "what to do first"
             CheckInShared.wipe()                     // the widget's two numbers
             SecretReview.wipe(ownerHash: hash)       // the "still right?" schedule
             CustodyReminders.wipe(ownerHash: hash)   // the "still have your key?" schedule
         }
         friendStore = nil
-        estateEngine = nil
-        urgentEngine = nil
+        engines = nil
         appLock = nil
         ceremony?.resetPhase()
         sync.resetStatus()

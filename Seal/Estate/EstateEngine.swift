@@ -53,40 +53,29 @@ final class EstateEngine {
     /// Posted after any refresh so screens re-read state.
     static let changed = Notification.Name("seal.estate.changed")
 
-    /// WHICH SET OF ENVELOPES THIS ENGINE RUNS (RELEASE.md section 10).
-    /// `.letters` is the estate everything was built for. `.urgent` is a
-    /// second, separate estate under the same identity: "bills and
-    /// medical", with its own key holders, its own shorter rule, its own
-    /// Estate Key, shares and tables. Nothing in the key hierarchy is
-    /// shared between the two, which is the whole point: a release of the
-    /// urgent set opens nothing in the letters. Same engine, same code,
-    /// different local storage (`storeHash`), and the key holders see two
-    /// estates from one person.
-    enum Slot: String {
-        case letters = ""
-        case urgent = "urgent"
-
-        var title: String { self == .urgent ? "Bills and medical" : "Letters" }
-        /// What a key holder sees the owner called, so the two estates
-        /// from one person read apart on their phone.
-        func ownerLabel(_ name: String) -> String { self == .urgent ? "\(name) (bills and medical)" : name }
-    }
-
-    let slot: Slot
+    /// WHICH RULE THIS ENGINE RUNS (RELEASE.md section 13, and section 10
+    /// for how it started). One rule is one box of keys: its own key
+    /// holders, its own numbers, its own Estate Key, shares and tables.
+    /// Nothing in the key hierarchy is shared between two rules, which is
+    /// the whole point: a release of one opens nothing in another. Same
+    /// engine, same code, different local storage (`storeHash`), and the
+    /// key holders see each rule from one person as its own estate.
+    /// `RuleSlot` and the list of them live in RuleBook.swift.
+    private(set) var slot: RuleSlot
     /// The key every local store of this engine is filed under. The
-    /// identity hash for the letters (unchanged from before slots existed,
-    /// so nothing already on a phone moves), a prefixed one for the urgent
-    /// set. `ownerHash` stays the identity hash everywhere the record or
-    /// the directory is concerned.
+    /// identity hash for the default rule (unchanged from before rules
+    /// existed, so nothing already on a phone moves), a prefixed one for
+    /// every other rule. `ownerHash` stays the identity hash everywhere the
+    /// record or the directory is concerned.
     let storeHash: String
 
-    init(ownerHash: String, identity: IdentityManager, sync: SyncEngine, clock: Clock = Clocks.current, slot: Slot = .letters) {
+    init(ownerHash: String, identity: IdentityManager, sync: SyncEngine, clock: Clock = Clocks.current, slot: RuleSlot = .main) {
         self.ownerHash = ownerHash
         self.identity = identity
         self.sync = sync
         self.clock = clock
         self.slot = slot
-        self.storeHash = slot == .letters ? ownerHash : "\(slot.rawValue).\(ownerHash)"
+        self.storeHash = slot.storeHash(ownerHash: ownerHash)
         estate = EstateStore.load(ownerHash: storeHash)
         guarded = CustodianVault.load(ownerHash: storeHash)
         let logs = EstateLogStore.load(ownerHash: storeHash)
@@ -273,7 +262,7 @@ final class EstateEngine {
     func createEstateIfNeeded() -> Estate {
         if let estate { return estate }
         var fresh = Estate.new(ownerHash: ownerHash, now: clock.now)
-        if slot == .urgent {
+        if slot.startsShort {
             // The short rule. The shortest silence the machine allows, one
             // week of warnings, no grace. The owner can change it.
             fresh.policy.silenceDays = ReleasePolicy.allowedSilenceDays.min() ?? 30
@@ -372,6 +361,34 @@ final class EstateEngine {
         e.envelopes[i].updatedAt = clock.now
         e.envelopes[i].sealed = false
         estate = e; saveEstate(); recomputeAll()
+    }
+
+    /// An envelope prepared by a move from another rule (EstateEngines.move):
+    /// a fresh id and content key, the words carried over, the media
+    /// re-attached by the caller. The recipient comes along if this rule
+    /// did not know them yet.
+    func adopt(_ envelope: Envelope, recipient: Recipient?) {
+        var e = createEstateIfNeeded()
+        if let recipient, !e.recipients.contains(where: { $0.rootHash == recipient.rootHash }) {
+            e.recipients.append(recipient)
+        }
+        var env = envelope
+        if env.isAddressed {
+            env.revealOrder = (e.envelopes(for: env.recipientHash).map(\.revealOrder).max() ?? 0) + 1
+        }
+        env.sealed = false
+        env.updatedAt = clock.now
+        e.envelopes.append(env)
+        estate = e; saveEstate()
+    }
+
+    /// After an envelope moved out: if this rule was ever sealed, its key
+    /// tables still list the envelope and must be published again without
+    /// it. Nothing else changes.
+    func markTablesStale() {
+        guard var e = estate, e.epochPublished else { return }
+        e.tablesStale = true
+        estate = e; saveEstate()
     }
 
     /// Any edit un-seals the envelope so the next seal republishes it.
@@ -605,11 +622,12 @@ final class EstateEngine {
         let vaultEvent = try sign(.vaultUpdated, estateID: e.id, payload: try EstateEvent.encodeBody(vault), previous: previous)
         try await publish(vaultEvent, into: e.id, mine: true)
         e.publishedTableIDs = tableIDs.sorted()
+        e.tablesStale = false
         estate = e; saveEstate()
 
         // 5. Invites, and a heartbeat so the clock starts from now.
-        // The urgent set names itself in the invite, so the key holder's
-        // phone shows "Nathan (bills and medical)" beside "Nathan".
+        // A rule that is not the default names itself in the invite, so the
+        // key holder's phone shows "Nathan (Sooner)" beside "Nathan".
         let myName = slot.ownerLabel(identity.rootIdentity?.displayName ?? "")
         for c in e.custodians {
             try await sync.publishEstateInvite(EstateInvite(estateID: e.id, ownerHash: ownerHash, ownerName: myName, role: .custodian),
@@ -624,6 +642,62 @@ final class EstateEngine {
         }
         await sync.ensureEstateSubscription(estateID: e.id)
         await heartbeat()
+    }
+
+    // MARK: - Owner: leaving Seal (DepartureRules.swift)
+
+    /// Called by the delete screen BEFORE the tombstone and the wipe. One
+    /// signed entry saying what the owner chose, then, when they chose to
+    /// cancel, every sealed blob this account uploaded is removed so the
+    /// envelopes cannot be opened by anybody, whatever app they run.
+    /// Returns how many blobs could not be removed (0 when keeping).
+    /// Local state is not touched: the caller wipes it next.
+    @discardableResult
+    func announceDeparture(keepEnvelopes: Bool) async throws -> Int {
+        guard let e = estate, !ownerEvents.isEmpty, !DemoFixtures.isActive else { return 0 }
+        let body = try EstateEvent.encodeBody(DepartureBody(keepEnvelopes: keepEnvelopes,
+                                                            departedAtEpoch: RecordEvent.epochSeconds(clock.now)))
+        let event = try sign(.ownerDeparted, estateID: e.id, payload: body,
+                             previous: EstateLogStore.headDigest(ownerEvents))
+        // Straight to the directory, not `publish`: that saves the local log,
+        // and a background stamp finishing after the wipe would write the
+        // log back into the keychain. The stamp is awaited here instead.
+        try await sync.publishEstateEvent(event)
+        if let token = await TimestampService.stamp(digest: event.digest) {
+            try? await sync.attachEstateTimestamp(estateID: e.id, eventID: event.id, token: token)
+        }
+        guard !keepEnvelopes else { return 0 }
+        var names: Set<String> = []
+        if e.epoch >= 1 {
+            for n in 1...e.epoch { names.insert(EstateNames.epochBlob(e.id, n)) }
+        }
+        for id in e.publishedTableIDs { names.insert(EstateNames.tableBlob(e.id, id)) }
+        for record in e.tableKeys.values { names.insert(EstateNames.tableBlob(e.id, record.tableID)) }
+        for blob in e.addressedEnvelopes.flatMap(\.blobIDs) { names.insert(EstateNames.contentBlob(e.id, blob)) }
+        var failed = 0
+        for name in names {
+            do { try await sync.deleteEstateBlob(name: name) }
+            catch {
+                failed += 1
+                Self.log.error("departure: could not remove \(name, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        return failed
+    }
+
+    /// Key holder side: the owner's signed "cancel" stops every step.
+    private func refuseIfCancelled(_ g: GuardedEstate) throws {
+        let events = guardedEvents[g.estateID] ?? []
+        guard DepartureRules.openingAllowed(events: events, ownerHash: g.ownerHash) else {
+            let name = g.ownerName.isEmpty ? "The owner" : g.ownerName
+            throw EngineError.notAllowed("\(name) cancelled these envelopes when they deleted their Seal account. They can never be opened.")
+        }
+    }
+
+    /// What the owner decided when they left, if they have.
+    func departure(of estateID: String) -> DepartureRules.Departure? {
+        guard let g = guarded.first(where: { $0.estateID == estateID }) else { return nil }
+        return DepartureRules.departure(events: guardedEvents[estateID] ?? [], ownerHash: g.ownerHash)
     }
 
     // MARK: - Owner: the heartbeat and the cancel
@@ -655,8 +729,8 @@ final class EstateEngine {
     /// heartbeat landed and the silence limit. Nothing else leaves the
     /// engine this way.
     private func shareCheckIn() {
-        // The widget shows the letters' rule, the long one.
-        guard slot == .letters, let e = estate, let snapshot = ownerSnapshot else { return }
+        // The widget shows the default rule, the long one.
+        guard slot.isDefault, let e = estate, let snapshot = ownerSnapshot else { return }
         CheckInShared.record(lastCheckIn: snapshot.silenceAnchor, silenceDays: e.policy.silenceDays)
     }
 
@@ -757,7 +831,7 @@ final class EstateEngine {
             // made me a custodian, so their events are what everything else
             // hangs from.
             var directory = EstateLogVerifier.Directory(identities: [:])
-            directory.identities[g.ownerHash] = try await lookup(g.ownerHash, forceRefresh: true)
+            directory.identities[g.ownerHash] = try await ownerForHistory(g.ownerHash)
             let ownerOnly = EstateLogVerifier.admitted(fetched, ownerHash: g.ownerHash, custodianHashes: [], directory: directory)
             // The newest epoch statement names the custodians and their keys.
             if let epochEvent = ownerOnly.filter({ $0.kind == .epochPublished })
@@ -793,6 +867,24 @@ final class EstateEngine {
         }
     }
 
+    /// The owner, for checking the record. A deleted owner's record is no
+    /// longer served by `fetchIdentity`, which used to freeze the record on
+    /// every key holder's and recipient's phone the day the owner left, so
+    /// the "I deleted my account" entry was never seen and a release could
+    /// never be accepted. The history read is trusted only through the key
+    /// this phone pinned when it met the owner.
+    private func ownerForHistory(_ hash: String) async throws -> (RootIdentity, [DeviceEndorsement]) {
+        do {
+            return try await lookup(hash, forceRefresh: true)
+        } catch {
+            if let found = try? await sync.fetchIdentityForHistory(credentialIDHash: hash) {
+                directoryCache[hash] = found
+                return found
+            }
+            throw error
+        }
+    }
+
     /// A custodian's phone that sees the owner overdue says so, signed,
     /// once a day. Evidence, not a decision.
     private func observeSilenceIfDue(guardedIndex i: Int) async {
@@ -825,6 +917,7 @@ final class EstateEngine {
 
     func openClaim(estateID: String, reason: String) async throws {
         let (g, s) = try guardedEstate(estateID)
+        try refuseIfCancelled(g)
         guard g.isCustodian, let epoch = g.epoch else { throw EngineError.notAllowed("You are not a custodian of this estate.") }
         guard ReleaseMachine.custodianCanClaim(s, now: clock.now) else {
             throw EngineError.notAllowed("A claim can only start once the owner has been silent for the full period.")
@@ -875,6 +968,7 @@ final class EstateEngine {
     /// exact claim and history, plus my share re-wrapped to the claimant.
     func authorize(estateID: String, ceremony: CeremonyManager) async throws {
         let (g, s) = try guardedEstate(estateID)
+        try refuseIfCancelled(g)
         guard let myRoot = identity.rootIdentity else { throw EngineError.noDeviceKey }
         guard g.isCustodian, let epoch = g.epoch, let claim = s.claim else {
             throw EngineError.notAllowed("There is no open claim on this estate.")
@@ -990,6 +1084,7 @@ final class EstateEngine {
     /// signed `released` event.
     func release(estateID: String) async throws {
         let (g, s) = try guardedEstate(estateID)
+        try refuseIfCancelled(g)
         guard let mine = identity.kemPrivateBundle else { throw EngineError.noDeviceKey }
         guard let claim = s.claim, claim.claimantHash == ownerHash else {
             throw EngineError.notAllowed("Only the custodian who opened the claim can combine the keys.")
@@ -1076,10 +1171,19 @@ final class EstateEngine {
     // MARK: - Wipe
 
     static func wipe(ownerHash: String) {
-        for slot in [Slot.letters, .urgent] {
-            let storeHash = slot == .letters ? ownerHash : "\(slot.rawValue).\(ownerHash)"
+        // Every rule the book lists, plus every id a rule could ever have
+        // had (RuleBook.allStoreHashes), so nothing is left behind.
+        for storeHash in RuleBook.allStoreHashes(ownerHash: ownerHash) {
             EstateStore.wipe(ownerHash: storeHash)
             EstateMediaStore.wipe(ownerHash: storeHash)
         }
+    }
+
+    /// The rule's name changed (EstateEngines.rename). Metadata only: it
+    /// is in no signature and no share. The next seal carries it in the
+    /// invite so key holders see the new name.
+    func rename(slot newSlot: RuleSlot) {
+        guard newSlot.id == slot.id else { return }
+        slot = newSlot
     }
 }
