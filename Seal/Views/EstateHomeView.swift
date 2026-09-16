@@ -97,6 +97,9 @@ struct EstateHomeView: View {
                 SealTheme.ink.ignoresSafeArea()
                 ScrollView {
                     VStack(spacing: 18) {
+                        // First, above everything, when it is true: a phone
+                        // that has something to be told and cannot be.
+                        NotificationsOffCard(matters: !estateEngine.guarded.isEmpty || !inSetup)
                         if guardsOnly {
                             guardedSection
                             PeopleYouWouldDoThisForCard(
