@@ -65,7 +65,33 @@ to the matching `init(from:)`, or it silently breaks loading.**
 
 Built and ran clean on the phone on 2026-09-16 (evening). Phase 1 is done.
 
-### Phase 2: easier check-ins, and secrets that go stale (UNCOMPILED)
+### Second pass on the envelope (UNCOMPILED, after Phase 2 built clean)
+
+Jason looked at Phase 1 on the phone and called it a form with a popup
+menu, which it was. Rebuilt on 2026-09-16 evening (`bda513c`):
+
+- `EnvelopeEditorView` is five cards in the order the recipient sees
+  them (letter, what to do first, secrets, photos, voice). A filled card
+  shows its contents small; an empty one says in one line why the
+  recipient would want it. A packing line and five dots at the top say
+  what is in the box. The letter card opens to write and closes to a
+  four line preview. The voice card plays back in place.
+- `FirstStepsEditorView` is a timeline with inline editing (title, note
+  with dictation, secret picker that can create a secret on the spot),
+  starter chips in an adaptive grid, up and down arrows to reorder.
+- `FirstStepsViews.swift` (new) holds the shared pieces: `StepMarker`,
+  `StepsTimelineMini`, `SecretChip`, `StarterChip`, and the recipient's
+  `StepsChecklist` with "2 of 5 done" and the next step lit.
+- `Envelope.contentsSummary` feeds the home screen row.
+
+Most likely to fail to compile: `TextField(..., axis: .vertical)` with
+`.lineLimit(2...6)`; the `@FocusState` keyed by a String; the generic
+`card(...)` helper with a `@ViewBuilder` closure containing if/else
+chains (if the type checker times out, split the branch bodies into
+their own `private var`s). Video is the next step after this is seen on
+a phone (task list), and is not started.
+
+### Phase 2: easier check-ins, and secrets that go stale (built clean 2026-09-16)
 
 **Part A, the quick check-in.**
 
