@@ -98,6 +98,10 @@ struct HomeView: View {
     /// the estates this phone guards.
     private func refreshEverything() async {
         await estateEngine.heartbeat()
+        // The heartbeat just moved, so the owner's own reminders are measured
+        // again from now (OwnerNotices). Nothing is posted here; three
+        // reminders are scheduled for later and replaced on the next open.
+        await OwnerNotices.schedule(engine: estateEngine, ownerHash: myRoot.credentialIDHash)
         await estateEngine.refreshGuarded()
         // The CloudKit push for a guarded estate is silent now, because it
         // fires on the owner's heartbeat too. This is what the person

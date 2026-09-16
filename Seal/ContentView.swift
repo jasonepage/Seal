@@ -138,6 +138,7 @@ struct ContentView: View {
             TimestampStore.wipe(ownerHash: hash)
             AppLock.wipe(ownerHash: hash)
             CustodianNotices.wipe(ownerHash: hash)   // what this phone has already announced
+            OwnerNotices.wipe(ownerHash: hash)       // the owner's own scheduled reminders
         }
         friendStore = nil
         estateEngine = nil
