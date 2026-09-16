@@ -55,6 +55,7 @@ struct EstateHomeView: View {
     @State private var showTimeTravel = false
     @State private var showFamilyPreview = false
     @State private var showSecretReview = false
+    @State private var showCoupleSetup = false
     @State private var showPaywall = false
     @Environment(SealPurchase.self) private var purchase
     @State private var explain: ExplainRequest?
@@ -184,6 +185,16 @@ struct EstateHomeView: View {
                 // seal the person was in the middle of. Presented from the
                 // dismissal, not from inside the sheet, for the usual reason.
                 if was, !now, purchase.isUnlocked { runSeal() }
+            }
+            .sheet(isPresented: $showCoupleSetup) {
+                CoupleSetupView(myRoot: myRoot, friendStore: friendStore, estateEngine: estateEngine,
+                                ceremony: ceremony, sync: sync,
+                                onOpenPeople: { showCoupleSetup = false; showPeople = true },
+                                onWriteEnvelope: { envelope in showCoupleSetup = false; editing = envelope },
+                                onSeal: { showCoupleSetup = false; runSeal() },
+                                onClose: { showCoupleSetup = false })
+                    .environment(\.parentMode, parentMode)
+                    .parentTypeScale()
             }
             .sheet(isPresented: $showSecretReview) {
                 SecretReviewView(estateEngine: estateEngine, ownerHash: myRoot.credentialIDHash,
@@ -434,6 +445,15 @@ struct EstateHomeView: View {
                 explain = ExplainRequest(role: .sealer, numbers: numbersForMyEstate)
             } label: {
                 Label("Watch it happen", systemImage: "play.circle")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(SealSecondaryButtonStyle())
+            .parentTapTarget()
+
+            // Two people, two phones, one evening (CoupleSetupView). A
+            // guided path over the same four steps, run on both phones.
+            Button { showCoupleSetup = true } label: {
+                Label("Set up with my partner", systemImage: "person.2")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(SealSecondaryButtonStyle())

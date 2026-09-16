@@ -65,7 +65,55 @@ to the matching `init(from:)`, or it silently breaks loading.**
 
 Built and ran clean on the phone on 2026-09-16 (evening). Phase 1 is done.
 
-### Phase 3: key holders confirm they still have their key (UNCOMPILED)
+### Phase 5: set up with my partner (UNCOMPILED)
+
+`Seal/Views/CoupleSetupView.swift`: a guided checklist over existing
+pieces, run on both phones. Pick the partner from the people met (the
+choice is remembered per identity in UserDefaults; a name, not a
+secret). Six steps: meet, make them a key holder, hand them a key (opens
+PersonView's receipt flow), write the envelope (creates it and opens the
+editor), one more key holder each (recommended, not gating; with only
+each other one key alone opens after the silence), seal (the home
+screen's one seal path, paywall in front). Every step says what happens
+on this phone and what the partner does on theirs, and the screen says
+plainly that it can only check its own side. Nothing in the key
+hierarchy moves; one estate per identity is unchanged. Reached from the
+setup card's "Set up with my partner" button. `AnyButtonStyle` (bottom
+of the file) erases two button styles behind one `if`.
+
+Most likely to fail to compile: `PersonView` presented inside a sheet
+with an extra toolbar item; `AnyButtonStyle` (if `makeBody` on a
+`ButtonStyle` value is not directly callable, replace with two separate
+`if` branches).
+
+Not committed yet: the shell on Jason's Mac stopped starting on the
+evening of the 16th, so Phase 4, Phase 5 and `docs/Seal-explained.pdf`
+were written straight to disk through the file bridge. `git status` will
+show them. Commit them in two commits (Phase 4 with the PDF, Phase 5).
+
+### Phase 4: the printed survival kit (UNCOMPILED)
+
+`Seal/Views/SurvivalKitPDF.swift`: `SurvivalKit.content(...)` builds the
+words from two names, the rule, the key holder count and a date, and
+nothing else, so the page cannot carry a secret, a share or an envelope
+detail by construction. `render` draws one US Letter page with
+`UIGraphicsPDFRenderer` and a Core Image QR code to
+`sealmessenger.com/how-it-works.html`; the verifier's address and
+`docs/CAPSULE.md` are named in the text. `makeFile` writes it to the
+temporary directory for the share sheet. Reached from `PersonView`'s key
+holder card: "A page to keep with the key", then "Print or send the page
+for Karen". Tests in `SurvivalKitTests` check the words and that the
+bytes are a PDF. No Xcode steps, no CloudKit.
+
+Note for the pilot: the page tells the key holder to save a capsule
+today, because a capsule is the only thing that makes recovery easy if
+the app is gone. Say that out loud at the elders evening.
+
+Most likely to fail to compile: `CIFilter.qrCodeGenerator()` needs
+`import CoreImage.CIFilterBuiltins` (it is there); `UIGraphicsPDFRendererFormat.documentInfo`
+keys as `String`.
+
+### Phase 3: key holders confirm they still have their key (built clean 2026-09-16)
 
 - `Seal/Estate/CustodyConfirmation.swift`: the `custodyConfirmed` event
   body, the challenge in its own domain (`seal.custody.confirm.v1`, no

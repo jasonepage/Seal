@@ -27,6 +27,8 @@ struct PersonView: View {
     @State private var handoverError: String?
     @State private var handoverDone = false
     @State private var showRecord = false
+    @State private var kitURL: URL?
+    @State private var kitError: String?
     @Environment(\.parentMode) private var parentMode
 
     private var hash: String { person.identity.credentialIDHash }
@@ -122,6 +124,29 @@ struct PersonView: View {
                     Text("Do this with \(person.identity.displayName) next to you. Tap the button, then hand \(person.identity.displayName) this phone. If they use a security key, they tap it on this phone. If they use Face ID, this phone shows a square code: they scan it with their own phone and confirm with their face. That confirmation, plus this phone's signature, is the record that they agreed to hold a key. Nothing else changes hands.")
                         .font(.caption).foregroundStyle(.white.opacity(0.45)).fixedSize(horizontal: false, vertical: true)
                 }
+                // The printed page that goes in the drawer with the key
+                // (SurvivalKitPDF). Built from two names and the rule, so
+                // it cannot carry a secret or an envelope.
+                VStack(alignment: .leading, spacing: 8) {
+                    if let kitURL {
+                        ShareLink(item: kitURL) {
+                            Label("Print or send the page for \(person.identity.displayName)", systemImage: "printer")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered).tint(.white)
+                        .parentTapTarget()
+                    } else {
+                        Button { makeKit() } label: {
+                            Label("A page to keep with the key", systemImage: "doc.text")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered).tint(.white)
+                        .parentTapTarget()
+                    }
+                    Text("One printed page for \(person.identity.displayName): whose key it is, what to do when the time comes, and what to do if Seal the app is ever gone. No secrets on it. Put it in the drawer with the key.")
+                        .font(.caption).foregroundStyle(.white.opacity(0.45)).fixedSize(horizontal: false, vertical: true)
+                    if let kitError { Text(kitError).font(.caption).foregroundStyle(.orange) }
+                }
                 Button(role: .destructive) { estateEngine.removeCustodian(hash) } label: {
                     Text("Stop being a key holder").frame(maxWidth: .infinity)
                 }
@@ -177,6 +202,17 @@ struct PersonView: View {
         case 4: "fourth"
         case 5: "fifth"
         default: "\(n)th"
+        }
+    }
+
+    private func makeKit() {
+        guard let estate = estateEngine.estate else { return }
+        do {
+            kitURL = try SurvivalKit.makeFile(ownerName: myRoot.displayName, custodianName: person.identity.displayName,
+                                              policy: estate.policy, custodianCount: estate.custodians.count,
+                                              now: estateEngine.now)
+        } catch {
+            kitError = error.localizedDescription
         }
     }
 
