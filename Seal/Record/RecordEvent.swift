@@ -45,6 +45,7 @@ struct RecordEvent: Identifiable, Hashable {
         case cancellation
         case keyTapped              // a custodian authorised the release
         case released
+        case keyConfirmed           // a custodian tapped to say they still have their key (not a release tap)
     }
 
     /// What Seal can honestly say about WHEN this happened.
@@ -254,6 +255,8 @@ enum RecordBuilder {
                 kind = .keyTapped; summary = "\(who) tapped a key to authorise the release."
             case .released:
                 kind = .released; summary = "\(who) combined the keys. The envelopes are released."
+            case .custodyConfirmed:
+                kind = .keyConfirmed; summary = "\(who) tapped their key to confirm they still have it. Not a release tap."
             }
             var event = RecordEvent(kind: kind,
                                     occurredAt: e.occurredAt,

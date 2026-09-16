@@ -165,6 +165,7 @@ struct RecordView: View {
         case .cancellation: "xmark.octagon.fill"
         case .keyTapped: "key.horizontal.fill"
         case .released: "envelope.open.fill"
+        case .keyConfirmed: "checkmark.seal.fill"
         }
     }
 

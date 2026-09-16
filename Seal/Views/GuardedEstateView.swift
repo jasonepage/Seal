@@ -358,6 +358,7 @@ struct GuardedEstateView: View {
         case .cancellation: return "\(who) stopped the claim."
         case .authorization: return "\(who) tapped a key."
         case .released: return "\(who) combined the keys. Released."
+        case .custodyConfirmed: return "\(who) confirmed they still have their key."
         }
     }
 
