@@ -135,7 +135,7 @@ enum DemoFixtures {
         if let data = try? JSONEncoder().encode(stored) {
             KeychainStore.save(data, for: "seal.friends.\(owner)")
         }
-        EstateStore.save(seedEstate(owner: owner))
+        EstateStore.save(seedEstate(owner: owner), ownerHash: owner)
     }
 
     private static func uninstallIfPresent() {

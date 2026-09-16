@@ -14,10 +14,10 @@ import CryptoKit
 enum EstateLogTests {
 
     static var suites: [SelfTest.Suite] { [
-        .init(name: "estatelog.signing", run: signing),
-        .init(name: "estatelog.admission", run: admission),
-        .init(name: "estatelog.feed", run: feed),
-        .init(name: "estatelog.genTime", run: genTime),
+        .init(name: "estatelog.signing") { try signing($0) },
+        .init(name: "estatelog.admission") { try admission($0) },
+        .init(name: "estatelog.feed") { try feed($0) },
+        .init(name: "estatelog.genTime") { try genTime($0) },
     ] }
 
     static let t0 = Date(timeIntervalSince1970: 1_800_000_000)

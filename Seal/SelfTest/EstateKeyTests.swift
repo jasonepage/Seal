@@ -16,10 +16,10 @@ import CryptoKit
 enum EstateKeyTests {
 
     static var suites: [SelfTest.Suite] { [
-        .init(name: "estatekeys.hybridWrap", run: hybridWrap),
-        .init(name: "estatekeys.epoch", run: epoch),
-        .init(name: "estatekeys.tables", run: tables),
-        .init(name: "estatekeys.rotation", run: rotation),
+        .init(name: "estatekeys.hybridWrap") { try hybridWrap($0) },
+        .init(name: "estatekeys.epoch") { try epoch($0) },
+        .init(name: "estatekeys.tables") { try tables($0) },
+        .init(name: "estatekeys.rotation") { try rotation($0) },
     ] }
 
     /// A device with both KEM halves, like a phone that signed in after the

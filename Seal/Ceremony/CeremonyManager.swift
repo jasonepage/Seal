@@ -295,6 +295,13 @@ final class CeremonyManager: NSObject {
             let hash = Data(SHA256.hash(data: assertion.credentialID)).hexString
             let resolved = try await directory.resolveSignInCredential(credentialIDHash: hash)
             let root = resolved.root
+            // A SPONSORED identity (Identity/SponsoredKey.swift) carries a
+            // locked virtual device in the directory. The endorsement tap
+            // below will also ask the key for its PRF secret over that
+            // device's salt, and unlock the halves onto this phone.
+            let sponsored: DeviceEndorsement? = tier == .verified
+                ? (try? await directory.fetchIdentity(credentialIDHash: root.credentialIDHash))?.1.first(where: \.isSponsored)
+                : nil
 
             // 3. Verify the assertion against the directory's published key
             //    for THAT credential, proves the tapper controls the
@@ -334,10 +341,21 @@ final class CeremonyManager: NSObject {
             // BACKUP key and the endorsement this device gets is signed by the
             // backup, which peers accept because `verifiedDevices` verifies
             // against the whole authority set rather than the root alone.
-            let endorseCredential = try await performRequest(
-                makeAssertionRequest(tier: tier, challenge: commitment, allowedCredentialID: assertion.credentialID))
+            let endorseRequest = makeAssertionRequest(tier: tier, challenge: commitment, allowedCredentialID: assertion.credentialID)
+            if let salt = sponsored?.prfSalt { Self.attachPRF(salt: salt, to: endorseRequest) }
+            let endorseCredential = try await performRequest(endorseRequest)
             guard let endorseAssertion = endorseCredential as? ASAuthorizationPublicKeyCredentialAssertion else {
                 throw CeremonyError.unexpectedCredential
+            }
+            if let sponsored, let salt = sponsored.prfSalt, let locked = sponsored.lockedPrivate {
+                guard let prf = Self.prfOutput(of: endorseCredential) else { throw SponsoredKey.Failure.prfMissing }
+                do {
+                    let halves = try SponsoredKey.unlock(locked, prf: prf, salt: salt)
+                    identity.installSponsoredHalves(halves, for: root.credentialIDHash)
+                    WebAuthnDiag.log.info("signIn: unlocked a sponsored identity's virtual device onto this phone")
+                } catch {
+                    throw SponsoredKey.Failure.wrongKey
+                }
             }
             let endorsement = DeviceEndorsement(
                 devicePublicKey: devicePub,

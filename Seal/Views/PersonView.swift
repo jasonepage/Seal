@@ -45,7 +45,9 @@ struct PersonView: View {
                         IdentityRing(displayName: person.identity.displayName, tier: person.identity.tier, size: 84)
                         Text(person.identity.displayName)
                             .font(.system(.title2, design: .rounded, weight: .semibold)).foregroundStyle(.white)
-                        Text("Met in person \(person.friendship.forgedAt.formatted(date: .abbreviated, time: .omitted)). Their key is pinned on this phone.")
+                        Text(person.friendship.sponsored == true
+                             ? "Their key was registered on this phone \(person.friendship.forgedAt.formatted(date: .abbreviated, time: .omitted)) and handed to them. Whoever holds it is \(person.identity.displayName)."
+                             : "Met in person \(person.friendship.forgedAt.formatted(date: .abbreviated, time: .omitted)). Their key is pinned on this phone.")
                             .font(.caption).foregroundStyle(.white.opacity(0.5)).multilineTextAlignment(.center)
                         Text(FingerprintPhrase.phrase(for: person.identity.publicKey))
                             .font(.system(.caption, design: .monospaced)).foregroundStyle(SealTheme.brass.opacity(0.8))

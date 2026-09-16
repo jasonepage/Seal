@@ -14,10 +14,10 @@ import CryptoKit
 enum SecurityFixTests {
 
     static var suites: [SelfTest.Suite] { [
-        .init(name: "fix1.keyPinning", run: keyPinning),
-        .init(name: "fix2.webauthnContext", run: webAuthnContext),
-        .init(name: "fix3.unsignedRevokedAt", run: unsignedRevokedAt),
-        .init(name: "fix4.endorsementFraming", run: endorsementFraming),
+        .init(name: "fix1.keyPinning") { try keyPinning($0) },
+        .init(name: "fix2.webauthnContext") { try webAuthnContext($0) },
+        .init(name: "fix3.unsignedRevokedAt") { try unsignedRevokedAt($0) },
+        .init(name: "fix4.endorsementFraming") { try endorsementFraming($0) },
     ] }
 
     // MARK: fix 1

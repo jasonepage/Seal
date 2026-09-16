@@ -76,3 +76,28 @@ Result = ✅ works / ⚠️ works sometimes / ❌ fails. For ❌ and ⚠️, cop
 You'll have a table that says, per model, exactly which stage breaks and which log
 line fired. That collapses "buggy everywhere" into a short list of named issues, 
 bring it back and we fix them one at a time.
+
+## The sponsored key (added 2026-09-16)
+
+`Seal/Ceremony/CeremonyManager+Sponsored.swift` registers a spare key AS
+somebody else and asks the key for its PRF secret (CTAP `hmac-secret`). Two
+more columns for the table, per model:
+
+| Model | PRF at register (`checkForSupport`) | PRF at endorse (`inputValues`) | Sign-in on a second iPhone unlocks | Notes |
+|---|---|---|---|---|
+| YubiKey 5 NFC (5.4+) | | | | expected to work |
+| YubiKey 5C NFC | | | | expected to work |
+| Security Key NFC by Yubico | | | | may lack hmac-secret |
+| Feitian / others | | | | unknown |
+
+What each failure points to:
+
+- **`prfUnsupported` on the first tap** → the key has no `hmac-secret`.
+  Nothing was published. Use a different key.
+- **`prfMissing` on the second tap** → iOS did not return a PRF output for
+  a security key assertion. Check the PIN is set (some keys gate
+  hmac-secret on UV), and that the build is iOS 26.4 or later.
+- **`wrongKey` at sign-in on the second phone** → the key answered PRF
+  differently than at registration (a reset key, or a different key with
+  the same credential ID, which cannot happen). The identity is intact in
+  the directory; the envelope is unreachable with this key.

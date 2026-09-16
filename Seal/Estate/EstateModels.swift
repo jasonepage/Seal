@@ -97,7 +97,9 @@ struct ReleasePolicy: Codable, Hashable {
 
     /// One line a 60 year old can read back and agree with.
     func summary(custodianCount: Int) -> String {
-        "Any \(threshold) of your \(custodianCount) custodians, after \(silenceDays) days of silence, \(warningDays) days of warnings and \(graceDays) days of grace."
+        custodianCount == 1
+            ? "Your one key holder, after \(silenceDays) days of silence, \(warningDays) days of warnings and \(graceDays) days of grace."
+            : "Any \(threshold) of your \(custodianCount) key holders, after \(silenceDays) days of silence, \(warningDays) days of warnings and \(graceDays) days of grace."
     }
 }
 
@@ -155,6 +157,14 @@ struct Envelope: Codable, Identifiable, Hashable {
     var voiceNote: MediaItem?
     /// One short video message, up to about a minute. Sealed like a photo.
     var videoNote: MediaItem? = nil
+    /// "Open no earlier than." A letter for a child's eighteenth birthday.
+    /// It does NOT open anything: the envelope still needs the release
+    /// (silence, warnings, grace, M taps). After the release, the
+    /// recipient's phone keeps the envelope closed until this date. There
+    /// is no trusted clock, so this is the recipient's phone honouring a
+    /// request, not a lock; RELEASE.md section 9 says so and so does the
+    /// editor. Travels in the payload so it is sealed with the letter.
+    var openNoEarlierThan: Date? = nil
     /// The secrets. A `SealedCard` already carries a title, a value and a
     /// note and refuses to be summarised; that is exactly a secret field.
     var secrets: [SealedCard]
@@ -224,12 +234,25 @@ struct Envelope: Codable, Identifiable, Hashable {
         /// these and decodes as empty (see the Decodable extension below).
         var firstSteps: [FirstStep] = []
         var videoNote: MediaItem? = nil
+        /// Whole seconds since 1970, or nil. See Envelope.openNoEarlierThan.
+        var openNoEarlierThanEpoch: Int64? = nil
+
+        var openNoEarlierThan: Date? {
+            openNoEarlierThanEpoch.map { Date(timeIntervalSince1970: TimeInterval($0)) }
+        }
+
+        /// True while the recipient's phone should keep this closed.
+        func isHeld(now: Date) -> Bool {
+            guard let date = openNoEarlierThan else { return false }
+            return now < date
+        }
     }
 
     var payload: Payload {
         Payload(title: title, letter: letter, secrets: secrets, photos: photos, voiceNote: voiceNote,
                 revealOrder: revealOrder, writtenAtEpoch: RecordEvent.epochSeconds(updatedAt),
-                firstSteps: usableFirstSteps, videoNote: videoNote)
+                firstSteps: usableFirstSteps, videoNote: videoNote,
+                openNoEarlierThanEpoch: openNoEarlierThan.map { RecordEvent.epochSeconds($0) })
     }
 
     /// Every media item in the envelope: photos, then the voice message,
@@ -384,6 +407,7 @@ extension ReleasePolicy {
 extension Envelope.Payload {
     private enum Keys: String, CodingKey {
         case title, letter, secrets, photos, voiceNote, revealOrder, writtenAtEpoch, firstSteps, videoNote
+        case openNoEarlierThanEpoch
     }
 
     init(from decoder: Decoder) throws {
@@ -397,6 +421,7 @@ extension Envelope.Payload {
         writtenAtEpoch = try c.decode(Int64.self, forKey: .writtenAtEpoch)
         firstSteps = try c.decodeIfPresent([FirstStep].self, forKey: .firstSteps) ?? []
         videoNote = try c.decodeIfPresent(MediaItem.self, forKey: .videoNote)
+        openNoEarlierThanEpoch = try c.decodeIfPresent(Int64.self, forKey: .openNoEarlierThanEpoch)
     }
 }
 
@@ -404,7 +429,7 @@ extension Envelope {
     private enum Keys: String, CodingKey {
         case id, recipientHash, title, letter, photos, voiceNote, secrets, revealOrder
         case createdAt, updatedAt, contentKey, payloadBlobID, sealed, draftRecipientName, firstSteps
-        case secretConfirmations, videoNote
+        case secretConfirmations, videoNote, openNoEarlierThan
     }
 
     init(from decoder: Decoder) throws {
@@ -426,6 +451,7 @@ extension Envelope {
         firstSteps = try c.decodeIfPresent([FirstStep].self, forKey: .firstSteps) ?? []
         secretConfirmations = try c.decodeIfPresent([String: Date].self, forKey: .secretConfirmations) ?? [:]
         videoNote = try c.decodeIfPresent(MediaItem.self, forKey: .videoNote)
+        openNoEarlierThan = try c.decodeIfPresent(Date.self, forKey: .openNoEarlierThan)
     }
 }
 
@@ -467,9 +493,11 @@ enum EstateStore {
         return try? JSONDecoder().decode(Estate.self, from: data)
     }
 
-    static func save(_ estate: Estate) {
+    /// `ownerHash` here is the engine's `storeHash`, not always the
+    /// identity hash: the urgent set files under a prefixed key.
+    static func save(_ estate: Estate, ownerHash: String) {
         if let data = try? JSONEncoder().encode(estate) {
-            KeychainStore.save(data, for: key(estate.ownerHash))
+            KeychainStore.save(data, for: key(ownerHash))
         }
     }
 

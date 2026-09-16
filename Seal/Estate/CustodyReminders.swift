@@ -23,7 +23,7 @@ enum CustodyReminders {
     private static let log = Logger(subsystem: "io.github.jasonepage.Seal", category: "notices")
 
     private static func key(_ ownerHash: String) -> String { "seal.custodyreminders.\(ownerHash)" }
-    private static func identifier(_ estateID: String) -> String { "seal.custody.remind.\(estateID)" }
+    nonisolated private static func identifier(_ estateID: String) -> String { "seal.custody.remind.\(estateID)" }
 
     /// estateID to the anchor epoch the reminder was last scheduled from.
     private static func load(ownerHash: String) -> [String: TimeInterval] {

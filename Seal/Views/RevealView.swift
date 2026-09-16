@@ -118,7 +118,12 @@ struct RevealPager: View {
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
                             }
-                            envelopeView(pages[min(index, pages.count - 1)])
+                            let page = pages[min(index, pages.count - 1)]
+                            if page.payload.isHeld(now: Clocks.current.now) {
+                                heldView(page)
+                            } else {
+                                envelopeView(page)
+                            }
                         }
                         .padding(20)
                         .frame(maxWidth: 560).frame(maxWidth: .infinity)
@@ -169,6 +174,32 @@ struct RevealPager: View {
             } message: { Text(error ?? "") }
         }
         .preferredColorScheme(.dark)
+    }
+
+    /// "Open no earlier than" has not arrived. The title and the date,
+    /// nothing else. This phone's clock decides, and the card says so: it
+    /// is the owner's wish being honoured, not a lock (RELEASE.md section 9).
+    private func heldView(_ page: RevealPage) -> some View {
+        let e = page.payload
+        let date = e.openNoEarlierThan ?? Date()
+        return VStack(alignment: .leading, spacing: 16) {
+            Text(e.title).font(.system(.title2, design: .rounded, weight: .semibold)).foregroundStyle(.white)
+            HStack(spacing: 14) {
+                Image(systemName: "calendar.badge.clock").font(.title).foregroundStyle(SealTheme.brass)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(ownerName) asked that this one wait.")
+                        .font(.headline).foregroundStyle(.white)
+                    Text("It opens on \(date.formatted(date: .long, time: .omitted)).")
+                        .font(.callout).foregroundStyle(SealTheme.brass)
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
+            Text("The envelope is here and it is yours. \(ownerName) chose the day you read it, and this phone is keeping that wish. Come back then.")
+                .font(.callout).foregroundStyle(.white.opacity(0.65))
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     private func envelopeView(_ page: RevealPage) -> some View {

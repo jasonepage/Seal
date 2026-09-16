@@ -66,6 +66,18 @@ struct DeviceEndorsement: Codable, Hashable {
     let kemBundlePublicKeys: Data
     let assertion: Data                 // WebAuthn assertion committing to devicePublicKey
     let createdAt: Date
+    /// A SPONSORED KEY'S VIRTUAL DEVICE (Identity/SponsoredKey.swift). The
+    /// owner registered this hardware key for somebody who is not on Seal
+    /// yet, and this "device" is not a phone: its private keys are here,
+    /// locked under a secret only the key itself can compute (the WebAuthn
+    /// PRF extension). Whoever holds the key and its PIN can unlock them on
+    /// any iPhone. Both nil on an ordinary phone endorsement. Neither is in
+    /// the endorsement commitment on purpose: a directory that swapped
+    /// `lockedPrivate` would only produce a blob that fails to decrypt.
+    var lockedPrivate: Data? = nil
+    var prfSalt: Data? = nil
+
+    var isSponsored: Bool { lockedPrivate != nil && prfSalt != nil }
 }
 
 /// Root-key-signed revocation of a device (FR-19). Clients treat the device
@@ -91,6 +103,10 @@ struct Friendship: Codable, Identifiable, Hashable {
     /// default so friendships already in the keychain still decode, and so the
     /// memberwise initialiser stays source-compatible with existing callers.
     var autoReciprocated: Bool? = nil
+    /// True when this person's key was registered on THIS phone by its
+    /// owner and handed over (Identity/SponsoredKey.swift). There was no
+    /// ceremony because there was no second phone; the owner held the key.
+    var sponsored: Bool? = nil
     /// Every friendship is in person now: the remote "introduction" path was
     /// retired with the messenger, and its proof field with it. Old keychain
     /// entries that carried one still decode (the key is ignored).

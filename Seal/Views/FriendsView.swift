@@ -62,6 +62,8 @@ struct FriendsView: View {
     @State private var moderationMessage = ""
     /// One person's timeline (docs/RECORD.md). Presented from their row.
     @State private var recordFor: FriendStore.StoredFriend?
+    /// Register a spare key as somebody who is not here (SponsoredKeyView).
+    @State private var showSponsored = false
     @Environment(\.openURL) private var openURL
     /// Circle isn't reachable in Parent Mode (HomeView renders the chat list
     /// alone), so this is belt and braces, but the rule "accepting an
@@ -91,6 +93,10 @@ struct FriendsView: View {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(moderationMessage)
+            }
+            .sheet(isPresented: $showSponsored) {
+                SponsoredKeyView(myRoot: myRoot, ceremony: ceremony, sync: sync, friendStore: friendStore,
+                                 onClose: { showSponsored = false })
             }
             .sheet(item: $recordFor) { friend in
                 NavigationStack {
@@ -186,6 +192,18 @@ struct FriendsView: View {
                     .tint(.white)
                     .parentTapTarget()
 
+
+                    // For the daughter on Android in another state
+                    // (SponsoredKeyView). Not brass: a key is about to be
+                    // tapped, but not in front of the person it is for.
+                    Button { showSponsored = true } label: {
+                        Label("Register a key for someone who is not here", systemImage: "key.viewfinder")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.white)
+                    .parentTapTarget()
 
                     Button { stage = .guide } label: {
                         Text("How adding someone works")

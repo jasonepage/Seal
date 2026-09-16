@@ -13,10 +13,10 @@ import Foundation
 enum SecretReviewTests {
 
     static var suites: [SelfTest.Suite] { [
-        .init(name: "secretreview.confirmDoesNotTouchPayload", run: confirmDoesNotTouchPayload),
-        .init(name: "secretreview.keysAndStamps", run: keysAndStamps),
-        .init(name: "secretreview.ageLines", run: ageLines),
-        .init(name: "secretreview.schedule", run: schedule),
+        .init(name: "secretreview.confirmDoesNotTouchPayload") { try confirmDoesNotTouchPayload($0) },
+        .init(name: "secretreview.keysAndStamps") { try keysAndStamps($0) },
+        .init(name: "secretreview.ageLines") { try ageLines($0) },
+        .init(name: "secretreview.schedule") { try schedule($0) },
     ] }
 
     static let t0 = Date(timeIntervalSince1970: 1_800_000_000)

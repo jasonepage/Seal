@@ -15,11 +15,11 @@ import CryptoKit
 enum CustodyConfirmationTests {
 
     static var suites: [SelfTest.Suite] { [
-        .init(name: "custody.neverCountsTowardRelease", run: neverCountsTowardRelease),
-        .init(name: "custody.challengeDomain", run: challengeDomain),
-        .init(name: "custody.admission", run: admission),
-        .init(name: "custody.ownerReads", run: ownerReads),
-        .init(name: "custody.policyDecodes", run: policyDecodes),
+        .init(name: "custody.neverCountsTowardRelease") { try neverCountsTowardRelease($0) },
+        .init(name: "custody.challengeDomain") { try challengeDomain($0) },
+        .init(name: "custody.admission") { try admission($0) },
+        .init(name: "custody.ownerReads") { try ownerReads($0) },
+        .init(name: "custody.policyDecodes") { try policyDecodes($0) },
     ] }
 
     static let t0 = EstateLogTests.t0

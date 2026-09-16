@@ -21,6 +21,11 @@ struct HomeView: View {
     let sync: SyncEngine
     @Bindable var friendStore: FriendStore
     @Bindable var estateEngine: EstateEngine
+    /// "Bills and medical": the second set with the short rule. Its
+    /// heartbeat is written beside the letters' on every open; the guarded
+    /// estates (what this phone holds for others) live on the letters
+    /// engine only, so they are not fetched twice.
+    @Bindable var urgentEngine: EstateEngine
     @Bindable var appLock: AppLock
     let onSignOut: () -> Void
     let onDelete: () -> Void
@@ -117,14 +122,16 @@ struct HomeView: View {
     /// the estates this phone guards.
     private func refreshEverything() async {
         await estateEngine.heartbeat()
+        await urgentEngine.heartbeat()
         answerCheckInRequest()
         // The heartbeat just moved, so the owner's own reminders are measured
         // again from now (OwnerNotices). Nothing is posted here; three
         // reminders are scheduled for later and replaced on the next open.
         await OwnerNotices.schedule(engine: estateEngine, ownerHash: myRoot.credentialIDHash)
+        await OwnerNotices.schedule(engine: urgentEngine, ownerHash: urgentEngine.storeHash)
         // The "still right?" reminder, at the next due date (SecretReview).
         await SecretReview.schedule(ownerHash: myRoot.credentialIDHash,
-                                    hasSecrets: !estateEngine.allSecrets.isEmpty,
+                                    hasSecrets: !(estateEngine.allSecrets.isEmpty && urgentEngine.allSecrets.isEmpty),
                                     estateCreatedAt: estateEngine.estate?.createdAt ?? estateEngine.now,
                                     now: estateEngine.now)
         await estateEngine.refreshGuarded()
@@ -143,7 +150,8 @@ struct HomeView: View {
 
     private var shell: some View {
         EstateHomeView(myRoot: myRoot, identity: identity, ceremony: ceremony, sync: sync,
-                       friendStore: friendStore, estateEngine: estateEngine, appLock: appLock,
+                       friendStore: friendStore, lettersEngine: estateEngine, urgentEngine: urgentEngine,
+                       appLock: appLock,
                        onOpenProfile: { showProfile = true })
             .sheet(isPresented: $showProfile) {
                 ProfileView(myRoot: myRoot, identity: identity, sync: sync,

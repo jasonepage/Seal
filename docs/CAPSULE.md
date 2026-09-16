@@ -102,6 +102,15 @@ The `kemBundleHex` is either a 32 byte X25519 public key or `"SKB1"` ‖ X25519
 (32) ‖ ML-KEM-768 public key (1184). It is not needed for verification; it is
 what the wrapped shares were encrypted to.
 
+Since 2026-09-16 an endorsement may also carry `lockedPrivate` and `prfSalt`
+(base64). That is a **sponsored key's virtual device**: the identity's owner
+registered a hardware key for somebody else, and this "device" is not a
+phone; its private halves are in `lockedPrivate`, AES-256-GCM under
+`HKDF-SHA256(prf, salt, "seal.sponsored.lock.v1")` where `prf` is the key's
+WebAuthn PRF output over `prfSalt`. Neither field is in the endorsement
+commitment. A verifier ignores both; they cannot be checked without the
+physical key, and they change nothing about what the endorsement proves.
+
 ## 5. Events
 
 ```
@@ -236,8 +245,11 @@ writtenAtEpoch`, and since 2026-09-16 an optional `firstSteps[]`, each
 `{ id, title, note, secretIndex }`, the owner's ordered "what to do first"
 list, where `secretIndex` is an index into `secrets` or null, and an
 optional `videoNote`, a media item like `voiceNote` whose `kind` is
-`"video"`); the rest are photos, the voice note and the video, whose SHA-256
-the payload records. A reader that
+`"video"`, and an optional `openNoEarlierThanEpoch`, whole seconds since
+1970, the owner's wish that the recipient's app keep this envelope closed
+until that day after the release; advisory, see RELEASE.md section 9);
+the rest are photos, the voice note and the video, whose SHA-256 the
+payload records. A reader that
 does not know `firstSteps` ignores it; a payload without it has none. This
 is additive and did not bump the version (section 11).
 

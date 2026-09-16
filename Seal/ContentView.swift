@@ -15,6 +15,9 @@ struct ContentView: View {
     @State private var sync = SyncEngine()
     @State private var friendStore: FriendStore?
     @State private var estateEngine: EstateEngine?
+    /// The second set of envelopes, "bills and medical", with its own
+    /// short rule (EstateEngine.Slot.urgent). Same engine, own storage.
+    @State private var urgentEngine: EstateEngine?
     @State private var appLock: AppLock?
     @State private var showBackupPrompt = false
     @State private var showRecoveryNotice = false
@@ -36,9 +39,10 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            if let root = identity.rootIdentity, let ceremony, let estateEngine, let friendStore, let appLock {
+            if let root = identity.rootIdentity, let ceremony, let estateEngine, let urgentEngine, let friendStore, let appLock {
                 HomeView(myRoot: root, identity: identity, ceremony: ceremony,
                          sync: sync, friendStore: friendStore, estateEngine: estateEngine,
+                         urgentEngine: urgentEngine,
                          appLock: appLock,
                          onSignOut: performSignOut, onDelete: performDelete)
                     // Blocking, by design (FR-3, UI.md §3.1): this is the one
@@ -123,6 +127,9 @@ struct ContentView: View {
         if estateEngine?.ownerHash != hash {
             estateEngine = EstateEngine(ownerHash: hash, identity: identity, sync: sync)
         }
+        if urgentEngine?.ownerHash != hash {
+            urgentEngine = EstateEngine(ownerHash: hash, identity: identity, sync: sync, slot: .urgent)
+        }
         if appLock?.ownerHash != hash {
             appLock = AppLock(ownerHash: hash)
         }
@@ -139,6 +146,7 @@ struct ContentView: View {
             AppLock.wipe(ownerHash: hash)
             CustodianNotices.wipe(ownerHash: hash)   // what this phone has already announced
             OwnerNotices.wipe(ownerHash: hash)       // the owner's own scheduled reminders
+            OwnerNotices.wipe(ownerHash: "urgent.\(hash)")   // and the urgent set's
             FirstStepsDone.wipe(ownerHash: hash)     // a recipient's check marks on "what to do first"
             CheckInShared.wipe()                     // the widget's two numbers
             SecretReview.wipe(ownerHash: hash)       // the "still right?" schedule
@@ -146,6 +154,7 @@ struct ContentView: View {
         }
         friendStore = nil
         estateEngine = nil
+        urgentEngine = nil
         appLock = nil
         ceremony?.resetPhase()
         sync.resetStatus()

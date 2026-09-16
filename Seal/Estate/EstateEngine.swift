@@ -53,14 +53,43 @@ final class EstateEngine {
     /// Posted after any refresh so screens re-read state.
     static let changed = Notification.Name("seal.estate.changed")
 
-    init(ownerHash: String, identity: IdentityManager, sync: SyncEngine, clock: Clock = Clocks.current) {
+    /// WHICH SET OF ENVELOPES THIS ENGINE RUNS (RELEASE.md section 10).
+    /// `.letters` is the estate everything was built for. `.urgent` is a
+    /// second, separate estate under the same identity: "bills and
+    /// medical", with its own key holders, its own shorter rule, its own
+    /// Estate Key, shares and tables. Nothing in the key hierarchy is
+    /// shared between the two, which is the whole point: a release of the
+    /// urgent set opens nothing in the letters. Same engine, same code,
+    /// different local storage (`storeHash`), and the key holders see two
+    /// estates from one person.
+    enum Slot: String {
+        case letters = ""
+        case urgent = "urgent"
+
+        var title: String { self == .urgent ? "Bills and medical" : "Letters" }
+        /// What a key holder sees the owner called, so the two estates
+        /// from one person read apart on their phone.
+        func ownerLabel(_ name: String) -> String { self == .urgent ? "\(name) (bills and medical)" : name }
+    }
+
+    let slot: Slot
+    /// The key every local store of this engine is filed under. The
+    /// identity hash for the letters (unchanged from before slots existed,
+    /// so nothing already on a phone moves), a prefixed one for the urgent
+    /// set. `ownerHash` stays the identity hash everywhere the record or
+    /// the directory is concerned.
+    let storeHash: String
+
+    init(ownerHash: String, identity: IdentityManager, sync: SyncEngine, clock: Clock = Clocks.current, slot: Slot = .letters) {
         self.ownerHash = ownerHash
         self.identity = identity
         self.sync = sync
         self.clock = clock
-        estate = EstateStore.load(ownerHash: ownerHash)
-        guarded = CustodianVault.load(ownerHash: ownerHash)
-        let logs = EstateLogStore.load(ownerHash: ownerHash)
+        self.slot = slot
+        self.storeHash = slot == .letters ? ownerHash : "\(slot.rawValue).\(ownerHash)"
+        estate = EstateStore.load(ownerHash: storeHash)
+        guarded = CustodianVault.load(ownerHash: storeHash)
+        let logs = EstateLogStore.load(ownerHash: storeHash)
         if let estate { ownerEvents = logs[estate.id] ?? [] }
         for g in guarded { guardedEvents[g.estateID] = logs[g.estateID] ?? [] }
         recomputeAll()
@@ -99,15 +128,15 @@ final class EstateEngine {
         var logs: [String: [EstateEvent]] = [:]
         if let estate { logs[estate.id] = ownerEvents }
         for (id, events) in guardedEvents { logs[id] = events }
-        EstateLogStore.save(logs, ownerHash: ownerHash)
+        EstateLogStore.save(logs, ownerHash: storeHash)
     }
 
     private func saveEstate() {
-        if let estate { EstateStore.save(estate) }
+        if let estate { EstateStore.save(estate, ownerHash: storeHash) }
     }
 
     private func saveGuarded() {
-        CustodianVault.save(guarded, ownerHash: ownerHash)
+        CustodianVault.save(guarded, ownerHash: storeHash)
     }
 
     private func recomputeAll() {
@@ -243,7 +272,14 @@ final class EstateEngine {
     @discardableResult
     func createEstateIfNeeded() -> Estate {
         if let estate { return estate }
-        let fresh = Estate.new(ownerHash: ownerHash, now: clock.now)
+        var fresh = Estate.new(ownerHash: ownerHash, now: clock.now)
+        if slot == .urgent {
+            // The short rule. The shortest silence the machine allows, one
+            // week of warnings, no grace. The owner can change it.
+            fresh.policy.silenceDays = ReleasePolicy.allowedSilenceDays.min() ?? 30
+            fresh.policy.warningDays = 7
+            fresh.policy.graceDays = 0
+        }
         estate = fresh
         saveEstate()
         recomputeAll()
@@ -386,7 +422,7 @@ final class EstateEngine {
         guard var e = estate else { return }
         if let env = e.envelopes.first(where: { $0.id == id }) {
             for blob in env.allMedia.map(\.blobID) {
-                try? FileManager.default.removeItem(at: EstateMediaStore.directory(ownerHash: ownerHash).appendingPathComponent(blob))
+                try? FileManager.default.removeItem(at: EstateMediaStore.directory(ownerHash: storeHash).appendingPathComponent(blob))
             }
         }
         e.envelopes.removeAll { $0.id == id }
@@ -400,7 +436,7 @@ final class EstateEngine {
         let blobID = UUID().uuidString
         let ciphertext = try EstateKeyHierarchy.sealContent(plaintext, contentKey: e.envelopes[i].contentKey,
                                                             estateID: e.id, blobID: blobID)
-        try EstateMediaStore.write(ciphertext, blobID: blobID, ownerHash: ownerHash)
+        try EstateMediaStore.write(ciphertext, blobID: blobID, ownerHash: storeHash)
         let item = MediaItem(blobID: blobID, kind: kind, sha256: Data(SHA256.hash(data: plaintext)),
                              byteCount: plaintext.count, localName: blobID)
         switch kind {
@@ -416,7 +452,7 @@ final class EstateEngine {
 
     /// Decrypts a local media blob for the owner's own preview.
     func mediaPlaintext(_ item: MediaItem, in envelope: Envelope) -> Data? {
-        guard let estate, let ciphertext = EstateMediaStore.read(blobID: item.blobID, ownerHash: ownerHash) else { return nil }
+        guard let estate, let ciphertext = EstateMediaStore.read(blobID: item.blobID, ownerHash: storeHash) else { return nil }
         return try? EstateKeyHierarchy.openContent(ciphertext, contentKey: envelope.contentKey, estateID: estate.id, blobID: item.blobID)
     }
 
@@ -536,7 +572,7 @@ final class EstateEngine {
             let sealed = try EstateKeyHierarchy.sealContent(payload, contentKey: env.contentKey, estateID: e.id, blobID: payloadBlobID)
             try await sync.saveEstateBlob(sealed, name: EstateNames.contentBlob(e.id, payloadBlobID))
             for item in env.allMedia {
-                guard let ciphertext = EstateMediaStore.read(blobID: item.blobID, ownerHash: ownerHash) else { continue }
+                guard let ciphertext = EstateMediaStore.read(blobID: item.blobID, ownerHash: storeHash) else { continue }
                 try await sync.saveEstateBlob(ciphertext, name: EstateNames.contentBlob(e.id, item.blobID))
             }
             env.payloadBlobID = payloadBlobID
@@ -572,7 +608,9 @@ final class EstateEngine {
         estate = e; saveEstate()
 
         // 5. Invites, and a heartbeat so the clock starts from now.
-        let myName = identity.rootIdentity?.displayName ?? ""
+        // The urgent set names itself in the invite, so the key holder's
+        // phone shows "Nathan (bills and medical)" beside "Nathan".
+        let myName = slot.ownerLabel(identity.rootIdentity?.displayName ?? "")
         for c in e.custodians {
             try await sync.publishEstateInvite(EstateInvite(estateID: e.id, ownerHash: ownerHash, ownerName: myName, role: .custodian),
                                                to: c.rootHash,
@@ -617,7 +655,8 @@ final class EstateEngine {
     /// heartbeat landed and the silence limit. Nothing else leaves the
     /// engine this way.
     private func shareCheckIn() {
-        guard let e = estate, let snapshot = ownerSnapshot else { return }
+        // The widget shows the letters' rule, the long one.
+        guard slot == .letters, let e = estate, let snapshot = ownerSnapshot else { return }
         CheckInShared.record(lastCheckIn: snapshot.silenceAnchor, silenceDays: e.policy.silenceDays)
     }
 
@@ -677,9 +716,21 @@ final class EstateEngine {
     /// Invites, then every guarded estate. Called on launch, foreground, and
     /// every push.
     func refreshGuarded() async {
-        guard !DemoFixtures.isActive, let mine = identity.kemPrivateBundle else { return }
-        if let invites = try? await sync.fetchEstateInvites(myHash: ownerHash, mine: mine) {
-            for invite in invites {
+        guard !DemoFixtures.isActive, !identity.kemPrivateBundles.isEmpty else { return }
+        // Every bundle this phone can open with: its own, and a sponsored
+        // identity's virtual device (SponsoredKey). An invite wrapped to
+        // the virtual device before this phone existed opens with the
+        // second; one wrapped after this phone signed in opens with the first.
+        var found: [EstateInvite] = []
+        for mine in identity.kemPrivateBundles {
+            if let invites = try? await sync.fetchEstateInvites(myHash: ownerHash, mine: mine) {
+                for invite in invites where !found.contains(where: { $0.estateID == invite.estateID && $0.role == invite.role }) {
+                    found.append(invite)
+                }
+            }
+        }
+        if !found.isEmpty {
+            for invite in found {
                 if let i = guarded.firstIndex(where: { $0.estateID == invite.estateID }) {
                     guarded[i].roles.insert(invite.role)
                     guarded[i].ownerName = invite.ownerName
@@ -980,7 +1031,8 @@ final class EstateEngine {
     /// table, and only mine. Media is fetched on demand by `openMedia`.
     func openEnvelopes(estateID: String) async throws -> [OpenedEnvelope] {
         let (g, s) = try guardedEstate(estateID)
-        guard let mine = identity.kemPrivateBundle else { throw EngineError.noDeviceKey }
+        let bundles = identity.kemPrivateBundles
+        guard !bundles.isEmpty else { throw EngineError.noDeviceKey }
         guard s.releasedAt != nil,
               let released = (guardedEvents[estateID] ?? []).last(where: { $0.kind == .released })?.body(ReleasedBody.self)
         else { throw EngineError.notReleased }
@@ -988,9 +1040,12 @@ final class EstateEngine {
         for tableID in g.vault?.tableIDs ?? [] {
             guard let data = try await sync.fetchEstateBlob(name: EstateNames.tableBlob(estateID, tableID)),
                   let wrap = try? JSONDecoder().decode(RecipientTableWrap.self, from: data) else { continue }
-            guard let tableKey = try? EstateKeyHierarchy.openTableKeyAsRecipient(wrap, estateID: estateID,
-                                                                                 estateKey: released.estateKey, mine: mine)
-            else { continue }   // not my table, by design
+            // Try this phone's bundle, then the sponsored virtual device's.
+            // A table that opens with neither is not mine, by design.
+            guard let tableKey = bundles.lazy.compactMap({ mine in
+                try? EstateKeyHierarchy.openTableKeyAsRecipient(wrap, estateID: estateID,
+                                                                estateKey: released.estateKey, mine: mine)
+            }).first else { continue }
             let table = try EstateKeyHierarchy.openTable(wrap, estateID: estateID, tableKey: tableKey)
             for entry in table.entries.sorted(by: { $0.revealOrder < $1.revealOrder }) {
                 guard let payloadID = entry.blobIDs.first,
@@ -1021,7 +1076,10 @@ final class EstateEngine {
     // MARK: - Wipe
 
     static func wipe(ownerHash: String) {
-        EstateStore.wipe(ownerHash: ownerHash)
-        EstateMediaStore.wipe(ownerHash: ownerHash)
+        for slot in [Slot.letters, .urgent] {
+            let storeHash = slot == .letters ? ownerHash : "\(slot.rawValue).\(ownerHash)"
+            EstateStore.wipe(ownerHash: storeHash)
+            EstateMediaStore.wipe(ownerHash: storeHash)
+        }
     }
 }

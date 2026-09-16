@@ -42,6 +42,9 @@ struct EnvelopeEditorView: View {
     @State private var showVoice = false
     @State private var showVideo = false
     @State private var showVideoPlayer = false
+    /// The date picker's working value while the card is open. Nil in the
+    /// envelope means "open with everything else".
+    @State private var pickingDate = false
     @State private var videoThumbnail: UIImage?
     @State private var confirmDelete = false
     @State private var showPreview = false
@@ -111,6 +114,7 @@ struct EnvelopeEditorView: View {
                         photosCard
                         stepsCard
                         secretsCard
+                        openOnDateCard
                         if envelope.isAddressed { previewRow }
                         Text(envelope.isAddressed
                              ? "Written for \(recipientName). Opens on their phone, in the order you choose, only after your key holders release it."
@@ -581,6 +585,64 @@ struct EnvelopeEditorView: View {
             p.play()
             player = p
         } catch { self.error = error.localizedDescription }
+    }
+
+    // MARK: - Open on a date
+
+    /// A letter for a child's eighteenth birthday. The card says exactly
+    /// what the date does (the recipient's phone keeps the envelope
+    /// closed until then, after the release) and does not do (it opens
+    /// nothing on its own, and there is no clock on Earth everyone
+    /// trusts, so it is a wish the phone honours, not a lock).
+    private var openOnDateCard: some View {
+        let has = envelope.openNoEarlierThan != nil
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: "calendar.badge.clock")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(has ? SealTheme.brass : .white.opacity(0.5))
+                    .frame(width: 22)
+                Text("Open on a date").font(.headline).foregroundStyle(.white)
+                Spacer()
+                if has {
+                    Button("Clear") { envelope.openNoEarlierThan = nil; pickingDate = false }
+                        .font(.subheadline.weight(.semibold)).foregroundStyle(.white.opacity(0.7))
+                        .parentTapTarget(44)
+                } else {
+                    Button(pickingDate ? "Close" : "Set") {
+                        withAnimation(.easeInOut(duration: 0.2)) { pickingDate.toggle() }
+                    }
+                    .buttonStyle(.bordered).tint(SealTheme.brass)
+                    .parentTapTarget(44)
+                }
+            }
+            if let date = envelope.openNoEarlierThan {
+                Text("\(recipientName)'s phone keeps this envelope closed until \(date.formatted(date: .long, time: .omitted)), even after everything else has opened.")
+                    .font(.callout).foregroundStyle(.white.opacity(0.8))
+                    .fixedSize(horizontal: false, vertical: true)
+                DatePicker("Open on", selection: Binding(
+                    get: { envelope.openNoEarlierThan ?? Date() },
+                    set: { envelope.openNoEarlierThan = $0 }),
+                    displayedComponents: .date)
+                    .datePickerStyle(.compact)
+                    .tint(SealTheme.brass).foregroundStyle(.white)
+            } else if pickingDate {
+                DatePicker("Open on", selection: Binding(
+                    get: { Calendar.current.date(byAdding: .year, value: 1, to: estateEngine.now) ?? estateEngine.now },
+                    set: { envelope.openNoEarlierThan = $0; pickingDate = false }),
+                    displayedComponents: .date)
+                    .datePickerStyle(.graphical)
+                    .tint(SealTheme.brass).foregroundStyle(.white)
+            } else {
+                invitation("For a letter meant for a birthday years away. \(recipientName) would still only get it after your key holders release everything; on their phone it then waits until the day you choose.")
+            }
+            Text("What the date does not do: it does not open anything by itself, and it is not a lock. There is no clock everyone can trust, so \(recipientName)'s phone honours the date the way a person honours a wish. Someone determined, with the file and a computer, could read it sooner.")
+                .font(.caption).foregroundStyle(.white.opacity(0.4))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(16)
+        .background(.white.opacity(has ? 0.06 : 0.035), in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(has ? SealTheme.brass.opacity(0.25) : .clear, lineWidth: 1))
     }
 
     // MARK: - What they see

@@ -15,12 +15,13 @@ import Foundation
 enum FirstStepsTests {
 
     static var suites: [SelfTest.Suite] { [
-        .init(name: "firststeps.payloadRoundTrip", run: payloadRoundTrip),
-        .init(name: "firststeps.oldPayloadOpens", run: oldPayloadOpens),
-        .init(name: "firststeps.secretLinks", run: secretLinks),
-        .init(name: "firststeps.oldEstateDecodes", run: oldEstateDecodes),
-        .init(name: "firststeps.starters", run: starters),
-        .init(name: "firststeps.videoInMedia", run: videoInMedia),
+        .init(name: "firststeps.payloadRoundTrip") { try payloadRoundTrip($0) },
+        .init(name: "firststeps.oldPayloadOpens") { try oldPayloadOpens($0) },
+        .init(name: "firststeps.secretLinks") { try secretLinks($0) },
+        .init(name: "firststeps.oldEstateDecodes") { try oldEstateDecodes($0) },
+        .init(name: "firststeps.starters") { try starters($0) },
+        .init(name: "firststeps.videoInMedia") { try videoInMedia($0) },
+        .init(name: "firststeps.openOnADate") { try openOnADate($0) },
     ] }
 
     static let t0 = Date(timeIntervalSince1970: 1_800_000_000)
@@ -59,6 +60,32 @@ enum FirstStepsTests {
         t.equal(payload.title, "For Karen", "the rest of the old payload is intact")
         t.check(payload.voiceNote == nil, "a missing voice note is still nil")
         t.check(payload.videoNote == nil, "a payload without a video decodes with none")
+        t.check(payload.openNoEarlierThan == nil && !payload.isHeld(now: t0), "a payload without a date is never held")
+    }
+
+    /// "Open no earlier than" rides in the payload and only ever HOLDS an
+    /// envelope on the recipient's phone. It has no way to open one: it
+    /// touches no key, no table and no event.
+    static func openOnADate(_ t: SelfTest.Context) throws {
+        var envelope = Envelope.new(recipientHash: "R", title: "For your eighteenth", now: t0, revealOrder: 0)
+        let birthday = t0.addingTimeInterval(3_000 * 86_400)
+        envelope.openNoEarlierThan = birthday
+        let payload = envelope.payload
+        t.equal(payload.openNoEarlierThanEpoch, RecordEvent.epochSeconds(birthday), "the date is sealed as whole seconds")
+        t.check(payload.isHeld(now: t0.addingTimeInterval(100 * 86_400)), "held before the date")
+        t.check(payload.isHeld(now: birthday.addingTimeInterval(-1)), "held one second before")
+        t.check(!payload.isHeld(now: birthday), "open on the day")
+        t.check(!payload.isHeld(now: birthday.addingTimeInterval(365 * 86_400)), "open after")
+        let back = try JSONDecoder().decode(Envelope.Payload.self, from: try EstateEvent.encodeBody(payload))
+        t.equal(back.openNoEarlierThanEpoch, payload.openNoEarlierThanEpoch, "round trips")
+        let saved = try JSONDecoder().decode(Envelope.self, from: try JSONEncoder().encode(envelope))
+        t.equal(saved.openNoEarlierThan, birthday, "the working copy keeps the date")
+        // Same blob ids, same content key, same secrets: nothing the date
+        // could have reached into changed.
+        var plain = envelope; plain.openNoEarlierThan = nil
+        t.equal(plain.blobIDs, envelope.blobIDs, "the date touches no blob")
+        t.equal(plain.contentKey, envelope.contentKey, "the date touches no key")
+        t.check(!envelope.contentsSummary.contains("date"), "the home row does not announce it")
     }
 
     /// The video rides in the media list the engine encrypts and uploads.

@@ -14,8 +14,8 @@ import Foundation
 enum SurvivalKitTests {
 
     static var suites: [SelfTest.Suite] { [
-        .init(name: "survivalkit.words", run: words),
-        .init(name: "survivalkit.renders", run: renders),
+        .init(name: "survivalkit.words") { try words($0) },
+        .init(name: "survivalkit.renders") { try renders($0) },
     ] }
 
     static let t0 = Date(timeIntervalSince1970: 1_800_000_000)
@@ -32,7 +32,7 @@ enum SurvivalKitTests {
         t.check(text.contains("30 days"), "says the warning days")
         t.check(text.contains("7 days"), "says the grace days")
         t.check(text.contains("2 of 3 key holders"), "says the threshold in plain words")
-        t.check(text.contains("verify_capsule.py") && text.contains(SurvivalKit.verifierURL), "points at the verifier")
+        t.check(!text.contains("verify_capsule.py"), "the verifier is not on the page (cut 2026-09-16)")
         t.check(text.contains(SurvivalKit.howItWorksURL), "points at how it works")
         t.check(!text.contains("\u{2014}"), "no em dash")
         t.check(!text.lowercased().contains("custodian"), "the user facing word is key holder")

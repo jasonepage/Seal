@@ -6,7 +6,7 @@ import Foundation
 
 enum ClockTests {
     static var suites: [SelfTest.Suite] { [
-        .init(name: "clock.simulated", run: simulated),
+        .init(name: "clock.simulated") { try simulated($0) },
     ] }
 
     static func simulated(_ t: SelfTest.Context) throws {

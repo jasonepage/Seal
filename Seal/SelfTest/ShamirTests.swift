@@ -16,9 +16,9 @@ import CryptoKit
 enum ShamirTests {
 
     static var suites: [SelfTest.Suite] { [
-        .init(name: "shamir.field", run: field),
-        .init(name: "shamir.vectors", run: vectors),
-        .init(name: "shamir.random", run: randomRoundTrip),
+        .init(name: "shamir.field") { try field($0) },
+        .init(name: "shamir.vectors") { try vectors($0) },
+        .init(name: "shamir.random") { try randomRoundTrip($0) },
     ] }
 
     static func hex(_ s: String) -> Data {

@@ -15,16 +15,16 @@ import Foundation
 enum ReleaseMachineTests {
 
     static var suites: [SelfTest.Suite] { [
-        .init(name: "release.silence", run: silence),
-        .init(name: "release.happyPath", run: happyPath),
-        .init(name: "release.heartbeatBeatsEverything", run: heartbeatBeatsEverything),
-        .init(name: "release.cancellation", run: cancellation),
-        .init(name: "release.objectionPause", run: objectionPause),
-        .init(name: "release.objectionVeto", run: objectionVeto),
-        .init(name: "release.authorizationRules", run: authorizationRules),
-        .init(name: "release.earlyClaim", run: earlyClaim),
-        .init(name: "release.policy", run: policy),
-        .init(name: "release.ninetySecondRun", run: ninetySecondRun),
+        .init(name: "release.silence") { try silence($0) },
+        .init(name: "release.happyPath") { try happyPath($0) },
+        .init(name: "release.heartbeatBeatsEverything") { try heartbeatBeatsEverything($0) },
+        .init(name: "release.cancellation") { try cancellation($0) },
+        .init(name: "release.objectionPause") { try objectionPause($0) },
+        .init(name: "release.objectionVeto") { try objectionVeto($0) },
+        .init(name: "release.authorizationRules") { try authorizationRules($0) },
+        .init(name: "release.earlyClaim") { try earlyClaim($0) },
+        .init(name: "release.policy") { try policy($0) },
+        .init(name: "release.ninetySecondRun") { try ninetySecondRun($0) },
     ] }
 
     static let day: TimeInterval = 86_400

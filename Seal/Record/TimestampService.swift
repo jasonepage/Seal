@@ -227,7 +227,9 @@ enum TimestampService {
 /// Just enough ASN.1 to build an RFC 3161 request and read a response's status.
 /// Not a general parser and should not grow into one: anything more belongs in
 /// the export verifier, where real libraries exist.
-enum TimestampDER {
+// nonisolated: DER parsing is pure and ReleaseFeed.effectiveTime calls it
+// from a nonisolated context.
+nonisolated enum TimestampDER {
 
     static let sha256AlgorithmOID = Data([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01])
     static let null = Data([0x05, 0x00])

@@ -113,6 +113,26 @@ final class IdentityManager {
         kemPrivateKey.map { KEMPrivateBundle(x25519: $0, mlkem768Seed: mlkemSeed) }
     }
 
+    /// A SPONSORED identity's virtual device, unlocked on this phone at
+    /// sign-in with the key's PRF secret (Identity/SponsoredKey.swift).
+    /// Envelopes and invites written before this phone existed were
+    /// wrapped to it, so opening tries it after this phone's own bundle.
+    private(set) var sponsoredHalves: SponsoredKey.PrivateHalves?
+    private static func sponsoredTag(_ hash: String) -> String { "seal.sponsored.\(hash)" }
+
+    /// Every bundle this phone can open with: its own, then the sponsored
+    /// one. Order matters only for speed.
+    var kemPrivateBundles: [KEMPrivateBundle] {
+        [kemPrivateBundle, sponsoredHalves?.kemBundle].compactMap { $0 }
+    }
+
+    func installSponsoredHalves(_ halves: SponsoredKey.PrivateHalves, for identityHash: String) {
+        if let data = try? JSONEncoder().encode(halves) {
+            KeychainStore.save(data, for: Self.sponsoredTag(identityHash))
+        }
+        sponsoredHalves = halves
+    }
+
     /// What goes into the device endorsement: the hybrid bundle when this
     /// phone has an ML-KEM key, the bare X25519 key otherwise.
     var kemPublicKeyData: Data? { kemPrivateBundle?.publicBundle.encoded }
@@ -176,6 +196,7 @@ final class IdentityManager {
         deviceKey = nil          // in-memory only; the keychain copy survives
         kemPrivateKey = nil
         mlkemSeed = nil
+        sponsoredHalves = nil    // the keychain copy survives, like the device key
         KeychainStore.delete(Self.identityKey)
         KeychainStore.delete(Self.endorsementKey)
     }
@@ -195,8 +216,10 @@ final class IdentityManager {
             KeychainStore.delete(Self.deviceKeyTag(hash))
             KeychainStore.delete(Self.kemKeyTag(hash))
             KeychainStore.delete(Self.mlkemKeyTag(hash))
+            KeychainStore.delete(Self.sponsoredTag(hash))
         }
         mlkemSeed = nil
+        sponsoredHalves = nil
         // Legacy un-scoped keys, if any, go too.
         KeychainStore.delete(Self.legacyDeviceKeyTag)
         KeychainStore.delete(Self.legacyKemKeyTag)
@@ -229,6 +252,9 @@ final class IdentityManager {
             kemPrivateKey = try? Curve25519.KeyAgreement.PrivateKey(rawRepresentation: data)
         }
         mlkemSeed = KeychainStore.load(Self.mlkemKeyTag(hash))
+        if let data = KeychainStore.load(Self.sponsoredTag(hash)) {
+            sponsoredHalves = try? JSONDecoder().decode(SponsoredKey.PrivateHalves.self, from: data)
+        }
     }
 
     // MARK: - Verification

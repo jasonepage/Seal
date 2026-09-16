@@ -123,7 +123,88 @@ confirmations during an open claim leave the state exactly where it was
 (`custody.neverCountsTowardRelease`). The owner's home screen reads them to
 say when each key holder last confirmed, and to name the one to ask.
 
-## 9. Known judgement calls, for review
+## 9. Open on a date (built 2026-09-16)
+
+A letter for a child's eighteenth birthday. There is no server and no
+trusted clock, so a date cannot open anything and the design does not
+pretend it can. The honest version, which is what is built:
+
+- The envelope carries `openNoEarlierThan` inside its sealed payload.
+- It still needs the full release: the silence, the warnings, the grace
+  and M key taps. Nothing in the machine reads the date. The key table
+  and the blobs are exactly what they would be without it.
+- After the release, the recipient's phone shows the title and "opens on
+  <date>", and nothing else, until that day by its own clock.
+
+What the app says to the owner, on the card: the date does not open
+anything by itself; it is not a lock; there is no clock everyone can
+trust, so the recipient's phone honours it the way a person honours a
+wish; someone determined, with the capsule and a computer, could read it
+sooner. That is the whole truth and PRODUCT.md section 7 stays true.
+
+The stronger version, a real time lock, would need a third party that
+releases a key on a date. That puts a stranger into the promise. Not
+built, and not planned unless a customer asks for it with the trade-off
+understood.
+
+## 10. The owner is alive but cannot act (built 2026-09-16 as two estates per identity)
+
+**Built the same day Jason approved it, as the first option below.** The
+app calls it "Bills and medical": a segmented control at the top of the
+Envelopes and Keys tabs switches between the letters and the urgent set.
+The urgent set is a second `Estate` run by a second `EstateEngine`
+(`slot: .urgent`) with its own local storage, its own key holders, its
+own rule (default: the shortest silence the machine allows, one week of
+warnings, no grace), its own Estate Key, shares, tables and log. The
+owner's heartbeat is written to both on every open. A key holder's phone
+sees it as a separate estate from "Nathan (bills and medical)". Nothing
+in the key hierarchy is shared, so a release of the urgent set opens
+none of the letters. The design discussion that led here follows.
+
+The case: a stroke. The owner is alive, the heartbeat stops because
+nobody opens the app, and the family needs the bills and the medical
+information now, not the letters, and not in 90 plus 21 plus 14 days.
+
+The idea: a second, smaller envelope set marked "bills and medical" with
+its own shorter rule (say 14 days of silence, 3 of warnings, 0 of grace,
+and the same key holders or a subset), while the personal letters keep
+the full rule.
+
+What it touches. The rule is per estate and the Estate Key is per estate.
+A shorter rule for some envelopes means one of:
+
+- **Two estates per identity.** The cleanest: a second `Estate` with its
+  own policy, epoch, Estate Key, shares and tables, owned by the same
+  identity. The machine, the feed, the engine and every screen assume
+  one estate per identity (PRODUCT.md section 3, `EstateStore.load`).
+  Everything that loads an estate by owner hash would take an estate id
+  instead. Large, mechanical, no cryptographic novelty. Key holders see
+  two estates from the same person, each with its own claim and taps.
+- **Two policies in one estate.** One Estate Key, two rules, tables
+  tagged "personal" or "urgent". But the Estate Key is one key: once M
+  taps release it under the urgent rule, every table's inner layer is
+  open, and the only thing keeping the letters closed is the recipient's
+  phone declining to show them. That is section 9's weakness applied to
+  the whole vault. It breaks PRODUCT.md section 7 for the letters.
+  Rejected.
+- **Two Estate Keys in one estate.** One log, two rules, two sets of
+  shares and commitments in the epoch statement, each table wrapped
+  under one of the two keys. Sound, about half the surgery of two
+  estates, but `EpochBody`, `EpochKeyMaterial`, the share wrapping, the
+  claim and authorization bodies and the capsule format (a version bump)
+  all change. Cryptographic surface touched, without a compiler.
+
+The question the design cannot answer for the owner: who gets the
+urgent set. A stroke patient's spouse needs the bills; the spouse is
+usually also a key holder. "The spouse can open the bills after two
+weeks of silence" is close to "the spouse can open the bills". The app
+would have to say that.
+
+**Recommendation:** two estates per identity, built as "a second set of
+envelopes with its own rule", in the batch after this TestFlight round.
+Stop here. The human decides.
+
+## 11. Known judgement calls, for review
 
 - After a **veto**, a new claim may open immediately if the owner is still
   overdue; the objecting custodian must veto again. An alternative (the

@@ -28,7 +28,9 @@ import CryptoKit
 //  Digests use the same domain-separated, length-framed discipline as
 //  RecordEvent and CustodyReceipt.
 
-struct EstateEvent: Codable, Hashable, Identifiable {
+// nonisolated: a signed event is plain data plus pure arithmetic, and
+// ReleaseFeed.effectiveTime reads it from a nonisolated context.
+nonisolated struct EstateEvent: Codable, Hashable, Identifiable {
 
     enum Kind: String, Codable, CaseIterable {
         /// Owner. Payload: EstateCreatedBody.

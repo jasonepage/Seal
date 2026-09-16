@@ -32,15 +32,15 @@ struct PolicyView: View {
                             .fixedSize(horizontal: false, vertical: true)
 
                         block("How long you can go quiet",
-                              "If you do not open Seal for this long, your custodians may start the process. Opening the app once resets it.") {
+                              "If you do not open Seal for this long, your key holders may start the process. Opening the app once resets it.") {
                             Picker("Silence", selection: $policy.silenceDays) {
                                 ForEach(ReleasePolicy.allowedSilenceDays, id: \.self) { Text("\($0) days").tag($0) }
                             }
                             .pickerStyle(.segmented)
                         }
 
-                        block("How many custodians must agree",
-                              "Any \(policy.threshold) of your \(estateEngine.estate?.custodians.count ?? 0) custodians must each tap their key. One tap from you stops all of it.") {
+                        block("How many key holders must agree",
+                              "Any \(policy.threshold) of your \(estateEngine.estate?.custodians.count ?? 0) key holders must each tap their key. One tap from you stops all of it.") {
                             Stepper("\(policy.threshold) of \(estateEngine.estate?.custodians.count ?? 0)", value: $policy.threshold, in: 1...custodianCount)
                                 .foregroundStyle(.white)
                         }
@@ -55,7 +55,7 @@ struct PolicyView: View {
                             Stepper("\(policy.graceDays) days", value: $policy.graceDays, in: 0...90).foregroundStyle(.white)
                         }
 
-                        block("If a custodian objects",
+                        block("If a key holder objects",
                               policy.objectionBehavior == .pause
                                 ? "The countdown stops until they withdraw the objection. Nothing else changes."
                                 : "The claim is dead. A new one has to be started from the beginning.") {

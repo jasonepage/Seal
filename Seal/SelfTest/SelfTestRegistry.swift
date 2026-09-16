@@ -17,5 +17,6 @@ enum SelfTestRegistry {
             + SecretReviewTests.suites
             + CustodyConfirmationTests.suites
             + SurvivalKitTests.suites
+            + SponsoredKeyTests.suites
     }
 }

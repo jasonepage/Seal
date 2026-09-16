@@ -1,6 +1,6 @@
 # Where Seal stands
 
-**Updated:** 2026-09-16 · **Owner:** Nathan (Jason Page) · natepage67@gmail.com
+**Updated:** 2026-09-16 (morning after) · **Owner:** Nathan (Jason Page) · natepage67@gmail.com
 **Repo:** `~/Documents/GitHub/Seal` · iOS 26.5+, SwiftUI, no backend
 
 New Swift files under `Seal/` join the target automatically (file system
@@ -23,6 +23,158 @@ timestamps, custody receipts and sealed cards were kept and extended.
 - Team `8C4BM6A82T` · Bundle `io.github.jasonepage.Seal`
 - CloudKit container `iCloud.io.github.jasonepage.Seal`
 - WebAuthn relying party `sealmessenger.com`
+
+## THE SPONSORED KEY (built 2026-09-16, UNCOMPILED, needs hardware)
+
+Jason said cram it in, so it is in. `docs/PENDING_RECIPIENTS.md` option A:
+
+- `Seal/Identity/SponsoredKey.swift`: the virtual device's private halves
+  (P-256 signing key, X25519, ML-KEM seed), locked with AES-GCM under
+  HKDF(PRF output, salt). `lock`, `unlock`, `publicParts`.
+- `DeviceEndorsement.lockedPrivate` and `.prfSalt` (optional, nil on a
+  phone; `isSponsored`). Outside the commitment on purpose. No CloudKit
+  schema change: they ride inside the existing `deviceEndorsements` blob.
+- `Friendship.sponsored` (optional), so PersonView can say how the person
+  was added and nothing mistakes it for a ceremony.
+- `CeremonyManager+Sponsored.swift`: `registerSponsoredKey`. Two taps on
+  the spare key: registration with `prf = .checkForSupport` (refuses a key
+  without PRF before anything is saved), then the endorsement assertion
+  with `prf = .inputValues(salt)` whose output locks the halves. Publishes
+  the identity, pins it, returns it. The owner's phone keeps nothing.
+- `CeremonyManager.signIn`: when the directory says the identity is
+  sponsored, the endorsement tap on the new phone also evaluates PRF over
+  the stored salt and `installSponsoredHalves` onto that phone.
+- `IdentityManager.sponsoredHalves` and `kemPrivateBundles` (own bundle,
+  then the sponsored one). `EstateEngine.refreshGuarded` fetches invites
+  with each; `openEnvelopes` tries each bundle per table.
+- `SponsoredKeyView`, reached from People ("Register a key for someone who
+  is not here"). Says: whoever holds this key and its PIN is them; set a
+  PIN; nothing opens before the release.
+- Tests: `SponsoredKeyTests` (lock opens only with the key; halves match
+  the public parts; a sponsored endorsement verifies like a phone's).
+- `docs/SECURITY_KEY_TEST_MATRIX.md` has the PRF columns and the three
+  failure names. `docs/CAPSULE.md` section 4 documents the two fields.
+
+**Needs real hardware to prove.** The PRF API names on the security key
+request and result types (`prf`, `.checkForSupport`, `.inputValues(.init(saltInput1:saltInput2:))`,
+`.prf?.isSupported`, `.prf?.first`) mirror Apple's iOS 18 platform passkey
+API and Apple's docs list the security key `prf` property as iOS 26.4. If
+the spelling differs, every call is in `CeremonyManager+Sponsored.swift`
+under "PRF plumbing". Test with a YubiKey 5 with a PIN set: register a key
+as "Emma" on phone A, write and seal an envelope for Emma, sign in on
+phone B with that key, run a release with Time Travel, open.
+
+**Custodian use is not wired.** A sponsored identity can be a recipient.
+Making one a key holder would need `myShare` and `release` to try
+`kemPrivateBundles` too and a way to tap the key for authorization on the
+future phone; that works in principle (the key is the root credential)
+but is untested and deliberately left for after the first hardware pass.
+
+## BILLS AND MEDICAL: the second envelope set (built 2026-09-16, UNCOMPILED)
+
+`EstateEngine.Slot` (`.letters`, `.urgent`) and `storeHash`: the same
+engine, a second instance, its own keychain keys and media directory
+(`urgent.<hash>`). `ContentView` makes `urgentEngine`; `HomeView` writes
+its heartbeat beside the letters' and schedules its owner reminders under
+its own store key; `EstateHomeView` takes `lettersEngine` and
+`urgentEngine` and a `slot` picker ("Letters" / "Bills and medical") at
+the top of the Envelopes and Keys tabs, with `estateEngine` computed from
+it. What this phone holds for others is read from the letters engine
+only. The urgent set's default rule is the shortest silence allowed,
+seven warning days, no grace; `createEstateIfNeeded` sets it. Invites
+from the urgent set carry the owner name as "Nathan (bills and medical)"
+so a key holder's phone tells the two estates apart with no model change.
+`EstateStore.save` takes the store key now (DemoFixtures updated). Sign
+out wipes both slots. The widget shows the letters' rule.
+
+Most likely to fail to compile: `@Bindable var lettersEngine` /
+`urgentEngine` with the computed `estateEngine` (if `@Bindable` is
+unhappy on a computed property's source, drop it; nothing binds through
+it); `Slot` with a raw value of "" for `.letters`.
+
+## APPROVED AND DONE (Jason, 2026-09-16)
+
+1. The sponsored key: built, needs hardware.
+2. Bills and medical: built.
+
+## THE MORNING BATCH (2026-09-16, UNCOMPILED): everything in
+
+Jason's call: cram everything into this TestFlight build. So, on top of
+the tabs and the inbox:
+
+- **Phase 7, design only, done:** `docs/PENDING_RECIPIENTS.md`. Three
+  options for a recipient who is not on Seal; recommends A, the
+  sponsored key that carries a secret via the WebAuthn PRF extension,
+  which Apple ships for hardware security keys from iOS 26.4 (the app
+  requires 26.5). Not built: it is the riskiest code in the app and
+  needs a decision and a hardware test matrix. The next batch if A.
+- **Phase 6A, built:** `Envelope.openNoEarlierThan`, in the sealed
+  payload as `openNoEarlierThanEpoch`. `Payload.isHeld(now:)`. The
+  editor has an "Open on a date" card that says exactly what the date
+  does and does not do; `RevealPager` shows `heldView` (title and date,
+  nothing else) until the recipient's clock passes it. Nothing in the
+  machine, the keys or the tables reads the date. RELEASE.md section 9;
+  CAPSULE.md section 7; test `firststeps.openOnADate`.
+- **Phase 6B, designed, stopped:** RELEASE.md section 10. Two estates
+  per identity is the recommendation. Decision needed before code.
+- **The 47 warnings, swept:** all one shape. Forty four were the test
+  suites passing a main actor function as a plain closure; each
+  `.init(name:run:)` is now `.init(name:) { try fn($0) }`. Three were
+  `ReleaseFeed.effectiveTime` (nonisolated) reading `EstateEvent` and
+  calling `TimestampDER`; both types are now `nonisolated` (they are
+  pure data and pure arithmetic). One was `CustodyReminders.identifier`
+  used with `map`; now `nonisolated`. If the sweep produced NEW
+  warnings, the cause is Xcode's default main actor isolation on the
+  module: fix the named symbol with `nonisolated`, never by turning the
+  setting off.
+
+Most likely to fail to compile in this batch: `nonisolated struct` and
+`nonisolated enum` (Swift 6.2 syntax; if the toolchain rejects it,
+mark the three members instead: `digest`, `occurredAt`, `genTime`);
+the `DatePicker` bindings in `openOnDateCard`.
+
+## BEFORE THE NEXT TESTFLIGHT BUILD: the checklist (2026-09-16)
+
+Written the morning after the improvements batch, when Jason asked what
+was left before archiving. The answer is nothing in code. These, in
+order, and none of them can be skipped:
+
+1. **Commit everything.** `git status` shows Phase 4 (the printed key
+   holder page), Phase 5 (set up with my partner), the three tab home
+   screen, the inbox, `docs/Seal-explained.pdf` and this file. Two or
+   three commits, any sensible split. Delete
+   `docs/Seal-explained-for-the-family.pdf` (superseded).
+2. **Deploy the CloudKit schema to Production.** `EstateEvent` with
+   `estate` QUERYABLE, per `docs/CLOUDKIT_DEPLOY.md`. TestFlight talks to
+   Production. Without this every seal from the TestFlight build fails
+   and the failure looks like "could not seal", not like a schema error.
+   This is the most likely way the test goes wrong.
+3. **Decide the domain.** The ceremony screen shows `sealmessenger.com`
+   to every tester. After the first outside tester the relying party
+   cannot change. "Keep it" is a valid decision; "not yet" is not.
+4. **The product in App Store Connect:** `io.github.jasonepage.Seal.lifetime`,
+   non consumable, $29.99, plus the Paid Apps agreement. The paywall
+   stands in front of every seal, so a build with no product cannot seal.
+5. **If the widget target was added:** App Groups ticked on both
+   targets (`group.io.github.jasonepage.Seal`), or the widget says "Not
+   sealed yet" forever. If it was not added, the app builds fine without
+   it; the Siri check-in still works.
+6. **App Review notes** still name the demo path (`SEALDEMO`, "Set up
+   with Face ID"). Unchanged this batch.
+7. **Wipe local state on any phone that switched environments** (sign
+   out and back in), or the Development estate in the keychain confuses
+   the Production build (GOTCHAS "Environments"). The engine now rotates
+   the epoch when the published material is missing, so this is less
+   fatal than it was, but a clean start is still the honest test.
+
+What has never run on a phone and needs the TestFlight week: the
+widget, "Check in with Seal" by Siri, the yearly key confirmation (needs
+a second phone or Time Travel), video and the steps list on a real
+release. Mom is the tester.
+
+After the build is out: the 47 main actor warnings (one sweep, one
+word each, `nonisolated` or `@MainActor`, mostly in `Seal/SelfTest`),
+then `docs/PENDING_RECIPIENTS.md` (Phase 7, design only), then Phase 6.
 
 ## STATUS 2026-09-16 (evening): the improvements batch, phase by phase
 
@@ -64,6 +216,38 @@ the bottom of `EstateModels.swift`. `firststeps.oldEstateDecodes` proves it.
 to the matching `init(from:)`, or it silently breaks loading.**
 
 Built and ran clean on the phone on 2026-09-16 (evening). Phase 1 is done.
+
+### The home screen is three tabs (UNCOMPILED)
+
+Jason's call on 2026-09-16 morning: one scroll with the status, every
+envelope, every key holder, every guarded estate and a footer was
+clutter, and "Seal the envelopes" sat below all of it. `EstateHomeView`
+is now a `TabView`: Envelopes (status or setup card, the envelopes,
+family preview, saved secrets, the Seal button), Keys (the rule, who
+holds a key for you with their yearly standing, set up with my partner,
+what you hold for others, the footer), People (`FriendsView` as a tab,
+no longer a sheet). Every sheet and alert hangs off the tab view in
+`attachSheets(to:)` so any tab can open any of them. The status card's
+check-in paragraph is one sentence; the rest is behind "Watch it
+happen". Every user facing "custodian" on these screens, in `PolicyView`
+and in `ReleasePolicy.summary` is now "key holder", and the summary
+reads "Your one key holder" at one instead of "Any 1 of your 1".
+
+**Then the Envelopes tab became an inbox** (same morning): one compact
+row per envelope, newest first (initial, name, title, one line of
+contents, date, orange dot when unsealed), a one-line status strip
+instead of the status card (the card still shows for a claim, a release
+or a long silence), a floating brass Write button (write, or help me
+write it), the preview, the saved secrets and "Watch it happen" behind
+the ellipsis menu, and a Seal bar above the tab bar only while
+something is unsealed. `envelopesSection`, `envelopeRow`,
+`familyPreviewRow`, `helperRow`, `secretReviewRow` and `sealButton` are
+gone; `runSeal` is the one seal path.
+
+Most likely to fail to compile: `@ViewBuilder private var inbox`
+with `if let` inside; `FriendsView` as a tab (it carries its own
+`NavigationStack`, which is what a tab wants); the `.toolbarBackground`
+calls on the `TabView`.
 
 ### Phase 5: set up with my partner (UNCOMPILED)
 
