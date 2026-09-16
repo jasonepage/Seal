@@ -1,10 +1,78 @@
 # Where Seal stands
 
-**Updated:** 2026-09-16 (evening: a rule per envelope, step 2) · **Owner:** Nathan (Jason Page) · natepage67@gmail.com
+**Updated:** 2026-09-16 (night: attach a file) · **Owner:** Nathan (Jason Page) · natepage67@gmail.com
 **Repo:** `~/Documents/GitHub/Seal` · iOS 26.5+, SwiftUI, no backend
 
 New Swift files under `Seal/` join the target automatically (file system
 synced groups), so no project edits are needed to add one.
+
+## ATTACH A FILE, AND "READ IT FOR ME" (2026-09-16 night, UNCOMPILED)
+
+PRODUCT.md section 12 is the design, written and built the same evening
+on Jason's "build it, go with your gut". Not committed.
+
+**What changed.**
+
+- `MediaItem.Kind` gains `.file`; `MediaItem.fileName: String?` (nil for
+  photos, voice, video) and `fileExtension`. `Envelope.files` and
+  `Envelope.Payload.files`, both `decodeIfPresent` in the hand written
+  decoders, both in `allMedia` so the engine encrypts, uploads and
+  removes them like a photo. `contentsSummary` counts them.
+- `EstateEngine.attachMedia` takes `fileName:`; the `switch` over the
+  kind has the new case. `EstateEngines.move` carries files across.
+- `Seal/Estate/FileReading.swift` (new): `FileReader.text` (PDFKit page
+  by page with a "[page N]" line each, or plain text), `pieces` (about
+  3,000 characters, page lines kept), `steps` (the on-device model, the
+  same `OnDeviceDrafter.respond` and `houseStyle` the interview uses, up
+  to eight `ProposedStep`s), and the two `@Generable` shapes `ReadStep`
+  and `ReadSteps` behind `#if canImport(FoundationModels)`. No model on
+  the phone means no steps and no button; the file still attaches.
+- `EnvelopeEditorView`: a "Files" card after Photos (system file picker
+  via `.fileImporter`, 50 MB ceiling, security scoped read, one file at
+  a time), each file with a remove button and, when the phone can read
+  it, "Read it for me": a sheet that reads on the phone and lists the
+  proposed steps with ticks; "Add N" appends them to the envelope's
+  "what to do first" list. Nothing is written until Add.
+- `RevealView`: files show after the photos as a row; tap opens the
+  system viewer (`.quickLookPreview`), share once loaded. The owner's
+  preview gets the same through `RevealPager`.
+- Tests: `Seal/SelfTest/AttachedFileTests.swift`, registered: payload
+  round trip with names, an old payload and an old photo item decode,
+  the media list and the vault commitment include the file, extension
+  rules, piece cutting keeps page lines and the cap, plain text reading,
+  a proposed step becomes a `FirstStep` within the limits. The model is
+  not called in tests.
+- Docs: PRODUCT.md section 12 (build order amended), GOTCHAS.
+
+**Not changed:** the crypto, the machine, the record, CloudKit (a file
+is a `MediaAsset` blob like a photo), the capsule format beyond the
+additive `files` key in a payload nobody outside the recipient decodes.
+
+**Most likely to fail to compile**, in order:
+
+1. `.fileImporter(... allowedContentTypes: [.pdf, .plainText,
+   .commaSeparatedText, .json, .zip, .image, .data] ...)`: needs
+   `import UniformTypeIdentifiers` (added); if `.json` or `.zip` are not
+   `UTType` statics on this SDK, drop them, `.data` covers everything.
+2. `.quickLookPreview($previewURL)` needs `import QuickLook` (added).
+3. `@Generable struct ReadSteps { var steps: [ReadStep] }`: an array of
+   a `@Generable` type inside another. If the macro objects, flatten to
+   five optional step fields or ask for one step per call.
+4. `MediaItem` memberwise init now has a trailing defaulted `fileName`;
+   the engine builds it without it and sets it after (`var item`).
+5. `ProposedStep: Hashable` with `let id = UUID().uuidString`.
+6. In `AttachedFileTests.oldPayloadOpens`, `sha256` as `"AAAA"` (base64
+   for three zero bytes).
+
+**How to test.** Build. Open an envelope, Files, Attach, pick a PDF from
+Files or iCloud Drive. The row shows its name and size. On a phone with
+Apple Intelligence on, "Read it for me" appears: tap it, wait, tick the
+steps, Add. The steps card grows by that many, each note ending in
+"(page N)". Seal. On the recipient's phone after a release (Time
+Travel), the file row is under the photos; tap opens it; the share
+button appears once it has loaded. What your family sees (the preview)
+shows the same row. A phone without the model: attach works, no Read
+button, and the caption says only "Sealed like a photo."
 
 ## A RULE PER ENVELOPE, STEPS 1 AND 2 (2026-09-16 evening; step 1 built clean, step 2 UNCOMPILED)
 

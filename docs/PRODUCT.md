@@ -193,3 +193,82 @@ was never the numbers, it is which people, which is a judgement about a family
 that a small model running on a phone has no business having an opinion about.
 The app already says the only true thing there: pick people who will still be
 reachable in ten years.
+
+## 12. Attach a file, and what the phone can read from it
+
+**Not built. Written down 2026-09-16 so it is not reinvented, and so the
+promise below is decided before anybody writes code. Queued behind
+section 11; both ride on the same on-device model.**
+
+### The case
+
+Karen has a PDF of her life insurance policy, the deed to the house, and
+the folder of statements the bank emails her. Today she can type a
+password into a secret and a sentence into a letter. She cannot put the
+policy itself in Mike's envelope, and she cannot get from a forty page
+PDF to "call this number, quote this policy, the beneficiary is you"
+without reading it herself on a Sunday night. Most people do not.
+
+### What it is
+
+A seventh card in the editor, "Files", beside photos, voice and video.
+A file is sealed exactly like a photo: encrypted on the phone under the
+envelope's content key, one blob, listed in the recipient's key table,
+opened on their phone after the release. PDFs, images of documents, and
+plain exports (a folder of text, a zip) are all just bytes to the
+envelope. Nothing about the key hierarchy, the machine or the capsule
+changes; `MediaItem.Kind` gains a case, and every phone must run a
+current build, as with video.
+
+On top of that, and only when the phone can run Apple's on-device model
+(the same test as section 11): "Read it for me." The phone pulls the
+words out of the file (PDFKit for a PDF, the text files in an export),
+keeps a small index of them on the phone, and offers "what to do first"
+steps drawn from the file, each pointing at the page it came from. The
+owner ticks the ones that are right and edits the words. The steps go
+into the envelope's existing list. The file itself is not summarised
+into the letter; the letter stays hers.
+
+A real run of it: Karen attaches the policy PDF to Mike's envelope and
+taps "Read it for me." Ten seconds later: "Call MetLife on 1-800-... and
+quote policy 4471 (page 2). The beneficiary is Michael Page (page 3).
+Premiums are paid to March (page 7)." She keeps the first two, deletes
+the third, and seals. Mike gets the steps, the PDF, and the letter, in
+that order.
+
+### The promise, decided first
+
+**Nothing in a file leaves the phone. Not to a server, not to us, not to
+Apple's private cloud.** The reading and the index happen on the phone
+or they do not happen; with no model on this phone, the card still
+attaches the file and offers no reading. This is section 11's promise
+applied to documents, and it is the only reason a product about secrets
+can offer this at all. In the first cut no index is kept at all: the
+reading is done on demand, and its only output is the steps the owner
+ticks, which are sealed with the envelope like every other step.
+
+### What it is not
+
+- **Not a digital footprint dashboard.** "Upload your TikTok export and
+  see what they kept about you" is a different product for a different
+  customer, and it would pull Seal back toward being two ideas in one
+  app, which is the mistake the messenger was. An export can be attached
+  to an envelope like any file, and read for steps like any file, and
+  that is where it stops.
+- **Not a search across envelopes.** The index is per file, per envelope,
+  for one purpose: steps. No "ask my vault" box.
+- **Not an OCR service.** A photographed document is attached as an
+  image; the phone's own text recognition (Vision) may feed the reading
+  when it runs on the phone, and nothing else does.
+
+### Build order
+
+Built the same evening it was written (2026-09-16, uncompiled): the
+Files card and sealing (`MediaItem.Kind.file`, `Envelope.files`, the
+system file picker, the reveal's viewer and share), and "Read it for me"
+on top (`Seal/Estate/FileReading.swift`: PDFKit and plain text in,
+pieces of about 3,000 characters to the on-device model, up to eight
+proposed steps out, each ticked by the owner). A zip or an export folder
+attaches and seals but is not read yet. Jason's call to build it now
+rather than after section 11; the ordering argument above still stands
+for what to show real people first.

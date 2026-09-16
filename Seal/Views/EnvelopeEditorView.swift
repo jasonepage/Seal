@@ -4,6 +4,7 @@
 
 import SwiftUI
 import AVFoundation
+import UniformTypeIdentifiers
 
 //  EnvelopeEditorView.swift
 //  Seal
@@ -54,6 +55,12 @@ struct EnvelopeEditorView: View {
     /// envelope means "open with everything else".
     @State private var pickingDate = false
     @State private var showRule = false
+    /// Files: the system file picker, and the reader's proposed steps
+    /// for one file while the owner ticks them (FileReading.swift).
+    @State private var showFilePicker = false
+    @State private var reading: MediaItem?
+    @State private var proposedSteps: [FileReader.ProposedStep]?
+    @State private var keptSteps: Set<String> = []
     @State private var videoThumbnail: UIImage?
     @State private var confirmDelete = false
     @State private var showPreview = false
@@ -87,9 +94,12 @@ struct EnvelopeEditorView: View {
     private var hasPhotos: Bool { !envelope.photos.isEmpty }
     private var hasVoice: Bool { envelope.voiceNote != nil }
     private var hasVideo: Bool { envelope.videoNote != nil }
+    private var hasFiles: Bool { !envelope.files.isEmpty }
     /// In Karen's order.
     private var filled: [Bool] { [hasLetter, hasVoice, hasVideo, hasPhotos, hasSteps, hasSecrets] }
     private static let dotNames = ["Letter", "Voice", "Video", "Photos", "Steps", "Secrets"]
+    /// Files are the one thing a person cannot be expected to attach; the
+    /// packing line does not count them as missing.
 
     /// "A letter and 2 secrets. No voice, video, photos or steps yet."
     private var packingLine: String {
@@ -121,6 +131,7 @@ struct EnvelopeEditorView: View {
                         voiceCard
                         videoCard
                         photosCard
+                        filesCard
                         stepsCard
                         secretsCard
                         if engines != nil { whenItOpensCard }
@@ -183,6 +194,16 @@ struct EnvelopeEditorView: View {
                 FamilyPreviewView(recipientHash: envelope.recipientHash, recipientName: recipientName,
                                   ownerName: ownerName, estateEngine: estateEngine,
                                   onClose: { showPreview = false })
+                    .environment(\.parentMode, parentMode)
+                    .parentTypeScale()
+            }
+            .fileImporter(isPresented: $showFilePicker,
+                          allowedContentTypes: [.pdf, .plainText, .commaSeparatedText, .json, .zip, .image, .data],
+                          allowsMultipleSelection: false) { result in
+                attachFile(result)
+            }
+            .sheet(item: $reading) { item in
+                readSheet(item)
                     .environment(\.parentMode, parentMode)
                     .parentTypeScale()
             }
@@ -667,6 +688,163 @@ struct EnvelopeEditorView: View {
         .padding(16)
         .background(.white.opacity(has ? 0.06 : 0.035), in: RoundedRectangle(cornerRadius: 16))
         .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(has ? SealTheme.brass.opacity(0.25) : .clear, lineWidth: 1))
+    }
+
+    // MARK: - Files
+
+    static let maxFileBytes = 50 * 1024 * 1024
+
+    private var filesCard: some View {
+        card("doc.fill", "Files", filled: hasFiles,
+             action: "Attach", onAction: { showFilePicker = true }) {
+            if hasFiles {
+                VStack(spacing: 8) {
+                    ForEach(envelope.files) { item in
+                        HStack(spacing: 12) {
+                            Image(systemName: "doc").foregroundStyle(SealTheme.brass).frame(width: 22)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(item.fileName ?? "File").font(.subheadline.weight(.semibold)).foregroundStyle(.white).lineLimit(1)
+                                Text(ByteCountFormatter.string(fromByteCount: Int64(item.byteCount), countStyle: .file))
+                                    .font(.caption).foregroundStyle(.white.opacity(0.5))
+                            }
+                            Spacer()
+                            if FileReader.canRead, FileReader.isReadable(item) {
+                                Button { reading = item } label: {
+                                    Text("Read it for me").font(.caption.weight(.semibold))
+                                }
+                                .buttonStyle(.bordered).tint(SealTheme.brass)
+                                .parentTapTarget(40)
+                            }
+                            Button { envelope.files.removeAll { $0.blobID == item.blobID } } label: {
+                                Image(systemName: "xmark.circle.fill").foregroundStyle(.white.opacity(0.5))
+                            }
+                            .parentTapTarget(40)
+                            .accessibilityLabel("Remove \(item.fileName ?? "this file")")
+                        }
+                        .padding(10)
+                        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
+                    }
+                }
+                Text(FileReader.canRead
+                     ? "Sealed like a photo. \"Read it for me\" turns a PDF or a text file into steps, on this phone only; nothing in it leaves the phone."
+                     : "Sealed like a photo. Nothing in it leaves the phone.")
+                    .font(.caption).foregroundStyle(.white.opacity(0.4))
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                invitation("The insurance policy. The deed. A statement. \(recipientName) gets the file itself, sealed with the letter. Up to 50 MB each.")
+            }
+        }
+    }
+
+    private func attachFile(_ result: Result<[URL], Error>) {
+        guard case .success(let urls) = result, let url = urls.first else { return }
+        let opened = url.startAccessingSecurityScopedResource()
+        defer { if opened { url.stopAccessingSecurityScopedResource() } }
+        do {
+            let data = try Data(contentsOf: url)
+            guard data.count <= Self.maxFileBytes else {
+                error = "That file is bigger than 50 MB. Attach a smaller one."
+                return
+            }
+            estateEngine.updateEnvelope(envelope)
+            let item = try estateEngine.attachMedia(data, kind: .file, to: envelope.id, fileName: url.lastPathComponent)
+            envelope.files.append(item)
+        } catch {
+            self.error = "Could not read that file. \(error.localizedDescription)"
+        }
+    }
+
+    /// The reader's proposed steps for one file, each with a tick. Kept
+    /// steps join the envelope's own list; nothing is written until Add.
+    private func readSheet(_ item: MediaItem) -> some View {
+        NavigationStack {
+            ZStack {
+                SealTheme.ink.ignoresSafeArea()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text(item.fileName ?? "File").font(.headline).foregroundStyle(.white)
+                        if let proposedSteps {
+                            if proposedSteps.isEmpty {
+                                Text("Nothing to suggest from this file. Attach it anyway; \(recipientName) gets the whole thing.")
+                                    .font(.callout).foregroundStyle(.white.opacity(0.7))
+                                    .fixedSize(horizontal: false, vertical: true)
+                            } else {
+                                Text("Tick the steps that are right. You can change the words after.")
+                                    .font(.callout).foregroundStyle(.white.opacity(0.7))
+                                ForEach(proposedSteps) { step in
+                                    Button {
+                                        if keptSteps.contains(step.id) { keptSteps.remove(step.id) } else { keptSteps.insert(step.id) }
+                                    } label: {
+                                        HStack(alignment: .top, spacing: 12) {
+                                            Image(systemName: keptSteps.contains(step.id) ? "checkmark.circle.fill" : "circle")
+                                                .foregroundStyle(keptSteps.contains(step.id) ? SealTheme.brass : .white.opacity(0.4))
+                                                .padding(.top, 2)
+                                            VStack(alignment: .leading, spacing: 3) {
+                                                Text(step.title).font(.callout.weight(.semibold)).foregroundStyle(.white)
+                                                    .fixedSize(horizontal: false, vertical: true)
+                                                if !step.note.isEmpty || step.page > 0 {
+                                                    Text(step.asFirstStep.note).font(.caption).foregroundStyle(.white.opacity(0.6))
+                                                        .fixedSize(horizontal: false, vertical: true)
+                                                }
+                                            }
+                                            Spacer(minLength: 0)
+                                        }
+                                        .padding(12)
+                                        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
+                                        .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .parentTapTarget()
+                                }
+                            }
+                        } else {
+                            HStack(spacing: 10) {
+                                ProgressView().tint(SealTheme.brass)
+                                Text("Reading it on this phone. Nothing leaves it.")
+                                    .font(.callout).foregroundStyle(.white.opacity(0.7))
+                            }
+                        }
+                        Text("Check every number against the file before you seal. The reader copies; it does not understand.")
+                            .font(.caption).foregroundStyle(.white.opacity(0.4))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(20)
+                    .frame(maxWidth: 520)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .containerRelativeFrame(.horizontal)
+                }
+            }
+            .navigationTitle("Read it for me")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { reading = nil }.foregroundStyle(.white.opacity(0.7))
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add \(keptSteps.count)") {
+                        let chosen = (proposedSteps ?? []).filter { keptSteps.contains($0.id) }.map(\.asFirstStep)
+                        envelope.firstSteps.append(contentsOf: chosen)
+                        reading = nil
+                    }
+                    .foregroundStyle(SealTheme.brass)
+                    .disabled(keptSteps.isEmpty)
+                }
+            }
+            .task(id: item.blobID) {
+                proposedSteps = nil
+                keptSteps = []
+                guard let data = estateEngine.mediaPlaintext(item, in: envelope),
+                      let text = FileReader.text(from: data, fileExtension: item.fileExtension) else {
+                    proposedSteps = []
+                    return
+                }
+                let steps = await FileReader.steps(from: text, fileName: item.fileName ?? "the file", recipientName: recipientName)
+                proposedSteps = steps
+                keptSteps = Set(steps.map(\.id))
+            }
+        }
+        .preferredColorScheme(.dark)
     }
 
     // MARK: - When it opens

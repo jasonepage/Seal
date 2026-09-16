@@ -83,6 +83,7 @@ extension Envelope {
         if !photos.isEmpty { parts.append(photos.count == 1 ? "a photo" : "\(photos.count) photos") }
         if videoNote != nil { parts.append("a video") }
         if voiceNote != nil { parts.append("your voice") }
+        if !files.isEmpty { parts.append(files.count == 1 ? "a file" : "\(files.count) files") }
         switch parts.count {
         case 0: return "empty"
         case 1: return parts[0]

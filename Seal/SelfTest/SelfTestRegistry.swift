@@ -22,5 +22,6 @@ enum SelfTestRegistry {
             + DepartureTests.suites
             + OnboardingCopyTests.suites
             + RuleBookTests.suites
+            + AttachedFileTests.suites
     }
 }

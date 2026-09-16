@@ -186,5 +186,9 @@ once and is not now. The em dashes inside user-visible strings are gone too
   under the engine's `storeHash` and be covered by
   `RuleBook.allStoreHashes` in the wipe. The guarded estates (what this
   phone holds for others) live on the default rule's engine only.
+- **`MediaItem.Kind.file` and `Envelope.files` (2026-09-16, uncompiled)**
+  are new in the sealed payload, like video before them: a build from
+  before cannot decode a payload with a file. Every phone that opens
+  envelopes must run a current build.
 - **Demo mode seeds a sealed estate but publishes nothing.** Every engine
   method checks `DemoFixtures.isActive` and returns; the buttons are disabled.

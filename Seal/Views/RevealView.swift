@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import SwiftUI
+import QuickLook
 import AVFoundation
 
 //  RevealView.swift
@@ -85,6 +86,10 @@ struct RevealPager: View {
     /// something to hand over. Keyed by blob id.
     @State private var voiceFiles: [String: URL] = [:]
     @State private var videoData: [String: Data] = [:]
+    /// Attached files, decrypted into the temporary directory for the
+    /// system's own viewer and share sheet.
+    @State private var fileURLs: [String: URL] = [:]
+    @State private var previewURL: URL?
     @State private var showVideo: String?
     @State private var saved: String?
     @State private var copied: String?
@@ -217,6 +222,7 @@ struct RevealPager: View {
             if let voice = e.voiceNote { voiceView(voice, page: page) }
             if let video = e.videoNote { videoView(video, page: page) }
             ForEach(e.photos) { item in photoView(item, page: page) }
+            ForEach(e.files) { item in fileView(item, page: page) }
             if !e.firstSteps.isEmpty { firstStepsView(e) }
             if !e.secrets.isEmpty {
                 Text("The secrets").font(.headline).foregroundStyle(.white).padding(.top, 6)
@@ -245,8 +251,54 @@ struct RevealPager: View {
                     .parentTapTarget()
                 }
             }
-            Text("Everything above was sealed by \(ownerName)'s phone and could not be read by anyone, including Seal, until the key holders combined their keys. The letter is theirs. Photos and the video can be saved to your Photos. Check the secrets carefully before acting on them.")
+            Text("Everything above was sealed by \(ownerName)'s phone and could not be read by anyone, including Seal, until the key holders combined their keys. The letter is theirs. Photos and the video can be saved to your Photos; a file can be opened and shared. Check the secrets carefully before acting on them.")
                 .font(.caption2).foregroundStyle(.white.opacity(0.4)).fixedSize(horizontal: false, vertical: true)
+        }
+        .quickLookPreview($previewURL)
+    }
+
+    // MARK: - Files
+
+    /// Tap to open in the system viewer (Quick Look), share once the bytes
+    /// are here. The file is written to the temporary directory with full
+    /// file protection and goes nowhere unless the person shares it.
+    private func fileView(_ item: MediaItem, page: RevealPage) -> some View {
+        let name = item.fileName ?? "File"
+        return HStack(spacing: 10) {
+            Button {
+                Task {
+                    if fileURLs[item.blobID] == nil {
+                        do {
+                            let data = try await page.loadMedia(item)
+                            let ext = item.fileExtension.isEmpty ? "dat" : item.fileExtension
+                            fileURLs[item.blobID] = try MediaSaving.tempFile(data, extension: ext, name: "file-\(item.blobID)")
+                        } catch { self.error = error.localizedDescription; return }
+                    }
+                    previewURL = fileURLs[item.blobID]
+                }
+            } label: {
+                HStack(spacing: 14) {
+                    Image(systemName: "doc.fill").font(.title2).foregroundStyle(SealTheme.brass).frame(width: 32)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(name).font(.headline).foregroundStyle(.white).lineLimit(2)
+                        Text("Tap to open. \(ByteCountFormatter.string(fromByteCount: Int64(item.byteCount), countStyle: .file))")
+                            .font(.caption).foregroundStyle(.white.opacity(0.55))
+                    }
+                    Spacer()
+                }
+                .padding(16)
+                .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
+            }
+            .buttonStyle(.plain)
+            .parentTapTarget()
+            if let url = fileURLs[item.blobID] {
+                ShareLink(item: url) {
+                    Image(systemName: "square.and.arrow.up").padding(.vertical, 6).padding(.horizontal, 4)
+                }
+                .buttonStyle(.bordered).tint(SealTheme.brass)
+                .accessibilityLabel("Share \(name)")
+                .parentTapTarget()
+            }
         }
     }
 
