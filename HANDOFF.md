@@ -157,6 +157,31 @@ heading and a button with its paragraphs behind "What it does". Verified by
 reading `ProfileView.swift` and `BackupKeysView.swift` on 2026-09-16, not on
 a phone.
 
+## Pricing: decided 2026-09-16, not built
+
+**$29.99, one time, charged on the first seal.** Decided by Nathan on
+2026-09-16 after the first Production seal. The reasoning, so it is not
+reopened by accident:
+
+- The app stays free to install. Key holders and recipients did not choose
+  Seal; the owner did. They must never see a price.
+- The owner pays once, at the first tap of "Seal the envelopes". Writing,
+  meeting people and holding a key are free. Re-sealing after a change is
+  free forever: a person who has to pay to fix a typo in a letter to their
+  daughter does not fix it.
+- One time, never a subscription. `site/index.html` already says "no
+  subscription", and a sealed estate that could break because a card
+  expired would be a product that lies.
+- Not built until the release story has been walked on Production by two
+  phones (claim, keys, open). Nobody pays for the part that has not been
+  proven. Built BEFORE the first outside tester, because the first person
+  who seals for free is the person you can never charge.
+
+The build, when it happens: StoreKit 2, one non-consumable product, a
+paywall on `runSeal` when the estate has never sealed, restore purchases on
+the You screen, demo mode never asks, and the App Store Connect product plus
+a review screenshot. About a day.
+
 ## Ideas that are written down, not built
 
 - **The interview that fixes the blank page.** [docs/PRODUCT.md](docs/PRODUCT.md)
