@@ -79,11 +79,17 @@ struct FamilyPreviewPicker: View {
 
     @State private var chosen: Recipient?
 
-    private var people: [(recipient: Recipient, count: Int)] {
+    private struct Row: Identifiable {
+        let recipient: Recipient
+        let count: Int
+        var id: String { recipient.id }
+    }
+
+    private var people: [Row] {
         guard let estate = estateEngine.estate else { return [] }
         return estate.recipients
-            .map { ($0, estate.envelopes(for: $0.rootHash).count) }
-            .filter { $0.1 > 0 }
+            .map { Row(recipient: $0, count: estate.envelopes(for: $0.rootHash).count) }
+            .filter { $0.count > 0 }
     }
 
     var body: some View {
@@ -99,7 +105,7 @@ struct FamilyPreviewPicker: View {
                             Text("Nobody has an envelope yet. Write one first.")
                                 .font(.callout).foregroundStyle(.white.opacity(0.5))
                         }
-                        ForEach(people, id: \.recipient.id) { item in
+                        ForEach(people) { item in
                             Button { chosen = item.recipient } label: {
                                 HStack(spacing: 14) {
                                     Image(systemName: "person.fill").foregroundStyle(.white.opacity(0.7)).frame(width: 28)
