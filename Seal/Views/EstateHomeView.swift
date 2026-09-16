@@ -98,6 +98,15 @@ struct EstateHomeView: View {
                             ownHeading
                             envelopesSection
                             custodiansSection
+                        } else if inSetup {
+                            // ONE card until the first seal. The sections
+                            // appear underneath only once they hold
+                            // something, so nothing on this screen is an
+                            // empty box with a paragraph in it.
+                            setupCard
+                            if let estate, !estate.envelopes.isEmpty { envelopesSection }
+                            if let estate, !estate.custodians.isEmpty { custodiansSection }
+                            guardedSection
                         } else {
                             statusCard
                             envelopesSection
@@ -246,12 +255,180 @@ struct EstateHomeView: View {
     /// nothing at all.
     private var unsealedLine: String? {
         guard let estate, estate.hasUnsealedChanges else { return nil }
-        let drafts = estate.envelopes.filter { !$0.sealed }.count
+        // addressedEnvelopes: one written to a typed name cannot be sealed
+        // yet, so counting it here would tell somebody to tap a button that
+        // does nothing for it.
+        let drafts = estate.addressedEnvelopes.filter { !$0.sealed }.count
         if drafts > 0 {
             let subject = drafts == 1 ? "1 envelope is" : "\(drafts) envelopes are"
             return "\(subject) only on this phone. Until you seal them they cannot open for anyone, ever. Tap Seal the envelopes below."
         }
         return "Your rule or your key holders changed since you last sealed. Seal again to give your key holders fresh shares. Your envelopes themselves are not touched."
+    }
+
+    // MARK: - The first run
+
+    /// The four things that have to happen, in the order they happen.
+    private enum SetupStep: Int, CaseIterable, Identifiable {
+        case envelope, keyHolders, rule, seal
+        var id: Int { rawValue }
+    }
+
+    /// True until the first successful seal. While this holds, the home
+    /// screen is ONE card.
+    private var inSetup: Bool { !(estate?.epochPublished ?? false) }
+
+    private func isDone(_ step: SetupStep) -> Bool {
+        guard let estate else { return false }
+        switch step {
+        case .envelope: return !estate.envelopes.isEmpty
+        case .keyHolders: return !estate.custodians.isEmpty
+        case .rule: return estate.isReadyToSeal
+        case .seal: return estate.epochPublished
+        }
+    }
+
+    private var firstUndone: SetupStep? {
+        SetupStep.allCases.first { !isDone($0) }
+    }
+
+    private func stepTitle(_ step: SetupStep) -> String {
+        switch step {
+        case .envelope: "Write your first envelope"
+        case .keyHolders: "Choose who can open them"
+        case .rule: "Set your rule"
+        case .seal: "Seal it"
+        }
+    }
+
+    /// Only the step somebody is actually on gets a second line. Four
+    /// explanations at once is the wall this card exists to replace.
+    private func stepDetail(_ step: SetupStep) -> String {
+        switch step {
+        case .envelope:
+            return "A letter, a few photos, and the secrets. You do not need anybody else to start. Type a name and write tonight."
+        case .keyHolders:
+            return "People you meet in person and trust to act together after you are gone. Open People, add them, then make them key holders."
+        case .rule:
+            if let estate, !estate.custodians.isEmpty {
+                let p = estate.policy
+                return "Right now: any \(p.threshold) of \(estate.custodians.count), after \(p.silenceDays) days of silence and \(p.warningDays) days of warnings. Tap to change it."
+            }
+            return "How long the silence has to be, how many warnings you get, and how many of them it takes."
+        case .seal:
+            return "Everything is encrypted on this phone and published. Nobody can open an envelope early."
+        }
+    }
+
+    private func perform(_ step: SetupStep) {
+        switch step {
+        case .envelope:
+            pickerMode = .blank
+            showRecipientPicker = true
+        case .keyHolders:
+            showPeople = true
+        case .rule:
+            showPolicy = true
+        case .seal:
+            // Nothing to seal until there are key holders and a valid rule,
+            // and the row above says so. Send them there rather than firing
+            // a seal that throws.
+            if estate?.isReadyToSeal == true { runSeal() } else { showPeople = true }
+        }
+    }
+
+    /// ONE card, instead of a paragraph over four empty containers.
+    ///
+    /// What a fresh install used to render: a status card explaining the
+    /// product, an empty envelopes section, an empty key holders section, an
+    /// empty guarded section, and a footer. Five containers, four of them
+    /// with nothing in them, and no answer anywhere to the only question a
+    /// new person has, which is what to do next.
+    private var setupCard: some View {
+        let current = firstUndone
+        let done = SetupStep.allCases.filter { isDone($0) }.count
+        return VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .center, spacing: 14) {
+                // Pewter. Nothing is sealed yet, so there is no trust moment
+                // to spend brass on.
+                SealMark(size: 44, trust: false, pressOnAppear: true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Sealed envelopes")
+                        .font(.system(.title2, design: .rounded, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("\(done) of 4 done")
+                        .font(.caption).foregroundStyle(.white.opacity(0.5))
+                }
+            }
+
+            Text("Sealed envelopes for the people you leave behind. Nobody, including us, can open one early. It takes an evening.")
+                .font(.callout).foregroundStyle(.white.opacity(0.7))
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(spacing: 8) {
+                ForEach(SetupStep.allCases) { step in
+                    Button { perform(step) } label: {
+                        setupRow(step, isCurrent: step == current)
+                    }
+                    .buttonStyle(.plain)
+                    .parentTapTarget()
+                }
+            }
+
+            Button {
+                explain = ExplainRequest(role: .sealer, numbers: numbersForMyEstate)
+            } label: {
+                Label("Watch it happen", systemImage: "play.circle")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(SealSecondaryButtonStyle())
+            .parentTapTarget()
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 20))
+        .padding(.horizontal, 20)
+    }
+
+    private func setupRow(_ step: SetupStep, isCurrent: Bool) -> some View {
+        let done = isDone(step)
+        return HStack(alignment: .top, spacing: 12) {
+            Image(systemName: done ? "checkmark.circle.fill" : "circle")
+                .font(.title3)
+                // Brass on the last step only when it is the one to tap: that
+                // tap is the trust moment of the whole product.
+                .foregroundStyle(done ? SealTheme.brass
+                                 : (isCurrent && step == .seal ? SealTheme.brass : .white.opacity(0.35)))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(stepTitle(step))
+                    .font(.headline)
+                    .foregroundStyle(done ? .white.opacity(0.5) : .white)
+                    .strikethrough(done, color: .white.opacity(0.35))
+                    .fixedSize(horizontal: false, vertical: true)
+                if isCurrent {
+                    Text(stepDetail(step))
+                        .font(.caption).foregroundStyle(.white.opacity(0.6))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: 0)
+            if !done {
+                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.white.opacity(0.3))
+            }
+        }
+        .padding(14)
+        .background((isCurrent ? Color.white.opacity(0.07) : Color.clear),
+                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .contentShape(Rectangle())
+    }
+
+    /// This owner's real rule, for the explainer. Falls back to the defaults
+    /// before there is anything real to show.
+    private var numbersForMyEstate: OnboardingNumbers {
+        guard let estate, !estate.custodians.isEmpty else { return .defaults }
+        return OnboardingNumbers(policy: estate.policy, custodianCount: estate.custodians.count)
     }
 
     private var statusCard: some View {
@@ -294,6 +471,19 @@ struct EstateHomeView: View {
                 if let last = snapshot?.lastHeartbeatAt {
                     Text("You last checked in \(last.formatted(.relative(presentation: .named))). Opening Seal is the check-in. If you go quiet for \(estate?.policy.silenceDays ?? 90) days, your custodians can start the process, and you get warned for weeks before anything opens.")
                 }
+                // The explainer was reachable only from a key holder's or a
+                // recipient's card, so the one person who set the whole thing
+                // up could not watch their own rule run. Their numbers, their
+                // path.
+                Button {
+                    explain = ExplainRequest(role: .sealer, numbers: numbersForMyEstate)
+                } label: {
+                    Label("Watch it happen", systemImage: "play.circle")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(SealSecondaryButtonStyle())
+                .parentTapTarget()
+                .padding(.top, 4)
                 if state == .cancelled {
                     Text("A claim was stopped when you checked in. Your custodians can see that.")
                         .foregroundStyle(.orange.opacity(0.9))
@@ -462,19 +652,26 @@ struct EstateHomeView: View {
         .padding(.horizontal, 20)
     }
 
+    /// One seal path, shared by the Seal button and the setup card's last
+    /// step, so the two can never drift into doing different things.
+    private func runSeal() {
+        guard !sealing, !DemoFixtures.isActive else { return }
+        sealing = true
+        Task {
+            defer { sealing = false }
+            do {
+                try await estateEngine.sealAndPublish()
+                sealedOK = true
+            } catch {
+                sealError = error.localizedDescription
+            }
+        }
+    }
+
     private func sealButton(_ estate: Estate) -> some View {
         VStack(spacing: 8) {
             Button {
-                sealing = true
-                Task {
-                    defer { sealing = false }
-                    do {
-                        try await estateEngine.sealAndPublish()
-                        sealedOK = true
-                    } catch {
-                        sealError = error.localizedDescription
-                    }
-                }
+                runSeal()
             } label: {
                 HStack {
                     if sealing { ProgressView().tint(SealTheme.ink) }
