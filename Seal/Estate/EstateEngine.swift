@@ -213,6 +213,22 @@ final class EstateEngine {
         e.custodians.append(Custodian(rootHash: friend.credentialIDHash, displayName: friend.displayName,
                                       addedAt: clock.now, handoverReceiptID: receiptID))
         if e.policy.threshold > e.custodians.count { e.policy.threshold = e.custodians.count }
+        // SAFE DEFAULT AT THE MOMENT IT BECOMES A CHOICE. Estate.new starts
+        // at a threshold of 1 because with no key holders there is nothing
+        // else it could be, and the clamp above only ever lowers it. So an
+        // owner who added three people and never opened the rule screen had
+        // "any 1 of 3": each of them able to release the whole estate alone,
+        // while PRODUCT.md's story, the onboarding and every figure say two
+        // of three.
+        //
+        // One of one is forced and stays. The second key holder is the first
+        // moment the threshold is a decision rather than the only option, so
+        // that is where the default moves to two. It fires ONLY on that
+        // transition, so an owner who then deliberately sets one of two and
+        // adds a third keeps their choice.
+        if e.custodians.count == 2 && e.policy.threshold == 1 {
+            e.policy.threshold = 2
+        }
         estate = e; saveEstate(); recomputeAll()
     }
 

@@ -57,10 +57,16 @@ struct GuardedRoleCard<Details: View>: View {
             lines.append("You can open them when the time comes. Nobody can open them early. Not Apple, not us, not anyone holding a key.")
         }
         if guarded.isCustodian {
-            let who = numbers.exact
-                ? "You are one of \(numbers.custodianCount) key holders, and it takes any \(numbers.threshold) together."
-                : "You are one of several key holders, and it takes more than one key."
-            lines.append("You cannot open anything with your key, and neither can anyone else with one. \(who) Your job is to keep this app installed and to still be findable in ten years.")
+            // Same check as HandoverDoneView: at a threshold of 1 the
+            // reassuring sentence is the untrue one.
+            if numbers.oneIsEnough {
+                lines.append("\(name) chose a rule that needs only one person, so your key alone can open everything once the silence and the warnings have run their course. Nothing opens before that. Your job is to keep this app installed and to still be findable in ten years.")
+            } else {
+                let who = numbers.exact
+                    ? "You are one of \(numbers.custodianCount) key holders, and it takes \(numbers.threshold) of you together."
+                    : "You are one of several key holders, and it takes more than one key."
+                lines.append("You cannot open anything with your key, and neither can anyone else with one. \(who) Your job is to keep this app installed and to still be findable in ten years.")
+            }
         }
         return lines.joined(separator: " ")
     }
@@ -263,8 +269,17 @@ struct HandoverDoneView: View {
                         Text("\(custodianName), three things to know")
                             .font(.headline)
                             .foregroundStyle(.white)
-                        bullet("You cannot open anything with this key. Nobody can with one key. It takes any \(numbers.threshold) of \(ownerName)'s \(numbers.custodianCount).")
-                        bullet("Put it somewhere you can still find in ten years. Then keep Seal on your phone.")
+                        // The first bullet CHECKS THE RULE before it
+                        // reassures anybody. At a threshold of 1 the usual
+                        // sentence is false, and false in the worst
+                        // direction: it tells this person they are powerless
+                        // while handing them sole control of the estate.
+                        if numbers.oneIsEnough {
+                            bullet("\(ownerName) chose a rule that needs only one person, so your key alone can open everything, once they have been quiet for \(numbers.silenceDays) days and all the warnings have run. Nobody can open anything before that.")
+                        } else {
+                            bullet("You cannot open anything with this key, and neither can anyone else holding one. It takes \(numbers.threshold) of \(ownerName)'s \(numbers.custodianCount) key holders, acting together.")
+                        }
+                        bullet("Keep Seal on this phone, and sign in again if you get a new one. That is the whole job, and it may be years before anyone needs you.")
                         bullet("If \(ownerName) goes quiet for \(numbers.silenceDays) days, this app tells you. Until then there is nothing to do.")
                     }
                     .padding(18)

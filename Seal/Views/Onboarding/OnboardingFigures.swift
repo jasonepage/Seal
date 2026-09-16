@@ -72,9 +72,28 @@ struct OnboardingNumbers: Hashable {
 
     var totalDays: Int { silenceDays + warningDays + graceDays }
 
-    /// "any 2 of 3" or, when not known for sure, "usually any 2 of 3".
+    /// TRUE WHEN ONE KEY HOLDER ALONE CAN RELEASE THE ESTATE.
+    ///
+    /// Every screen in this app promises a key holder that their key opens
+    /// nothing on its own. At a threshold of 1 that promise is FALSE, and it
+    /// is false in the most dangerous direction: it tells somebody they are
+    /// powerless while handing them sole control of the whole vault.
+    ///
+    /// A threshold of 1 is not a mistake and not always avoidable. With
+    /// exactly one key holder it is the only rule there is. So this is not a
+    /// thing to prevent, it is a thing every piece of copy has to check
+    /// before it reassures anybody.
+    var oneIsEnough: Bool { threshold <= 1 }
+
+    /// How many key holders there are besides the one being spoken to.
+    var others: Int { max(0, custodianCount - 1) }
+
+    /// "any 2 of 3", or "on their own" when one key holder is enough, or
+    /// "usually any 2 of 3" when these are defaults rather than a real rule.
+    /// Never "any 1 of 1", which is both untrue in spirit and not English.
     var anyMofN: String {
-        exact ? "any \(threshold) of \(custodianCount)" : "usually any \(threshold) of \(custodianCount)"
+        if oneIsEnough { return custodianCount <= 1 ? "the one key holder" : "any one key holder" }
+        return exact ? "any \(threshold) of \(custodianCount)" : "usually any \(threshold) of \(custodianCount)"
     }
 }
 
@@ -385,12 +404,14 @@ struct KeysTurningFigure: View {
     private var threshold: Int { numbers.threshold }
 
     private var caption: String {
-        if turned == 0 { return "\(count) keys were handed out." }
+        if turned == 0 {
+            return count == 1 ? "One key was handed out." : "\(count) keys were handed out."
+        }
         if turned < threshold {
             return "\(turned) \(turned == 1 ? "key" : "keys") turned. Still closed."
         }
         let spare = count - threshold
-        let base = "\(threshold) keys turned. Open."
+        let base = threshold == 1 ? "One key turned. Open." : "\(threshold) keys turned. Open."
         if spare == 0 { return base }
         return base + (spare == 1 ? " The other key was not needed." : " The other \(spare) keys were not needed.")
     }
@@ -503,8 +524,12 @@ struct ShamirCurveFigure: View {
 
     private var threshold: Int { numbers.threshold }
     private var count: Int { max(numbers.custodianCount, threshold) }
-    private var degree: Int { max(1, threshold - 1) }
-    private var shapeWord: String { degree == 1 ? "line" : "curve" }
+    /// A degree of 0 is correct and reachable: one key holder, threshold 1,
+    /// one point, a flat line. Flooring this at 1 drew a sloped line that
+    /// one point cannot fix, so the brass secret dot floated off the line it
+    /// was supposed to sit on.
+    private var degree: Int { max(0, threshold - 1) }
+    private var shapeWord: String { degree <= 1 ? "line" : "curve" }
 
     /// The x of each key holder's point, spread across the width.
     private var xs: [Double] {
@@ -556,6 +581,9 @@ struct ShamirCurveFigure: View {
         if revealed < threshold {
             let have = revealed == 1 ? "One point" : "\(revealed) points"
             return "\(have). The \(shapeWord) could be any of these. Nothing is learned."
+        }
+        if threshold == 1 {
+            return "One point fixes this \(shapeWord), because the rule needs only one key holder."
         }
         return "\(threshold) points fix the \(shapeWord). Where it meets the edge is the secret."
     }

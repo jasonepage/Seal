@@ -118,8 +118,12 @@ enum OnboardingScript {
                     figure: .timeline(.ownerStops)),
                 OnboardingScreen(
                     id: "s.keys",
-                    title: "Any \(n.threshold) of your \(n.custodianCount) keys open the envelopes.",
-                    body: "You hand a security key to \(n.custodianCount) people you trust, in person. After all the warnings pass, any \(n.threshold) of them tap their keys. Their phones combine the pieces. Then, and only then, the envelopes open on the phones of the people you wrote them for.",
+                    title: n.oneIsEnough
+                        ? "Your key holder opens the envelopes."
+                        : "Any \(n.threshold) of your \(n.custodianCount) keys open the envelopes.",
+                    body: n.oneIsEnough
+                        ? "You choose \(n.custodianCount == 1 ? "one person" : "people") you trust, in person. After all the warnings pass, \(n.anyMofN) taps. Then, and only then, the envelopes open on the phones of the people you wrote them for. Your rule needs only one person right now, so that person can act alone. You can change that on the rule screen."
+                        : "You choose \(n.custodianCount) people you trust, in person. After all the warnings pass, any \(n.threshold) of them tap. Their phones combine the pieces. Then, and only then, the envelopes open on the phones of the people you wrote them for.",
                     figure: .keys),
                 OnboardingScreen(
                     id: "s.curve",
@@ -143,15 +147,23 @@ enum OnboardingScript {
             return [
                 OnboardingScreen(
                     id: "k.nothing",
-                    title: "You cannot open anything. Nobody can.",
-                    body: "Your key holds one piece of a puzzle. One piece alone is no clue at all, not even a hint. That is arithmetic, not a promise. It is why the person who trusted you could hand you the key without a second thought.",
+                    title: n.oneIsEnough
+                        ? "Nothing opens until the countdown ends."
+                        : "You cannot open anything. Nobody can.",
+                    body: n.oneIsEnough
+                        ? "Until the person who asked you has gone quiet for a long time and every warning has run, nothing opens for anybody, including you. One tap from them stops it at any point. After all of that, their rule lets you act on your own."
+                        : "Your key holds one piece of a puzzle. One piece alone is no clue at all, not even a hint. That is arithmetic, not a promise. It is why the person who trusted you could ask you without a second thought.",
                     figure: .curve),
                 OnboardingScreen(
                     id: "k.several",
-                    title: "You are one of several.",
-                    body: n.exact
-                        ? "The person who gave you the key gave keys to \(n.custodianCount - 1) other \(n.custodianCount - 1 == 1 ? "person" : "people") too. It takes any \(n.threshold) of the \(n.custodianCount) keys, tapped together, to open anything. Your key alone does nothing, and that is the point."
-                        : "The person who gave you the key gave keys to a few other people too. It takes more than one key to open anything, \(n.anyMofN). Your key alone does nothing, and that is the point.",
+                    title: n.oneIsEnough ? "You are the only one." : "You are one of several.",
+                    // At a threshold of 1 this screen must not say "your key
+                    // alone does nothing". It does everything.
+                    body: n.oneIsEnough
+                        ? "The rule they chose needs only one person, and that person is you. Once they have gone quiet and every warning has run, your tap alone opens the envelopes for the people they were written for. Nothing opens before that, and one tap from them stops all of it at any point."
+                        : (n.exact
+                           ? "They asked \(n.others) other \(n.others == 1 ? "person" : "people") too. It takes \(n.threshold) of the \(n.custodianCount), acting together, to open anything. Your key alone does nothing, and that is the point."
+                           : "They asked a few other people too. It takes more than one key to open anything, \(n.anyMofN). Your key alone does nothing, and that is the point."),
                     figure: .keys),
                 OnboardingScreen(
                     id: "k.quiet",
@@ -174,7 +186,7 @@ enum OnboardingScript {
                 OnboardingScreen(
                     id: "r.opens",
                     title: "How it opens.",
-                    body: "The person who wrote it opens Seal now and then. If they go quiet for \(n.silenceDays) days, their key holders may start a claim. They are warned for \(n.warningDays) days, then \(n.graceDays) quiet days pass, and if they are alive one tap stops it. After all of that, \(n.anyMofN) key holders tap their keys, and the envelope opens here.",
+                    body: "The person who wrote it opens Seal now and then. If they go quiet for \(n.silenceDays) days, their key holders may start a claim. They are warned for \(n.warningDays) days, then \(n.graceDays) quiet days pass, and if they are alive one tap stops it. After all of that, \(n.anyMofN) taps, and the envelope opens here.",
                     figure: .timeline(.keysCanTap)),
                 OnboardingScreen(
                     id: "r.job",
