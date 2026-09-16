@@ -38,6 +38,8 @@ struct ProfileView: View {
     @State private var cardLockOn = false
     @State private var showHowTo = false
     @State private var timestampsOn = false
+    @State private var restored = false
+    @Environment(SealPurchase.self) private var purchase
 
     /// Live name, reflects an in-session rename immediately (myRoot is a
     /// passed-in copy that only refreshes when the parent re-renders).
@@ -378,6 +380,28 @@ struct ProfileView: View {
 
     @ViewBuilder
     private var accountSection: some View {
+        // Restore purchases (App Review 3.1.1). One line, no card: the person
+        // who needs it has a new phone and an old receipt, and the sentence
+        // says exactly that.
+        Button {
+            Task { await purchase.restore(); restored = true }
+        } label: {
+            Text(purchase.isUnlocked ? "Your seal is paid for" : "Restore a seal you paid for")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .tint(.white)
+        .disabled(purchase.isUnlocked)
+        .padding(.horizontal, 24)
+        .padding(.top, 16)
+        .alert("Restore", isPresented: $restored) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(purchase.isUnlocked
+                 ? "Found it. Your seal is paid for on this Apple ID."
+                 : (purchase.loadError ?? "No seal purchase was found on this Apple ID. If you paid with a different Apple ID, sign in to the App Store with that one and try again."))
+        }
+
         Button(role: .destructive) { confirmReset = true } label: {
             Text("Sign out")
                 .frame(maxWidth: .infinity)

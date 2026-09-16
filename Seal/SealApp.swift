@@ -57,6 +57,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 @main
 struct SealApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    /// The one in-app purchase, alive for the whole app so the entitlement
+    /// check happens once at launch and the transaction listener never
+    /// goes away. Read with @Environment(SealPurchase.self).
+    @State private var purchase = SealPurchase()
 
     init() {
         // FR-22: must run before ContentView creates the stores.
@@ -70,6 +74,8 @@ struct SealApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environment(purchase)
+                .task { await purchase.refresh() }
         }
     }
 }

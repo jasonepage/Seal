@@ -54,6 +54,8 @@ struct EstateHomeView: View {
     @State private var sealedOK = false
     @State private var showTimeTravel = false
     @State private var showFamilyPreview = false
+    @State private var showPaywall = false
+    @Environment(SealPurchase.self) private var purchase
     @State private var explain: ExplainRequest?
     @Environment(\.parentMode) private var parentMode
 
@@ -166,6 +168,21 @@ struct EstateHomeView: View {
                             onClose: { showPeople = false })
                     .environment(\.parentMode, parentMode)
                     .parentTypeScale()
+            }
+            .sheet(isPresented: $showPaywall) {
+                SealPaywallView(purchase: purchase,
+                                onUnlocked: {
+                                    showPaywall = false
+                                },
+                                onClose: { showPaywall = false })
+                    .environment(\.parentMode, parentMode)
+                    .parentTypeScale()
+            }
+            .onChange(of: showPaywall) { was, now in
+                // The sheet closed after a purchase: go straight on to the
+                // seal the person was in the middle of. Presented from the
+                // dismissal, not from inside the sheet, for the usual reason.
+                if was, !now, purchase.isUnlocked, let estate, !estate.epochPublished { runSeal() }
             }
             .sheet(isPresented: $showFamilyPreview) {
                 FamilyPreviewPicker(ownerName: myRoot.displayName, estateEngine: estateEngine,
@@ -762,8 +779,17 @@ struct EstateHomeView: View {
 
     /// One seal path, shared by the Seal button and the setup card's last
     /// step, so the two can never drift into doing different things.
+    ///
+    /// The paywall sits here and nowhere else. It asks on the FIRST seal
+    /// only: an estate that has published an epoch already paid (or sealed
+    /// before there was a price, which is the same thing to us). Demo mode
+    /// never asks. Re-sealing after a change never asks.
     private func runSeal() {
         guard !sealing, !DemoFixtures.isActive else { return }
+        if let estate, !estate.epochPublished, !purchase.isUnlocked {
+            showPaywall = true
+            return
+        }
         sealing = true
         Task {
             defer { sealing = false }
