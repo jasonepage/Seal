@@ -69,6 +69,11 @@ final class EstateEngine {
     /// record or the directory is concerned.
     let storeHash: String
 
+    /// When this phone first saw each event (FirstSeen.swift, REVIEW.md
+    /// finding 1). The feed's time for a claim or a tap is never earlier
+    /// than this phone's own first sight of it.
+    private var firstSeen = FirstSeen()
+
     init(ownerHash: String, identity: IdentityManager, sync: SyncEngine, clock: Clock = Clocks.current, slot: RuleSlot = .main) {
         self.ownerHash = ownerHash
         self.identity = identity
@@ -81,7 +86,25 @@ final class EstateEngine {
         let logs = EstateLogStore.load(ownerHash: storeHash)
         if let estate { ownerEvents = logs[estate.id] ?? [] }
         for g in guarded { guardedEvents[g.estateID] = logs[g.estateID] ?? [] }
+        if let saved = FirstSeenStore.load(ownerHash: storeHash) {
+            firstSeen = saved
+        } else {
+            // First run with the table: everything already here is trusted
+            // at its own time, once, so an upgrade does not restart a claim
+            // everyone had already been warned about.
+            firstSeen.seed(ownerEvents + guardedEvents.values.flatMap { $0 })
+            FirstSeenStore.save(firstSeen, ownerHash: storeHash)
+        }
         recomputeAll()
+    }
+
+    /// Records the moment this phone first held these events, and prunes
+    /// ids no log holds any more. Called after every merge.
+    private func noteSeen(_ events: [EstateEvent], at seenAt: Date) {
+        guard firstSeen.note(events, at: seenAt) else { return }
+        let live = Set((ownerEvents + guardedEvents.values.flatMap { $0 }).map(\.id))
+        firstSeen.keep(only: live)
+        FirstSeenStore.save(firstSeen, ownerHash: storeHash)
     }
 
     enum EngineError: LocalizedError {
@@ -131,7 +154,8 @@ final class EstateEngine {
     private func recomputeAll() {
         if let estate {
             ownerSnapshot = ReleaseFeed.snapshot(events: ownerEvents, ownerHash: ownerHash,
-                                                 fallbackPolicy: estate.policy, estateCreatedAt: estate.createdAt)
+                                                 fallbackPolicy: estate.policy, estateCreatedAt: estate.createdAt,
+                                                 timeOf: firstSeen.timeOf)
         }
         for g in guarded {
             // No events yet means nothing to reason about: leave the snapshot
@@ -144,7 +168,8 @@ final class EstateEngine {
             guardedSnapshots[g.estateID] = ReleaseFeed.snapshot(events: events,
                                                                 ownerHash: g.ownerHash,
                                                                 fallbackPolicy: policy,
-                                                                estateCreatedAt: .distantPast)
+                                                                estateCreatedAt: .distantPast,
+                                                                timeOf: firstSeen.timeOf)
         }
         NotificationCenter.default.post(name: Self.changed, object: nil)
     }
@@ -234,6 +259,8 @@ final class EstateEngine {
         } else {
             guardedEvents[estateID] = EstateLogStore.merged(guardedEvents[estateID] ?? [], [event])
         }
+        // This phone wrote it: first seen at its own time, no clamp.
+        noteSeen([event], at: event.occurredAt)
         saveLogs()
         recomputeAll()
         let stampable: Set<EstateEvent.Kind> = [.heartbeat, .cancellation, .releaseClaimed, .authorization, .released, .epochPublished]
@@ -363,6 +390,31 @@ final class EstateEngine {
         estate = e; saveEstate(); recomputeAll()
     }
 
+    /// After a release, the only way forward (REVIEW.md finding 2): a
+    /// fresh estate with a new id, new table keys and a new record, the
+    /// rule and the people carried across, the envelopes not. The old
+    /// record stays where it is in the directory; this phone stops
+    /// keeping it. Export a capsule first if you want the old record.
+    func startNewSet() {
+        guard let old = estate else { return }
+        var fresh = Estate.new(ownerHash: ownerHash, now: clock.now)
+        fresh.policy = old.policy
+        fresh.custodians = old.custodians
+        fresh.recipients = old.recipients
+        for envelope in old.envelopes {
+            for blob in envelope.allMedia.map(\.blobID) {
+                try? FileManager.default.removeItem(at: EstateMediaStore.directory(ownerHash: storeHash).appendingPathComponent(blob))
+            }
+        }
+        estate = fresh
+        ownerEvents = []
+        ownerSnapshot = nil
+        custodiansWithNewPhones = []
+        saveEstate()
+        saveLogs()
+        recomputeAll()
+    }
+
     /// An envelope prepared by a move from another rule (EstateEngines.move):
     /// a fresh id and content key, the words carried over, the media
     /// re-attached by the caller. The recipient comes along if this rule
@@ -482,6 +534,13 @@ final class EstateEngine {
     /// step is idempotent and the estate records what has been done.
     func sealAndPublish() async throws {
         guard var e = estate else { throw EngineError.noEstate }
+        // REVIEW.md finding 2: once the Estate Key is out, a recipient who
+        // opened their table holds its key, and anything sealed into the
+        // same table afterwards is theirs to read at once. So a released
+        // set never seals again; the owner starts a new set.
+        guard ownerSnapshot?.releasedAt == nil else {
+            throw EngineError.notAllowed("These envelopes have been released and cannot be sealed again. Start a new set.")
+        }
         guard let mine = identity.kemPrivateBundle else { throw EngineError.noDeviceKey }
         try e.policy.validate(custodianCount: e.custodians.count)
         isWorking = true
@@ -780,6 +839,7 @@ final class EstateEngine {
                                                       custodianHashes: Set(e.custodians.map(\.rootHash)),
                                                       directory: directory)
             ownerEvents = EstateLogStore.merged(ownerEvents, admitted)
+            noteSeen(admitted, at: clock.now)
             saveLogs()
             recomputeAll()
         } catch {
@@ -857,6 +917,7 @@ final class EstateEngine {
             let admitted = EstateLogVerifier.admitted(fetched, ownerHash: g.ownerHash,
                                                       custodianHashes: custodianHashes, directory: directory)
             guardedEvents[g.estateID] = EstateLogStore.merged(guardedEvents[g.estateID] ?? [], admitted)
+            noteSeen(admitted, at: clock.now)
             guarded[i] = g
             saveGuarded()
             saveLogs()

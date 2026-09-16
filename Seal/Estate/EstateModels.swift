@@ -530,5 +530,6 @@ enum EstateStore {
         KeychainStore.delete(key(ownerHash))
         EstateLogStore.wipe(ownerHash: ownerHash)
         CustodianVault.wipe(ownerHash: ownerHash)
+        FirstSeenStore.wipe(ownerHash: ownerHash)
     }
 }

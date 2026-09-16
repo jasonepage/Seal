@@ -65,6 +65,22 @@ from the outside.
   pinned key or the live record's key. Before, anybody could create one for
   anybody. Markers written by older builds count only on the phone that
   wrote them, or where the live record's tier was flipped.
+- **An unsigned delete marker counts on a phone that knows no key.**
+  `TombstoneProof.markerCounts` returns true when there is no pinned key
+  and no live record to check against. Only a phone with no relationship
+  to that identity is affected, on purpose; it is a footnote, not a hole
+  (REVIEW.md finding 3).
+- **A claim is never older than the day this phone saw it (2026-09-16,
+  uncompiled).** `FirstSeen.swift`: the feed's time for a claim or a tap
+  is `max(token or claimed time, first seen here)`, so a key holder
+  cannot backdate a claim to skip the warnings. Heartbeats are not
+  clamped. The table lives under the engine's store hash and is seeded
+  once from what was already on the phone.
+- **A released set never seals again.** `sealAndPublish` refuses once
+  the owner's snapshot has `releasedAt`; "Start a new set of envelopes"
+  on the released card makes a fresh estate with the rule and people
+  carried across. Before this, new envelopes for a recipient who had
+  already opened their table were readable by them at once.
 - **A deleted owner's record used to freeze on key holders' phones.** The
   delete scrubbed the device endorsements, so nothing the owner ever signed
   could be checked again. It no longer scrubs them. Owners deleted before

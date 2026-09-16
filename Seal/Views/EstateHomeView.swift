@@ -46,6 +46,9 @@ struct EstateHomeView: View {
     @State private var editing: EnvelopeRef?
     /// "Your rules" from the inbox menu: the rule sheet with no envelope.
     @State private var showRules = false
+    /// After a release: the confirmation before a fresh set replaces the
+    /// released one on this phone.
+    @State private var startingNewSet: EngineRef?
     /// Picking a person met in person to hold a key, then which rule when
     /// there is more than one.
     @State private var showAddKeyHolder = false
@@ -837,6 +840,16 @@ struct EstateHomeView: View {
                     deletingEnvelope = nil
                 }
             }
+            .confirmationDialog(
+                "Start a new set? The released envelopes leave this phone (the people who received them keep theirs). Your rule and your key holders stay. Save a copy of the old record first if you want it.",
+                isPresented: Binding(get: { startingNewSet != nil }, set: { if !$0 { startingNewSet = nil } }),
+                titleVisibility: .visible
+            ) {
+                Button("Start a new set", role: .destructive) {
+                    startingNewSet?.engine.startNewSet()
+                    startingNewSet = nil
+                }
+            }
             .alert("Could not seal", isPresented: Binding(get: { sealError != nil }, set: { if !$0 { sealError = nil } })) {
                 Button("OK", role: .cancel) {}
             } message: { Text(sealError ?? "") }
@@ -1135,6 +1148,14 @@ struct EstateHomeView: View {
                     .font(.system(.title3, design: .rounded, weight: .semibold))
                     .foregroundStyle(.orange)
                 Text("Your key holders combined their keys. If you are reading this, please contact them: the seal is broken and cannot be put back. Start a new set of envelopes when you are ready.")
+                // A released set never seals again (REVIEW.md finding 2).
+                Button { startingNewSet = EngineRef(engine: engine) } label: {
+                    Text("Start a new set of envelopes")
+                        .font(.system(.headline, design: .rounded))
+                        .frame(maxWidth: .infinity).padding(.vertical, 8)
+                }
+                .buttonStyle(.borderedProminent).tint(.orange)
+                .parentTapTarget(60)
             }
             if let error = engine.lastError {
                 Text(error).font(.caption).foregroundStyle(.orange.opacity(0.8))

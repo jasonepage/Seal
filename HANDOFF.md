@@ -1,10 +1,46 @@
 # Where Seal stands
 
-**Updated:** 2026-09-16 (night: attach a file) · **Owner:** Nathan (Jason Page) · natepage67@gmail.com
+**Updated:** 2026-09-16 (night: the review fixes) · **Owner:** Nathan (Jason Page) · natepage67@gmail.com
 **Repo:** `~/Documents/GitHub/Seal` · iOS 26.5+, SwiftUI, no backend
 
 New Swift files under `Seal/` join the target automatically (file system
 synced groups), so no project edits are needed to add one.
+
+## THE REVIEW FIXES (2026-09-16 night, UNCOMPILED)
+
+`docs/REVIEW.md` found two things; both are built. Not committed.
+
+- **Finding 1, backdated claims.** `Seal/Estate/FirstSeen.swift` (new):
+  a per-engine table of when this phone first saw each event id
+  (keychain `seal.firstseen.<storeHash>`, wiped by `EstateStore.wipe`).
+  `EstateEngine` loads it in `init` (seeding once from the events already
+  there, at their own time), calls `noteSeen` after every merge (own
+  events at their own time, fetched events at `clock.now`), and hands
+  `firstSeen.timeOf` to both `ReleaseFeed.snapshot` calls in
+  `recomputeAll`. Claims and taps are clamped; heartbeats are not.
+  `ReleaseMachine`, `ReleaseFeed`, `EstateLogVerifier` untouched.
+  Tests: `FirstSeenTests`, registered.
+- **Finding 2, sealing after a release.** `sealAndPublish` throws
+  `notAllowed` when `ownerSnapshot?.releasedAt != nil`.
+  `EstateEngine.startNewSet()` makes a fresh estate (new id, empty
+  envelopes, the rule and the people carried across, old media removed,
+  the old log dropped from this phone). The released status card gets
+  "Start a new set of envelopes" with a confirmation in `EstateHomeView`.
+- GOTCHAS: three new lines (findings 1, 2 and 3).
+
+Most likely to fail to compile: `timeOf: firstSeen.timeOf` (a method
+reference on a struct property; if it complains, write `{ self.firstSeen.timeOf($0) }`);
+`EstateEvent` memberwise init in `FirstSeenTests.event` (argument order
+follows the declaration: id, estateID, kind, actorHash,
+actorDevicePublicKey, occurredAtEpoch, previousDigest, payload,
+signature, timestampToken).
+
+How to test: `FirstSeenTests` runs at launch. On phones: two phones,
+Time Travel the owner past the silence, claim from Mom's phone; the
+owner's phone must show the warning card today, not "keys can be
+tapped". For finding 2: run a release with Time Travel, then on the
+owner's phone the status card shows "Start a new set of envelopes";
+tapping Seal before that says the set cannot be sealed again.
 
 ## ATTACH A FILE, AND "READ IT FOR ME" (2026-09-16 night, UNCOMPILED)
 
