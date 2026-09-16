@@ -60,7 +60,8 @@ final class EstateEngine {
         case noDeviceKey
         case noEstate
         case notReady(String)
-        case directory(String)
+        /// who it is about, and why the directory said no.
+        case directory(who: String, why: String)
         case notAllowed(String)
         case noShare
         case notReleased
@@ -70,7 +71,11 @@ final class EstateEngine {
             case .noDeviceKey: "This phone has no device key. Sign in again."
             case .noEstate: "You have not started your envelopes yet."
             case .notReady(let why): why
-            case .directory(let who): "Could not look up \(who) in the directory. Check your connection and try again."
+            // Names the PERSON and the actual reason. It used to print eight
+            // hex characters of a hash and then blame the connection, which
+            // was the one cause it could not be: a network failure throws out
+            // of CloudKit and never reaches here.
+            case .directory(let who, let why): "This is about \(who).\n\nSeal stopped because \(why)"
             case .notAllowed(let why): why
             case .noShare: "This phone does not hold your key share for this estate yet."
             case .notReleased: "The envelopes have not been released."
@@ -137,20 +142,48 @@ final class EstateEngine {
     /// Pinned lookups, cached for the session. Throws on a pin mismatch
     /// (KeyPinStore) and on "not found", because for an estate an absent
     /// custodian is an error, not an empty list.
-    private func lookup(_ hash: String, forceRefresh: Bool = false) async throws -> (RootIdentity, [DeviceEndorsement]) {
+    /// `named` is who this hash belongs to, in the owner's words, so a
+    /// failure can say "Karen" instead of eight hex characters. The owner
+    /// knows their key holders by name and has never seen a hash.
+    private func lookup(_ hash: String, named: String? = nil,
+                        forceRefresh: Bool = false) async throws -> (RootIdentity, [DeviceEndorsement]) {
         if !forceRefresh, let cached = directoryCache[hash] { return cached }
         guard let fetched = try await sync.fetchIdentity(credentialIDHash: hash) else {
-            throw EngineError.directory(String(hash.prefix(8)))
+            let why = await sync.identityAbsence(credentialIDHash: hash)
+            throw EngineError.directory(who: who(hash, named: named), why: why)
         }
         directoryCache[hash] = fetched
         return fetched
     }
 
+    /// The best name this engine has for a hash: the one the caller passed,
+    /// then the estate's own lists, then the hash as a last resort.
+    private func who(_ hash: String, named: String? = nil) -> String {
+        if let named, !named.isEmpty { return named }
+        if hash == ownerHash { return "your own identity on this phone" }
+        if let name = estate?.custodians.first(where: { $0.rootHash == hash })?.displayName, !name.isEmpty {
+            return name
+        }
+        if let name = estate?.recipients.first(where: { $0.rootHash == hash })?.displayName, !name.isEmpty {
+            return name
+        }
+        if let name = guarded.first(where: { $0.ownerHash == hash })?.ownerName, !name.isEmpty {
+            return name
+        }
+        return "the person whose seal starts \(String(hash.prefix(8)))"
+    }
+
     /// Every endorsed, unrevoked device's KEM bundle for an identity.
-    private func kemBundles(of hash: String) async throws -> [Data] {
-        let (root, endorsements) = try await lookup(hash)
+    private func kemBundles(of hash: String, named: String? = nil) async throws -> [Data] {
+        let (root, endorsements) = try await lookup(hash, named: named)
         let bundles = IdentityManager.verifiedDevices(root: root, endorsements: endorsements).map(\.kemBundlePublicKeys)
-        guard !bundles.isEmpty else { throw EngineError.directory(root.displayName) }
+        // A record exists but lists no usable device. Distinct from "not
+        // found", and the fix is different: they open Seal once.
+        guard !bundles.isEmpty else {
+            throw EngineError.directory(
+                who: who(hash, named: named ?? root.displayName),
+                why: "that identity has no device Seal can encrypt to. They open Seal once on their phone and sign in, and it repairs itself. A phone that has not signed in since the last update has no key published.")
+        }
         return bundles
     }
 
@@ -355,7 +388,7 @@ final class EstateEngine {
         defer { isWorking = false }
         lastError = nil
 
-        let ownerBundles = try await kemBundles(of: ownerHash)
+        let ownerBundles = try await kemBundles(of: ownerHash, named: "your own identity on this phone")
         var previous = EstateLogStore.headDigest(ownerEvents)
 
         if ownerEvents.isEmpty {
@@ -373,8 +406,9 @@ final class EstateEngine {
             var custodians: [EstateKeyHierarchy.Custodian] = []
             var custodianKeys: [Data] = []
             for c in e.custodians {
-                custodians.append(.init(hash: c.rootHash, kemBundles: try await kemBundles(of: c.rootHash)))
-                custodianKeys.append(try await lookup(c.rootHash).0.publicKey)
+                custodians.append(.init(hash: c.rootHash,
+                                        kemBundles: try await kemBundles(of: c.rootHash, named: c.displayName)))
+                custodianKeys.append(try await lookup(c.rootHash, named: c.displayName).0.publicKey)
             }
             let newKey = EstateCrypto.randomKey()
             let epoch = e.epoch + 1
@@ -448,7 +482,9 @@ final class EstateEngine {
         for recipientHash in recipientHashes.sorted() {
             let record = e.tableKeys[recipientHash] ?? Estate.TableKeyRecord(tableID: UUID().uuidString, tableKey: EstateCrypto.randomKey())
             e.tableKeys[recipientHash] = record
-            let recipientBundles = try await kemBundles(of: recipientHash)
+            let recipientBundles = try await kemBundles(
+                of: recipientHash,
+                named: e.recipients.first { $0.rootHash == recipientHash }?.displayName)
             let wrap = try EstateKeyHierarchy.wrapTable(e.keyTable(for: recipientHash), tableID: record.tableID,
                                                         tableKey: record.tableKey, estateID: e.id, epoch: e.epoch,
                                                         estateKey: estateKey, ownerBundles: ownerBundles,
@@ -470,11 +506,14 @@ final class EstateEngine {
         let myName = identity.rootIdentity?.displayName ?? ""
         for c in e.custodians {
             try await sync.publishEstateInvite(EstateInvite(estateID: e.id, ownerHash: ownerHash, ownerName: myName, role: .custodian),
-                                               to: c.rootHash, addresseeBundles: try await kemBundles(of: c.rootHash))
+                                               to: c.rootHash,
+                                               addresseeBundles: try await kemBundles(of: c.rootHash, named: c.displayName))
         }
         for r in recipientHashes {
             try await sync.publishEstateInvite(EstateInvite(estateID: e.id, ownerHash: ownerHash, ownerName: myName, role: .recipient),
-                                               to: r, addresseeBundles: try await kemBundles(of: r))
+                                               to: r,
+                                               addresseeBundles: try await kemBundles(
+                                                of: r, named: e.recipients.first { $0.rootHash == r }?.displayName))
         }
         await sync.ensureEstateSubscription(estateID: e.id)
         await heartbeat()

@@ -195,6 +195,49 @@ final class SyncEngine {
 
     /// Fetch a (claimed) identity from the directory. The caller must still
     /// verify its endorsement chain, the server is untrusted for integrity.
+    /// WHY `fetchIdentity` said no.
+    ///
+    /// That function returns nil for five different reasons and callers had
+    /// no way to tell them apart, so every one of them reached the person as
+    /// "Check your connection and try again." A genuine network failure
+    /// THROWS out of `record(for:)` and never returns nil at all, so the one
+    /// thing that message told somebody to check was the one thing it could
+    /// not be. This says which it actually was.
+    ///
+    /// One extra fetch, on a path that is already failing.
+    func identityAbsence(credentialIDHash: String) async -> String {
+        let recordID = CKRecord.ID(recordName: credentialIDHash)
+        let record: CKRecord
+        do {
+            record = try await publicDB.record(for: recordID)
+        } catch let error as CKError where error.code == .unknownItem {
+            // By far the most common, and GOTCHAS names the reason twice:
+            // TestFlight and the App Store use PRODUCTION CloudKit while
+            // Xcode builds use DEVELOPMENT. They are separate worlds with
+            // separate records, so a person who registered on one build is
+            // simply not there on the other.
+            return "no identity is published under that name here. A phone that has not signed in on this build has no record yet, and an Xcode build and a TestFlight build keep separate directories."
+        } catch {
+            return "the directory could not be reached (\(error.localizedDescription))."
+        }
+        if record["tier"] as? String == Self.deletedTier {
+            return "that identity was permanently deleted. Remove the person and meet them again once they have registered a new identity."
+        }
+        if record["publicKey"] as? Data == nil {
+            return "the directory entry has no public key in it, so nothing can be encrypted to that person."
+        }
+        if let publicKey = record["publicKey"] as? Data {
+            do { try KeyPinStore.enforce(hash: credentialIDHash, publicKey: publicKey) }
+            catch {
+                return "the key published under that name is NOT the key this phone pinned when you met. Seal refuses it. Do not work around this: remove the person and meet them again in person."
+            }
+        }
+        if (record["deviceEndorsements"] as? Data) == nil {
+            return "that identity has published no device, so there is nothing to encrypt to. They open Seal once on a phone and sign in, and the entry repairs itself."
+        }
+        return "the directory entry is incomplete or could not be read. They open Seal once and sign in to republish it."
+    }
+
     func fetchIdentity(credentialIDHash: String) async throws -> (RootIdentity, [DeviceEndorsement])? {
         let recordID = CKRecord.ID(recordName: credentialIDHash)
         let record: CKRecord
