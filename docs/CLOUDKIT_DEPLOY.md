@@ -46,7 +46,9 @@ The deploy copies whatever Development has, so Development has to be right.
 6. Schema → Indexes → `EstateEvent`. `estate` needs a **QUERYABLE** index.
    Without it custodian phones cannot find an estate's events at all and the
    failure is silent. `recordName` on `EstateEvent` needs nothing.
-7. Schema → Indexes → `Identity`. Confirm `recordName` has a **QUERYABLE**
+7. Schema → Indexes → `GroupInvite`. `recipient` needs a **QUERYABLE** index:
+   `fetchEstateInvites` and the invite push subscription both query on it.
+8. Schema → Indexes → `Identity`. Confirm `recordName` has a **QUERYABLE**
    index. **This is the one that matters most.** Without it the directory scan,
    the one-key-one-identity check and security-key sign-in all break in
    TestFlight, and they break quietly.

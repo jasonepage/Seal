@@ -602,12 +602,25 @@ final class SyncEngine {
         return payloads
     }
 
-    private static func friendly(_ error: Error) -> String {
-        guard let ck = error as? CKError else { return error.localizedDescription }
+    /// One sentence a person can act on, or at least understand, for the
+    /// iCloud errors that reach a screen. Public so the seal button and the
+    /// claim buttons can use it too; they used to show the raw CloudKit
+    /// description, which on 2026-09-16 put a CKRecordID and the words
+    /// "production schema" in front of a tester.
+    static func friendly(_ error: Error) -> String {
+        let raw = error.localizedDescription
+        // The schema was never deployed to Production. This is the
+        // developer's job, and no amount of retrying on the phone fixes it,
+        // so say that instead of dumping a record name.
+        if raw.contains("production schema") || raw.contains("Cannot create new type") {
+            return "Seal's storage on Apple's servers is not set up for this version yet. That is on the developer, not on you or your phone. Nothing was lost, and sealing works as soon as it is fixed."
+        }
+        guard let ck = error as? CKError else { return raw }
         switch ck.code {
         case .notAuthenticated: return "Sign in to iCloud in Settings to go online."
         case .networkUnavailable, .networkFailure: return "No connection. Seal tries again."
         case .quotaExceeded: return "iCloud storage is full."
+        case .serverRejectedRequest, .invalidArguments: return "Apple's server refused the request. \(ck.localizedDescription)"
         default: return "iCloud error \(ck.code.rawValue): \(ck.localizedDescription)"
         }
     }

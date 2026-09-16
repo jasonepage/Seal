@@ -526,7 +526,7 @@ struct EstateHomeView: View {
                 Text("If that is not what you want, tap the button. It stops everything. You do not need your key for this.")
                 Button {
                     Task {
-                        do { try await estateEngine.cancelClaim() } catch { sealError = error.localizedDescription }
+                        do { try await estateEngine.cancelClaim() } catch { sealError = SyncEngine.friendly(error) }
                     }
                 } label: {
                     Text("I am here. Stop it.")
@@ -771,7 +771,7 @@ struct EstateHomeView: View {
                 try await estateEngine.sealAndPublish()
                 sealedOK = true
             } catch {
-                sealError = error.localizedDescription
+                sealError = SyncEngine.friendly(error)
             }
         }
     }
