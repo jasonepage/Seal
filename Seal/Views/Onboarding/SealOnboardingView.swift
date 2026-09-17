@@ -484,6 +484,7 @@ struct SealOnboardingView: View {
     @State private var role: OnboardingRole?
     @State private var index: Int
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     /// Optional on purpose: a preview, or a tree with no store above it,
     /// must draw the price screen with the "shown before you pay" line
     /// rather than crash. On the phone SealApp puts the store in the
@@ -516,6 +517,13 @@ struct SealOnboardingView: View {
 
     private var isLast: Bool { role != nil && index == screens.count - 1 }
 
+    /// iPad, or a phone on its side. Everything sits in one centred column
+    /// instead of stretching across the screen.
+    private var wide: Bool { horizontalSizeClass == .regular }
+
+    /// The column the words, the figure and the buttons all share.
+    private var columnWidth: CGFloat { wide ? 560 : 460 }
+
     var body: some View {
         ZStack {
             SealTheme.ink.ignoresSafeArea()
@@ -524,22 +532,28 @@ struct SealOnboardingView: View {
 
                 // The ZStack lets the outgoing and incoming screens overlap
                 // during the transition instead of pushing each other.
+                // On a wide screen (iPad, or a phone on its side) the
+                // column is centred top to bottom as well, so the words do
+                // not sit in the top corner above a thousand points of ink.
+                GeometryReader { geo in
                 ZStack {
                 ScrollView {
-                    VStack(spacing: 22) {
+                    VStack(spacing: wide ? 28 : 22) {
                         figureView(screen.figure)
                             .padding(.top, 8)
+                            .scaleEffect(wide ? 1.25 : 1)
+                            .padding(.vertical, wide ? 16 : 0)
                             .accessibilityElement(children: .ignore)
                             .accessibilityLabel(screen.figure.accessibilityLabel(numbers))
 
                         Text(screen.title)
-                            .font(.system(.title, design: .rounded, weight: .bold))
+                            .font(.system(wide ? .largeTitle : .title, design: .rounded, weight: .bold))
                             .foregroundStyle(.white)
                             .multilineTextAlignment(.center)
                             .fixedSize(horizontal: false, vertical: true)
 
                         Text(screen.body)
-                            .font(.callout)
+                            .font(wide ? .body : .callout)
                             .foregroundStyle(.white.opacity(0.75))
                             .multilineTextAlignment(.center)
                             .fixedSize(horizontal: false, vertical: true)
@@ -554,20 +568,27 @@ struct SealOnboardingView: View {
                     }
                     .padding(.horizontal, 28)
                     .padding(.bottom, 24)
-                    .frame(maxWidth: 460)
+                    .frame(maxWidth: columnWidth)
                     .frame(maxWidth: .infinity)
                     // GOTCHAS "Layout": a vertical ScrollView does not
                     // constrain its content's width.
                     .containerRelativeFrame(.horizontal)
+                    // Shorter content is centred in the space; taller
+                    // content scrolls as before.
+                    .frame(minHeight: geo.size.height, alignment: wide ? .center : .top)
                 }
+                .scrollBounceBehavior(.basedOnSize)
                 .id(screen.id)
                 .transition(reduceMotion ? .opacity : .asymmetric(
                     insertion: .move(edge: .trailing).combined(with: .opacity),
                     removal: .opacity))
                 }
+                }
 
                 progressDots
                 bottomBar
+                    .frame(maxWidth: columnWidth)
+                    .padding(.bottom, wide ? 24 : 0)
             }
         }
         .preferredColorScheme(.dark)

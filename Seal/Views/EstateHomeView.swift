@@ -79,6 +79,13 @@ struct EstateHomeView: View {
     @Environment(SealPurchase.self) private var purchase
     @State private var explain: ExplainRequest?
     @Environment(\.parentMode) private var parentMode
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    /// iPad, or a phone on its side: one wider centred column, and the
+    /// Write button and Seal bar sit in that same column instead of at the
+    /// far edges of the screen.
+    private var wide: Bool { horizontalSizeClass == .regular }
+    private var columnWidth: CGFloat { wide ? 680 : 560 }
 
     /// The recipient picker is one sheet with two jobs. "Write one" opens
     /// the blank editor, exactly as before. "Help me write it" opens the
@@ -253,12 +260,19 @@ struct EstateHomeView: View {
                             statusCard(loudEngine).padding(.bottom, 12)
                         } else {
                             statusStrip
+                                .clipShape(RoundedRectangle(cornerRadius: wide ? 14 : 0))
+                                .padding(.bottom, wide ? 12 : 0)
                         }
-                        inbox
+                        // On a wide screen the rows sit in one soft card,
+                        // like Mail on iPad, instead of floating in the dark.
+                        VStack(spacing: 0) { inbox }
+                            .background(wide ? Color.white.opacity(0.04) : .clear,
+                                        in: RoundedRectangle(cornerRadius: 16))
                     }
                     .padding(.top, 8)
                     .padding(.bottom, 24)
-                    .frame(maxWidth: 560)
+                    .padding(.horizontal, wide ? 16 : 0)
+                    .frame(maxWidth: columnWidth)
                     .frame(maxWidth: .infinity)
                     .containerRelativeFrame(.horizontal)
                 }
@@ -303,10 +317,12 @@ struct EstateHomeView: View {
     /// phone, brass when everything is sealed and closed.
     private var statusStrip: some View {
         let unsealed = engines.all.reduce(0) { $0 + ($1.estate?.addressedEnvelopes.filter { !$0.sealed }.count ?? 0) }
-        let changed = engines.all.contains { $0.estate?.hasUnsealedChanges ?? false }
+        // The demo cannot seal (no keys), so it shows the finished state
+        // rather than an orange warning next to a button that does nothing.
+        let changed = !DemoFixtures.isActive && engines.all.contains { $0.estate?.hasUnsealedChanges ?? false }
         let last = estateEngine.ownerSnapshot?.lastHeartbeatAt
         let when: String = {
-            guard let last else { return "" }
+            guard let last else { return "just now" }
             return Date().timeIntervalSince(last) < 60 ? "just now" : last.formatted(.relative(presentation: .named))
         }()
         return HStack(spacing: 10) {
@@ -476,11 +492,13 @@ struct EstateHomeView: View {
                 .parentTapTarget(56)
             }
             .padding(.horizontal, 20)
-            if engines.all.contains(where: { $0.estate?.hasUnsealedChanges ?? false }), !inSetup {
+            if engines.all.contains(where: { $0.estate?.hasUnsealedChanges ?? false }), !inSetup, !DemoFixtures.isActive {
                 sealBar
             }
         }
-        .padding(.bottom, 8)
+        .padding(.bottom, wide ? 20 : 8)
+        .frame(maxWidth: columnWidth)
+        .frame(maxWidth: .infinity)
     }
 
     /// One bar: what is waiting, and the button. One short reason when it
