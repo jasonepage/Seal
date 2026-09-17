@@ -113,6 +113,21 @@ Estate Key             one per rule per epoch
        key holder's devices
 ```
 
+The same thing in the usual notation, for people who read that faster:
+
+```
+c_env      = Enc(m, k_env)                            one random k_env per envelope
+Table_r    = Enc({k_env, ...}, k_table_r)             one table per recipient r
+k_table_r  reachable two ways:
+             Wrap(k_table_r, pk_owner)
+             Wrap(Enc(k_table_r, K_estate), pk_r)     needs recipient's phone AND K_estate
+K_estate   = Shamir split into s_1 .. s_N, threshold M
+s_i        = Wrap(s_i, pk_holder_i)                   one piece per key holder
+```
+
+Wrap is X25519 plus ML-KEM-768 through HKDF-SHA256. Enc is AES-256-GCM with
+the estate, epoch and purpose in the AAD.
+
 The people who release an estate recover the Estate Key and **nothing else**.
 It opens no envelope on its own: each key table still needs the phone of the
 person it was written for. A rule is a separate estate with its own Estate
