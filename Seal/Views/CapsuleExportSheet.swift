@@ -33,14 +33,14 @@ struct CapsuleExportSheet: View {
                 ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     Text("A copy you keep").font(.system(.title3, design: .rounded, weight: .semibold)).foregroundStyle(.white)
-                    Text("One file with the whole signed record, every key share as it was wrapped, the encrypted key tables, and every public key needed to check it. Nothing in it is readable without the custodians' keys. It verifies with a small script and no Seal, no Apple and no account: tools/verify_capsule.py in the Seal repository.")
+                    Text("One file with the whole signed record, every key share as it was wrapped, the encrypted key tables, and every public key needed to check it. Nothing in it is readable without the key holders' keys. It verifies with a small script and no Seal, no Apple and no account: tools/verify_capsule.py in the Seal repository.")
                         .font(.callout).foregroundStyle(.white.opacity(0.75)).fixedSize(horizontal: false, vertical: true)
                     if isOwner {
                         Toggle("Include the encrypted envelopes themselves", isOn: $includeContent).tint(SealTheme.brass).foregroundStyle(.white)
-                        Text("Larger, but then the file alone is enough to open the envelopes after a release. Still encrypted. Keep it somewhere your custodians can reach.")
+                        Text("Larger, but then the file alone is enough to open the envelopes after a release. Still encrypted. Keep it somewhere your key holders can reach.")
                             .font(.caption).foregroundStyle(.white.opacity(0.5)).fixedSize(horizontal: false, vertical: true)
                     } else {
-                        Text("As a custodian you export the record and the wrapped shares. The envelopes themselves are not yours to carry and are not in this file.")
+                        Text("As a key holder you export the record and the wrapped shares. The envelopes themselves are not yours to carry and are not in this file.")
                             .font(.caption).foregroundStyle(.white.opacity(0.5)).fixedSize(horizontal: false, vertical: true)
                     }
                     Button {

@@ -1,0 +1,39 @@
+name: Bug report
+description: Something in the app or the tools did not do what it says
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Not for security findings. Those go to SECURITY.md, privately.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you got.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: App version and build
+      placeholder: "1.0 (12), TestFlight"
+  - type: input
+    id: device
+    attributes:
+      label: Device and iOS version
+      placeholder: "iPhone 15 Pro, iOS 26.5"
+  - type: dropdown
+    id: role
+    attributes:
+      label: Which side were you on
+      options:
+        - I was writing envelopes
+        - I hold a key for somebody
+        - Somebody wrote me an envelope
+        - Using the command line tools only
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: Screenshots help. Never paste a real seed phrase, password or capsule file.

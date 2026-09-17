@@ -15,6 +15,18 @@ There is no bounty. There is one developer and no company behind this, so
 there is no budget to pretend otherwise. What you get is a fast answer, credit
 in the fix commit if you want it, and a straight account of what was wrong.
 
+## What you can expect
+
+A first reply within three days, usually the same day. If it is real, you get
+told what the fix is and when it ships, and credit in the fix commit if you
+want it. If it is already known, you get pointed at where it is written down,
+which is usually `docs/PRE_AUDIT.md` or `docs/PRODUCT.md` section 8.
+
+Test against your own identities and your own envelopes. Do not touch other
+people's records in the shared directory, do not run denial of service against
+Apple's infrastructure, and do not keep anything you happen to see. Work that
+way and there is nothing to forgive: no legal action, ever, from this project.
+
 ## What counts
 
 Anything that lets somebody read an envelope they were not written, act as
@@ -40,6 +52,10 @@ reason the site tells people with hardware wallets not to put a live seed
 phrase in yet.
 
 ## Where to look first
+
+`docs/PRE_AUDIT.md` is written for you: what this has to get right, where to
+attack it in order, and the weak spots already accepted. Read that first.
+
 
 If you want the fastest route to the parts that matter:
 

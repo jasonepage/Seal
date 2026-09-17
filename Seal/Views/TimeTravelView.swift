@@ -42,7 +42,7 @@ struct TimeTravelView: View {
                                     .disabled(!simulated)
                             }
                         }
-                        Text("Advancing the clock re-evaluates every estate on this phone. To run the story: seal, travel 91 days, have a custodian phone claim, travel 21 then 14, tap keys, combine. The owner opening the app at any point cancels.")
+                        Text("Advancing the clock re-evaluates every estate on this phone. To run the story: seal, travel 91 days, have a key holder's phone claim, travel 21 then 14, tap keys, combine. The owner opening the app at any point cancels.")
                             .font(.caption).foregroundStyle(.white.opacity(0.5)).fixedSize(horizontal: false, vertical: true)
 
                         Divider().overlay(.white.opacity(0.2))

@@ -202,7 +202,7 @@ struct GuardedEstateView: View {
                 }
                 if ReleaseMachine.claimantCanRelease(s, now: now), s.claim?.claimantHash == myRoot.credentialIDHash {
                     action("Combine the keys", icon: "envelope.open.fill", tint: SealTheme.brass,
-                           note: "Enough custodians have tapped. This recovers the key and releases the envelopes to the people they are written for. It cannot be undone.") {
+                           note: "Enough key holders have tapped. This recovers the key and releases the envelopes to the people they are written for. It cannot be undone.") {
                         Task { await run { try await estateEngine.release(estateID: guarded.estateID) } }
                     }
                 }
@@ -322,7 +322,7 @@ struct GuardedEstateView: View {
                 .disabled(working || DemoFixtures.isActive)
                 .parentTapTarget(60)
             } else {
-                Text("\(live.ownerName) has written you something. It is sealed, and stays sealed until their custodians release it. Nobody, including us, can open it early.")
+                Text("\(live.ownerName) has written you something. It is sealed, and stays sealed until their key holders release it. Nobody, including us, can open it early.")
                     .font(.callout).foregroundStyle(.white.opacity(0.7)).fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -407,7 +407,7 @@ struct GuardedEstateView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Start a claim on \(live.ownerName)'s envelopes")
                         .font(.system(.title3, design: .rounded, weight: .semibold)).foregroundStyle(.white)
-                    Text("Do this only if you believe \(live.ownerName) has died or cannot ever come back. They get a warning every day. Every other custodian is told today. If \(live.ownerName) opens Seal once, the claim ends and everyone sees that you started it.")
+                    Text("Do this only if you believe \(live.ownerName) has died or cannot ever come back. They get a warning every day. Every other key holder is told today. If \(live.ownerName) opens Seal once, the claim ends and everyone sees that you started it.")
                         .font(.callout).foregroundStyle(.white.opacity(0.75)).fixedSize(horizontal: false, vertical: true)
                     TextField("Why (kept in the record)", text: $claimReason)
                         .padding(14).background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 14)).foregroundStyle(.white)

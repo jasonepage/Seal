@@ -1,0 +1,11 @@
+Contact: mailto:support@sealmessenger.com
+Policy: https://github.com/jasonepage/Seal/blob/main/SECURITY.md
+Preferred-Languages: en
+Canonical: https://sealmessenger.com/.well-known/security.txt
+Expires: 2027-09-17T00:00:00.000Z
+
+# Seal is open source: https://github.com/jasonepage/Seal
+# No independent audit has been done. The known limits are written down in
+# docs/PRODUCT.md section 8 and docs/PRE_AUDIT.md, and are not findings.
+# There is no bounty. There is one developer, a fast answer, and credit in
+# the fix commit if you want it.

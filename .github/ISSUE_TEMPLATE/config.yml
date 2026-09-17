@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security report
+    url: https://github.com/jasonepage/Seal/blob/main/SECURITY.md
+    about: Anything that lets somebody read, forge, release or stop what they should not. Do not open a public issue for it.
+  - name: Support and questions
+    url: https://sealmessenger.com/support.html
+    about: Help using the app, on the website.

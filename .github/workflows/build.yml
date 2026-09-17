@@ -1,0 +1,25 @@
+name: build
+
+# The app build, on a Mac runner. Kept on manual start on purpose: GitHub's
+# runners lag behind new Xcode releases, and a red badge for "the runner has
+# an older Xcode" says nothing true about the code. Run it from the Actions
+# tab. Once it passes on its own, add the push trigger back.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: xcodebuild
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Which Xcode versions this runner has
+        run: ls /Applications | grep Xcode
+      - name: Build for the simulator, no signing
+        run: |
+          xcodebuild -scheme Seal -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build | tail -40

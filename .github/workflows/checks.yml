@@ -1,0 +1,69 @@
+name: checks
+
+# Four checks, on every push and every pull request. None of them needs a
+# Mac, an Apple account or a phone, so anybody can run the same commands
+# locally and get the same answer:
+#
+#   python3 tools/shamir_vectors.py
+#   python3 tools/make_test_capsule.py > /tmp/capsule.json
+#   python3 tools/verify_capsule.py /tmp/capsule.json
+#   python3 tools/check_imports.py
+#   python3 tools/check_house_rules.py
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  record-and-crypto:
+    name: record and crypto
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install the one library the tools need
+        run: pip install cryptography
+
+      - name: Shamir vectors (the key split, over GF(256))
+        run: python3 tools/shamir_vectors.py > /dev/null
+
+      - name: Build a synthetic capsule and verify every signature in it
+        run: |
+          python3 tools/make_test_capsule.py > /tmp/capsule.json
+          python3 tools/verify_capsule.py /tmp/capsule.json
+
+      - name: A tampered capsule must fail
+        run: |
+          python3 tools/make_test_capsule.py --tamper > /tmp/tampered.json
+          if python3 tools/verify_capsule.py /tmp/tampered.json > /dev/null; then
+            echo "the verifier accepted a tampered capsule"
+            exit 1
+          fi
+          echo "the verifier caught the tampered signature"
+
+  no-dependencies:
+    name: no third party code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 tools/check_imports.py
+
+  house-rules:
+    name: house rules
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 tools/check_house_rules.py
