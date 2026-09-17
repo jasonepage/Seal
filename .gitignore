@@ -10,3 +10,6 @@ tools/mint_out*/
 # Wrangler's local cache — holds the Cloudflare account id and the account
 # email, changes on every deploy, and is rebuilt automatically. Never commit it.
 .wrangler/
+
+# Working notes, not part of the product
+Claude outputs/

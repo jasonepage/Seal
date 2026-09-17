@@ -23,12 +23,13 @@
   </header>
 
   <h1>What Seal does not do</h1>
-  <p class="lede">A product that holds secrets and lists only its strengths is telling you something about itself. This page is the other half, and it is the same page we keep internally.</p>
+  <p class="lede">A product that holds secrets and lists only its strengths is telling you something about itself. This page is the other half, and it is the same page we keep internally. The common objections have <a href="objections.html">their own page</a>.</p>
 
   <h2>Not done yet, as of September 2026</h2>
   <table>
     <tr><th style="width:15em">No independent audit</th><td>Nobody outside this project has reviewed the cryptography or the code. That is the single biggest reason to keep a live seed phrase out of it for now. The source is open so that this can change.</td></tr>
-    <tr><th>Beta</th><td>Seal is in TestFlight, not on the App Store. It is used by a handful of people.</td></tr>
+    <tr><th>New</th><td>Seal reached the App Store in September 2026. Before that it was used by a handful of families on TestFlight. Expect rough edges, and expect them to be fixed quickly.</td></tr>
+    <tr><th>One design review, two fixes</th><td>Before release, one pass over the key handling, the release machine and the record found two things worth fixing: a key holder could date a claim in the past and skip the warning period, and sealing again after a release could let one recipient read new envelopes early. Both are fixed in the App Store build. The full write-up is <a href="https://github.com/jasonepage/Seal/blob/main/docs/REVIEW.md">docs/REVIEW.md</a> in the source. That was a review, not an audit.</td></tr>
     <tr><th>One person</th><td>Built by one developer. There is no company, no team and no funding, which means nobody to be acquired by and also nobody to review a mistake before you see it.</td></tr>
     <tr><th>Security keys partly untested</th><td>A fix for a PIN handling conflict with FIDO2.1 keys is in, and has not yet been verified on real hardware over both NFC and USB-C. Passkeys are the better tested path today.</td></tr>
     <tr><th>iPhone only</th><td>No Android, and no second owner device: your working copy of drafts and media lives on one phone.</td></tr>
@@ -85,7 +86,8 @@
     <a href="mailto:support@sealmessenger.com">support@sealmessenger.com</a>.</p>
     <p>&copy; 2026 &middot; <a href="privacy.html">Privacy</a> &middot;
     <a href="support.html">Support</a> &middot;
-    <a href="limits.html">What Seal does not do</a></p>
+    <a href="limits.html">What Seal does not do</a> &middot;
+    <a href="objections.html">Objections</a></p>
   </footer>
 </div>
 </body>
