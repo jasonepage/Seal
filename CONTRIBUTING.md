@@ -22,7 +22,18 @@ python3 tools/check_house_rules.py
 
 The app's own tests live in `Seal/SelfTest/` and run on every DEBUG launch,
 because a passkey needs a real app to live in. A failed test blacks the
-screen on purpose.
+screen on purpose. `docs/TESTS.md` lists all of them by name.
+
+On a Mac you can also run the parts that need no app, straight from the same
+source files and the same suites:
+
+```
+sh tools/run_core_tests.sh
+```
+
+Today that is the key split and the release countdown. A file joins the list
+in that script only when it compiles with no user interface, no network and
+no keychain behind it.
 
 ## House rules
 

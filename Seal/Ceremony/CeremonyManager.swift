@@ -759,13 +759,5 @@ extension CeremonyManager: ASAuthorizationControllerDelegate, ASAuthorizationCon
     }
 }
 
-extension Data {
-    var hexString: String { map { String(format: "%02x", $0) }.joined() }
-
-    func base64URLEncodedString() -> String {
-        base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-    }
-}
+// `hexString` and `base64URLEncodedString` moved to Crypto/Hex.swift, so the
+// pure parts of Seal can be compiled and tested on their own (tools/coretests).

@@ -93,7 +93,11 @@ enum SelfTest {
 
     static let log = Logger(subsystem: "io.github.jasonepage.Seal", category: "selftest")
 
-    static func runAll(_ suites: [Suite] = SelfTestRegistry.suites) -> Report {
+    /// No default argument on purpose: this file has to compile with only
+    /// the suites handed to it, so the pure core can be built and run
+    /// outside the app (tools/coretests/main.swift). The app's own entry
+    /// point is `SelfTest.runAtLaunchIfDebug()` in SelfTestRegistry.swift.
+    static func runAll(_ suites: [Suite]) -> Report {
         var report = Report()
         for suite in suites {
             let context = Context(suite: suite.name)
@@ -115,11 +119,4 @@ enum SelfTest {
         return report
     }
 
-    /// DEBUG launch hook. Loud on failure, silent on success.
-    static func runAtLaunchIfDebug() {
-        #if DEBUG
-        let report = runAll()
-        assert(report.passed, "Self-tests failed: \(report.failures.map { "\($0.suite)/\($0.name)" })")
-        #endif
-    }
 }

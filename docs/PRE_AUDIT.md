@@ -91,9 +91,13 @@ the product documents too.
   hash can be spammed; every reader verifies signatures and drops the rest,
   and the revocation reader stops after twenty pages. The cost of the spam is
   fetch time, not correctness.
-- **The app's own tests run at launch in DEBUG builds only.** There is no test
-  target, because a passkey needs a real app to live in. The pure parts are
-  checked in continuous integration through the Python tools instead.
+- **Most of the app's tests run at launch in DEBUG builds only.** There is no
+  test target, because a passkey needs a real app to live in, so the suites in
+  `Seal/SelfTest` run on a phone. `docs/TESTS.md` lists them by name. The
+  pieces that need no app, today the key split and the release countdown, are
+  compiled straight from the same source files and run by
+  `sh tools/run_core_tests.sh`, so those suites can be watched by a stranger.
+  Everything above them still rests on tests only the developer sees run.
 
 ## What is deliberately not promised
 
@@ -113,10 +117,18 @@ python3 tools/make_test_capsule.py --tamper > /tmp/bad.json
 python3 tools/verify_capsule.py /tmp/bad.json            # must fail
 python3 tools/check_imports.py                           # no third party code
 python3 tools/check_house_rules.py                       # copy and hygiene rules
+python3 tools/list_tests.py --check                      # the test list is current
 ```
 
-These five commands are what continuous integration runs on every push, so a
+On a Mac, with Xcode's command line tools:
+
+```
+sh tools/run_core_tests.sh    # Seal's own suites for the key split and the countdown
+```
+
+The Python commands are what continuous integration runs on every push, so a
 green check on the repository means exactly what running them yourself means.
+The Mac one runs there too, on a Mac runner.
 
 ## The documents worth reading first
 

@@ -50,7 +50,7 @@ struct TimeTravelView: View {
                         Button {
                             running = true
                             Task {
-                                report = SelfTest.runAll()
+                                report = SelfTest.runAll(SelfTestRegistry.suites)
                                 running = false
                             }
                         } label: {

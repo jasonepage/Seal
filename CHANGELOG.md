@@ -45,6 +45,14 @@ Dates are the day the work landed in the repository. Anything marked
   push and need no Mac.
 - `docs/PRE_AUDIT.md`: where to attack this, and the weak spots already
   known, written before anybody asked.
+- `docs/TESTS.md`: every test in the app by name, generated from the source
+  by `tools/list_tests.py` and checked on every push.
+- `tools/run_core_tests.sh`: compiles the parts of Seal that need no app
+  (the key split and the release countdown) straight from the app's own
+  source files and runs the same self-test suites, so those tests can run
+  on a Mac runner where anybody can watch them pass. `ReleasePolicy` and the
+  `Data` hex helpers moved into files of their own for it, and
+  `SelfTest.runAll` no longer defaults to the whole registry.
 - `CONTRIBUTING.md`, issue and pull request templates, and a
   `.well-known/security.txt` on the website.
 

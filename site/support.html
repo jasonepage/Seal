@@ -3,8 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="icon" type="image/png" href="favicon.png">
-<link rel="apple-touch-icon" href="favicon.png">
+<link rel="icon" href="favicon.ico?v=2" sizes="any">
+<link rel="icon" type="image/png" href="favicon.png?v=2">
+<link rel="apple-touch-icon" href="apple-touch-icon.png?v=2">
 <link rel="stylesheet" href="seal.css">
 <title>Support: Seal</title>
 <meta name="description" content="Help for Seal: sealed envelopes for the people you leave behind.">
@@ -58,15 +59,19 @@
   <h2>How do I delete everything?</h2>
   <p>You screen, then Delete identity. That removes you from the directory permanently and wipes the app. It cannot be undone, because there is nothing left to restore. If an old key is blocking you from setting up a new identity, there is a "Retire it" link on the sign in screen for exactly that.</p>
 
+  <h2>Where is my data, and does it use my iCloud space?</h2>
+  <p>Sealed envelopes and the signed record are stored in Seal's own CloudKit container on Apple's servers, as ciphertext. That is not your personal iCloud storage: it does not count against your iCloud space, it does not appear in Settings under Manage Storage, and nothing there can be deleted from Apple's tools. Only the app, signed by your key, can remove your records. Your own drafts, photos and recordings also stay on the phone that wrote them.</p>
+  <h2>Does Seal work with iCloud turned off?</h2>
+  <p>No. There is no server of ours, so Apple's iCloud is the only place a sealed envelope can go. Without an iCloud account signed in on the phone you can write drafts, but you cannot seal or receive. If only iCloud Keychain is off, everything works; you just need a hardware key or your backup key to move to a new phone, because a passkey cannot sync without Keychain.</p>
   <h2>Is Seal on Android?</h2>
   <p>Not yet. Seal is iPhone only. If the people you need are on Android, tell us, because it helps us decide how fast.</p>
 
   <h2>What does it cost?</h2>
-  <p>Nothing on TestFlight. The App Store version is one purchase, once, for life. The price is on the App Store page and inside the app before you pay. There is no subscription because there is no server of ours to keep paying for. Holding a key for somebody else, or receiving an envelope, is free: only the person writing envelopes pays.</p>
+  <p>Nothing on TestFlight. Once it is on the App Store, it is one purchase, once, for life, and the price is shown inside the app before you pay. There is no subscription because there is no server of ours to keep paying for. Holding a key for somebody else, or receiving an envelope, is free: only the person writing envelopes pays.</p>
   <h2>Where do I get it?</h2>
-  <p><a href="https://testflight.apple.com/join/cYp9JRCG">Free on TestFlight</a> today, for iPhone and iPad. The App Store version is in review; this page links to it the day it is live. Seal needs iOS 26 or later. There is no Android version and no web version.</p>
+  <p><a href="https://testflight.apple.com/join/cYp9JRCG">Free on TestFlight</a> today, for iPhone and iPad. An App Store version is in review; this page links to it once it is live. Seal needs iOS 26 or later. There is no Android version and no web version.</p>
   <h2>Do I need a hardware security key?</h2>
-  <p>No. Seal works with a passkey and Face ID. A physical security key is an option for people who want one, and it is the stronger choice against phishing, but nothing in Seal requires it.</p>
+  <p>No. Seal works with a passkey and Face ID or Touch ID. A physical security key is an option for people who want one, and it is the stronger choice against phishing, but nothing in Seal requires it.</p>
 
   <div class="note">
     <p><strong>Still stuck?</strong> Email <a href="mailto:support@sealmessenger.com?subject=Seal%20support">support@sealmessenger.com</a>. A person reads every message, usually the same day.</p>

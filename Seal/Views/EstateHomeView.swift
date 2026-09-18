@@ -216,6 +216,15 @@ struct EstateHomeView: View {
                         IdentityRing(displayName: myRoot.displayName, tier: myRoot.tier, size: 32)
                     }
                     .accessibilityLabel("Profile")
+                    #if DEBUG
+                    // Hold the profile ring for two seconds: flip "pretend I
+                    // never paid" so the paywall and the payment sheet can be
+                    // screenshotted. Debug builds only; the next Seal tap
+                    // shows the paywall. Hold again to put it back.
+                    .simultaneousGesture(LongPressGesture(minimumDuration: 2).onEnded { _ in
+                        Task { await purchase.togglePretendUnpaid() }
+                    })
+                    #endif
                 }
                 #if DEBUG
                 ToolbarItem(placement: .topBarTrailing) {
@@ -286,6 +295,15 @@ struct EstateHomeView: View {
                         IdentityRing(displayName: myRoot.displayName, tier: myRoot.tier, size: 32)
                     }
                     .accessibilityLabel("Profile")
+                    #if DEBUG
+                    // Hold the profile ring for two seconds: flip "pretend I
+                    // never paid" so the paywall and the payment sheet can be
+                    // screenshotted. Debug builds only; the next Seal tap
+                    // shows the paywall. Hold again to put it back.
+                    .simultaneousGesture(LongPressGesture(minimumDuration: 2).onEnded { _ in
+                        Task { await purchase.togglePretendUnpaid() }
+                    })
+                    #endif
                 }
                 ToolbarItem(placement: .topBarTrailing) { inboxMenu }
                 #if DEBUG

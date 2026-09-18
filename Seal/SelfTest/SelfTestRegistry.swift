@@ -26,3 +26,16 @@ enum SelfTestRegistry {
             + FirstSeenTests.suites
     }
 }
+
+extension SelfTest {
+    /// DEBUG launch hook. Loud on failure, silent on success. It lives here
+    /// rather than in SelfTest.swift so the harness itself never names the
+    /// registry, which is what lets the pure core be compiled with a subset
+    /// of the suites (tools/coretests/main.swift).
+    static func runAtLaunchIfDebug() {
+        #if DEBUG
+        let report = runAll(SelfTestRegistry.suites)
+        assert(report.passed, "Self-tests failed: \(report.failures.map { "\($0.suite)/\($0.name)" })")
+        #endif
+    }
+}

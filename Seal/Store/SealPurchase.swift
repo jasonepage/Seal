@@ -54,19 +54,22 @@ final class SealPurchase {
 
     private var updates: Task<Void, Never>?
 
-    init() {
-        // Purchases made on another device, refunds, and a purchase that
-        // finished after the app was killed all arrive here.
-        updates = Task { [weak self] in
-            for await result in Transaction.updates {
-                guard let self else { return }
-                if case .verified(let transaction) = result {
-                    await transaction.finish()
-                    await self.refresh()
-                }
-            }
-        }
+    /// DEBUG only: pretend this Apple ID never bought the seal, whatever
+    /// Apple says, so the paywall and the payment sheet can be
+    /// screenshotted on a phone that already paid. Turned on by holding
+    /// the Seal button for two seconds in a Debug build (EstateHomeView),
+    /// or by the `-SealPretendUnpaid` launch argument. Compiled out of
+    /// Release, so no TestFlight or App Store build can hide a purchase.
+    #if DEBUG
+    private(set) var pretendUnpaid = ProcessInfo.processInfo.arguments.contains("-SealPretendUnpaid")
+
+    func togglePretendUnpaid() async {
+        pretendUnpaid.toggle()
+        await refresh()
     }
+    #else
+    private var pretendUnpaid: Bool { false }
+    #endif
 
     /// The price as the store shows it in the person's own currency, or
     /// nil until the product has loaded.
@@ -84,7 +87,7 @@ final class SealPurchase {
                 owned = true
             }
         }
-        isUnlocked = owned
+        isUnlocked = owned && !pretendUnpaid
         if product == nil { await loadProduct() }
     }
 

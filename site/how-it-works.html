@@ -3,8 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="icon" type="image/png" href="favicon.png">
-<link rel="apple-touch-icon" href="favicon.png">
+<link rel="icon" href="favicon.ico?v=2" sizes="any">
+<link rel="icon" type="image/png" href="favicon.png?v=2">
+<link rel="apple-touch-icon" href="apple-touch-icon.png?v=2">
 <link rel="stylesheet" href="seal.css">
 <title>How Seal works, in full</title>
 <meta name="description" content="The key hierarchy, the primitives, the ceremony, and what each layer does and does not protect. Written for somebody who owns a hardware wallet.">
@@ -78,7 +79,7 @@ Estate Key             one per owner per epoch
 
   <h2>The countdown, precisely</h2>
   <ul class="plain">
-    <li>Opening the app writes one signed line saying you were here. That is the heartbeat, and it needs your phone and at most Face ID. It never needs the hardware key, because a living person who lost their key must not be declared dead by their own software.</li>
+    <li>Opening the app writes one signed line saying you were here. That is the heartbeat, and it needs your phone and at most Face ID or Touch ID. It never needs the hardware key, because a living person who lost their key must not be declared dead by their own software.</li>
     <li>After the silence you chose, ninety days by default, a key holder may start a claim. Not before, and the machine that decides this is a pure state machine with an exhaustive test suite.</li>
     <li>A claim starts weeks of daily warnings, then a further quiet period. Any key holder may object, which pauses or kills the claim depending on your rule.</li>
     <li>One tap from you at any point in that cancels everything, and every key holder sees that it was cancelled and by whom.</li>

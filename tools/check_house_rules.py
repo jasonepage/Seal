@@ -14,7 +14,8 @@ Four rules, each one something that has gone wrong before:
 2. No "custodian" in anything a person reads. The word in the app is
    "key holder". Code names keep the old word and are ignored, and so is
    anything inside a string interpolation, because that is a variable name.
-3. No private key, and no ".DS_Store", anywhere in the tree.
+3. No private key anywhere in the tree. A stray ".DS_Store" is a note,
+   because .gitignore already keeps it out of the repository.
 4. Nothing in the app may write to a hard coded price. The price comes
    from the App Store.
 
@@ -107,12 +108,18 @@ def main():
                     if PRICE.search(naked):
                         problems.append(f"{rel}:{number}: a price is written into the code")
 
+    # .DS_Store is a note, not a failure: .gitignore already keeps it out of
+    # the repository, so one sitting in a working copy is Finder's doing and
+    # not something a checkout in continuous integration would ever see.
+    strays = []
     for base, dirs, names in os.walk(ROOT):
         dirs[:] = [d for d in dirs if d not in {".git"}]
         for name in names:
             if name == ".DS_Store":
-                problems.append(f"{os.path.relpath(os.path.join(base, name), ROOT)}: .DS_Store in the tree")
+                strays.append(os.path.relpath(os.path.join(base, name), ROOT))
 
+    for stray in strays:
+        print(f"  note {stray} is in your working copy, ignored by git")
     print(f"house rules: {checked} files checked" if not problems else "house rules broken")
     for line in problems:
         print("  FAIL " + line)

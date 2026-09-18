@@ -165,8 +165,8 @@ change a byte, and watch it fail. The format is documented in
 `docs/CAPSULE.md` in enough detail to write a fresh verifier from scratch,
 deliberately, in case this project is not here.
 
-The same five commands run in continuous integration on every push, so the
-green check above means what running them yourself means:
+The same commands run in continuous integration on every push, so the green
+check above means what running them yourself means:
 
 ```sh
 pip install cryptography
@@ -175,6 +175,14 @@ python3 tools/make_test_capsule.py > /tmp/capsule.json
 python3 tools/verify_capsule.py /tmp/capsule.json
 python3 tools/check_imports.py
 python3 tools/check_house_rules.py
+python3 tools/list_tests.py --check
+```
+
+On a Mac, Seal's own suites for the two pieces that need no app, compiled
+straight from the app's source files, no Xcode project involved:
+
+```sh
+sh tools/run_core_tests.sh
 ```
 
 If you are here to review the security, start with
@@ -208,6 +216,7 @@ weak spots already known, written before anybody asked.
 | `docs/RECORD.md` | The signed record and timestamping |
 | `docs/REVIEW.md` | The pre-release design review: what was found, what was fixed |
 | `docs/PRE_AUDIT.md` | Where to attack this, and the weak spots already known |
+| `docs/TESTS.md` | Every test in the app, by name, generated from the source |
 | `CHANGELOG.md` | What changed and when |
 | `CONTRIBUTING.md` | The house rules, and the checks to run before a pull request |
 | `docs/GOTCHAS.md` | What already went wrong, and what it turned out to be |
@@ -223,7 +232,9 @@ queryable, in both the development and production environments.
 
 Tests live in the app target under `Seal/SelfTest/`, because there is no test
 host for a passkey. They run on every DEBUG launch; a failure blacks the screen
-and prints which suite. The scheme has `-SealDemoMode` for a phone full of
+and prints which suite. [`docs/TESTS.md`](docs/TESTS.md) lists every one of
+them by name, generated from the source and checked on every push, so it
+cannot fall behind the code. The scheme has `-SealDemoMode` for a phone full of
 made-up envelopes and key holders, used for screenshots and demos.
 
 ## Contributing
