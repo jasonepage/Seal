@@ -8,7 +8,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png?v=2">
 <link rel="stylesheet" href="seal.css">
 <title>Privacy: Seal</title>
-<meta name="description" content="What Seal stores, what it cannot see, what the record shows, and the one service outside Apple it talks to.">
+<meta name="description" content="What Seal stores, what it cannot see, what the signed record shows to anybody who reads it, and the one service outside Apple that Seal talks to.">
 </head>
 <body>
 <div class="wrap">
@@ -23,44 +23,45 @@
     </nav>
   </header>
   <h1>Privacy Policy</h1>
-  <p class="small">Last updated: September 16, 2026</p>
+  <p class="small">Last updated: 18 September 2026</p>
 
-  <p>Seal holds the things people cannot afford to have read early. So this policy is written to be checked rather than trusted, and it says what leaks as plainly as it says what does not.</p>
+  <p>Seal holds the things people cannot afford to have read early. This policy says what leaks as plainly as it says what does not.</p>
 
   <h2>What we can never see</h2>
   <p>Your letters, photos, voice messages, videos and secrets are encrypted on your phone before they leave it. The keys that open them stay on your devices and are never sent to us. Seal has no server of its own and no way to decrypt anything. There is no password and no email or text reset. If you lose your key, only a backup key you registered earlier can bring your identity back. Nobody else can, including us and Apple.</p>
   <p>That is a statement about what is technically possible, not a promise about our intentions. We could not hand over an envelope if asked, because we hold nothing that would open one.</p>
-  <p>One exception to "keys stay on your devices": if you register a security key for someone who is not on Seal yet, that person's private keys are stored in iCloud, locked with a secret that only their physical security key can produce. Without that key, the stored copy cannot be opened.</p>
+  <p>One exception to “keys stay on your devices”: if you register a security key for somebody who is not on Seal yet, that person’s private keys are stored in Seal’s public container, locked under a secret that only their physical security key can compute. Without that key the stored copy cannot be opened. This is the one place any private key material leaves a phone, and it is <a href="limits.html">the newest and least tested part of Seal</a>.</p>
 
   <h2>What is stored, and where</h2>
-  <p>Seal uses Apple's iCloud (CloudKit) as a filing cabinet, under our developer account. It holds:</p>
+  <p>Seal uses Apple’s iCloud (CloudKit) as a filing cabinet, under our developer account. It holds:</p>
   <ul>
     <li>Your public identity record: the display name you chose, your public keys, an account ID made from your key, and which kind of key you use. This is public on purpose, so the people you meet can check it is you.</li>
     <li>Encrypted envelope contents, which cannot be read.</li>
-    <li>A signed record of what happened and when: an envelope set was created, a rule was set, you checked in, a key holder started a claim or stopped one, you deleted your account. Each entry is signed. The entries themselves are not encrypted: they show what kind of event it was, who made it (as an account ID), and when. Your rule and the list of your key holders' account IDs are in this record, so your key holders can check each other. If a key holder types a reason when starting a claim, or a note when objecting, that text is stored as written.</li>
+    <li>A signed record of what happened and when: an envelope set was created, a rule was set or changed, envelopes were sealed, you checked in, a key holder noticed your silence, started a claim, objected, withdrew an objection, tapped their key, released an estate, confirmed once a year that they still have their key, or you left or deleted your account. Each entry is signed. The entries are not encrypted: they show what kind of event it was, who made it as an account ID, and when. Your rule and the account IDs of your key holders are in this record, so your key holders can check each other. If a key holder types a reason when starting a claim, or a note when objecting, that text is stored as written. <a href="how-it-works.html">Every kind of entry is listed here.</a></li>
     <li>Invitations, encrypted and addressed by a one way fingerprint of the person invited.</li>
     <li>Device and key revocations you sign, so other phones stop trusting a device you removed.</li>
   </ul>
 
   <h2>What the record shows, stated plainly</h2>
-  <p>Perfect hiding is not one of the promises. Someone who could read the stored data could work out:</p>
+  <p>Perfect hiding is not one of the promises. The database is public, so somebody reading it could work out:</p>
   <ul>
-    <li>Who your key holders are, by account ID, and your rule.</li>
-    <li>When you check in, and when a claim starts or stops.</li>
+    <li>Who your key holders are, by account ID, and your rule in full, including the number of keys needed to open anything.</li>
+    <li>When you check in, when you seal, and when a claim starts or stops.</li>
     <li>How many people you wrote envelopes to, and roughly how much you wrote.</li>
     <li>That a particular account has some part in some envelope set.</li>
+    <li>Any reason or objection note a key holder typed, as written.</li>
   </ul>
   <p>What they could not work out: the titles, the letters, the photos, the secrets, or who any envelope is for.</p>
 
   <h2>Help writing, which never leaves the phone</h2>
-  <p>Seal can ask you questions and turn your answers into a draft, and it can turn your speech into text. Both run entirely on your phone. Nothing you write or say there is sent to us, to Apple, or to anyone else. If a phone cannot do this work on its own, Seal does not offer it on that phone.</p>
+  <p>Seal can ask you questions and turn your answers into a draft, and it can turn your speech into text. Both run entirely on your phone. Nothing you write or say there is sent to us, to Apple, or to anyone else. A phone that cannot do that work alone is offered no draft and no microphone button, rather than a server.</p>
 
   <h2>The one service outside Apple</h2>
-  <p>Seal asks a public timestamp service, currently freetsa.org, to sign the time of important record entries: check-ins, claims, stops, key taps, releases, and a deleted account. This happens automatically whenever you have an envelope set, because those times are what protect you and your family. For other activity, timestamps are off until you turn them on.</p>
+  <p>Seal asks a public timestamp service, currently freetsa.org, to sign the time of the record entries that decide when envelopes open: your check-ins, sealing, a claim, an objection being resolved into a stop, a key tap, a release, and a departure. This happens automatically once you have an envelope set, because those times are what protect you and your family. Other record entries, such as meeting somebody in person, are not timestamped until you turn that on.</p>
   <p>Seal sends only a short one way fingerprint (a hash) of the entry. It cannot be turned back into your envelope, your name or anything you wrote. What it does tell that service is that something was recorded, and when, along with the network address it came from.</p>
 
   <h2>Notifications</h2>
-  <p>Seal uses Apple's push service so the people who hold a key hear about a claim, and so a person knows when they have been given a part in someone's plan. The alert text is fixed in the app and carries nothing about the contents of anything.</p>
+  <p>Seal uses Apple’s push service so the people who hold a key hear about a claim, and so a person knows when they have been given a part in someone’s plan. The alert text is fixed in the app and carries nothing about the contents of anything.</p>
 
   <h2>What we collect about you</h2>
   <p>Only what is listed above: your display name, your account ID, your check-in times, and any claim reasons or objection notes. We use them only to make Seal work. Seal has no analytics, no trackers, no advertising identifiers, no crash reporting service and no third party code that phones home. We never ask for your phone number, email address, contacts or location. Purchases are handled by Apple, and we do not receive your payment details.</p>
@@ -69,19 +70,22 @@
   <p>If you report somebody, the report goes from your own mail app to our support address and includes the account IDs involved. We act on valid reports within 24 hours. Removing somebody from your People list is stored only on your phone.</p>
 
   <h2>Deleting your identity</h2>
-  <p>Open your profile (the round name badge at the top left), then tap Delete identity and confirm with your key. If you have sealed envelopes, Seal first asks what should happen to them:</p>
+  <p>Open your profile, the round name badge at the top left, then tap Delete identity and confirm with your key. If you have sealed envelopes, Seal first asks what should happen to them:</p>
   <ul>
     <li>Keep them for your family: they stay sealed and open under your rule, since you can never check in again.</li>
     <li>Cancel them: everything sealed that your phone uploaded is removed, and they can never be opened.</li>
   </ul>
-  <p>Your choice is written into your signed record so your key holders can see it. Your account is then permanently marked as deleted, signed by your key, and the app wipes its data on that phone. This cannot be undone, by you or by us. People who met you will see that your account was deleted. Your public identity record stays in the directory, marked deleted, so the people who met you can still check what you signed before you left.</p>
-  <p>Anything already delivered to another person's phone stays on that phone, like a letter you already handed over.</p>
+  <p>Your choice is written into your signed record so your key holders can see it. Your account is then permanently marked as deleted, signed by your key, and the app wipes its data on that phone. This cannot be undone, by you or by us. Your public identity record stays in the directory, marked deleted, so the people who met you can see that you left and can still check what you signed before you did.</p>
+  <p>Anything already delivered to another person’s phone stays on that phone, like a letter you already handed over.</p>
 
   <h2>Children</h2>
   <p>Seal is not meant for anyone under 18. It is for planning what happens to your belongings and accounts, and an identity is tied to a passkey or security key belonging to one person.</p>
 
   <h2>Changes and contact</h2>
   <p>The current version of this policy is always at this address, with its date updated. Questions: <a href="mailto:support@sealmessenger.com">support@sealmessenger.com</a>.</p>
+
+  <p class="small">Checked against the source on 18 September 2026. This pass: the list of record entries was completed, sealing was added to the entries that get a timestamp, and the place where a sponsored key is stored was named exactly.</p>
+
   <footer class="site">
     <p>Seal is built by Jason Page. The source is at
     <a href="https://github.com/jasonepage/Seal">github.com/jasonepage/Seal</a>.

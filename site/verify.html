@@ -8,7 +8,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png?v=2">
 <link rel="stylesheet" href="seal.css">
 <title>Check the record yourself</title>
-<meta name="description" content="Anybody holding part of a Seal estate can export the whole signed record as one file, and a short Python script with no Seal in it checks every signature and every timestamp.">
+<meta name="description" content="A Seal capsule is one JSON file holding the whole signed record. A standalone Python script checks it. Here is every check it makes, and the three it cannot.">
 </head>
 <body>
 <div class="wrap">
@@ -24,37 +24,44 @@
   </header>
 
   <h1>Check the record yourself</h1>
-  <p class="lede">The promise that matters least is the one you have to take on faith. This page is the one you do not.</p>
+  <p class="lede">Every other claim on this site is a sentence. This one is a file, a script and an exit code.</p>
 
   <h2>What a capsule is</h2>
-  <p>Anybody holding part of somebody's estate can export a <b>capsule</b>: one JSON file carrying the entire signed history. Every public key involved, every event in order, each one signed and hash linked to the one before it, the timestamp tokens where they were obtained, the wrapped key material with its commitments, and optionally the encrypted envelopes themselves.</p>
-  <p>Nothing in a capsule is readable without private keys that live in people's phones. <b>A capsule can be posted on a public website without harm.</b> That is deliberate. It is the archive of record and it has to survive being copied around, emailed to a lawyer, and sitting on a hard drive for twenty years.</p>
-
-  <h2>What the verifier checks</h2>
-  <p><code>tools/verify_capsule.py</code> is a single Python file with no Seal in it and no network access. It checks:</p>
-  <ul class="plain">
-    <li>Every event's signature, against the device key that signed it, using P-256 ECDSA with SHA-256.</li>
-    <li>That every device key was endorsed by the identity that claims it, and that the endorsement is itself a valid WebAuthn assertion with the right relying party and the user presence bit set.</li>
-    <li>That the hash link from each event to the one before it holds, so nothing has been removed from the middle.</li>
-    <li>Every RFC 3161 timestamp token against the authority's certificate, and that the token covers the digest it claims to.</li>
-    <li>That each key holder's share matches the commitment published for it in the signed epoch statement, so a bad share names the person who submitted it.</li>
-  </ul>
+  <p>Anybody holding part of somebody’s estate can export a <b>capsule</b>: one JSON file carrying the whole signed history, the public keys, the wrapped key material with its commitments, the timestamp tokens, and optionally the encrypted envelopes. <a href="how-it-works.html">The full contents are listed here.</a></p>
+  <p>Nothing in it is readable without private keys that live in people’s phones, so <b>a capsule can be posted on a public website without harm</b>. That is deliberate. It is the archive of record and it has to survive being copied around, emailed to a lawyer, and sitting on a hard drive for twenty years.</p>
 
   <h2>Run it</h2>
-<pre><code>git clone https://github.com/jasonepage/Seal
+<pre><code>pip install cryptography
+git clone https://github.com/jasonepage/Seal
 cd Seal
-python3 tools/verify_capsule.py seal-capsule-XXXX.json</code></pre>
-  <p>Add <code>--strict</code> to fail on anything it would otherwise warn about, including a missing timestamp token. The script reads the file, prints a line per check, and exits non-zero if anything does not hold.</p>
-  <p>There is also <code>tools/make_test_capsule.py</code>, which builds a synthetic capsule so you can watch the verifier pass, then change one byte and watch it fail. That is a more convincing five minutes than anything on this website.</p>
+python3 tools/verify_capsule.py seal-capsule-XXXX.json --strict</code></pre>
+  <p><a href="https://github.com/jasonepage/Seal/blob/main/tools/verify_capsule.py"><code>tools/verify_capsule.py</code></a> is a single Python file with no Seal in it and no network access. Its only dependency is the <code>cryptography</code> package. It prints one line per check and exits non-zero if anything does not hold. Without <code>--strict</code> it passes a timestamp token whose signature it could not check, and says so on that line.</p>
+  <p>There is also <a href="https://github.com/jasonepage/Seal/blob/main/tools/make_test_capsule.py"><code>tools/make_test_capsule.py</code></a>, which builds a synthetic capsule with real signatures, so you can watch the verifier pass and then run it again with <code>--tamper</code> and watch it fail.</p>
 
-  <div class="card">
-    <h3>Why this is the important page</h3>
-    <p class="dim">Every other claim here is a sentence. This one is a file, a script, and an exit code. If this project ends tomorrow, the capsule format is documented in <code>docs/CAPSULE.md</code> in enough detail to write a fresh verifier from scratch, and the document is written for somebody who has never seen Seal and has only the file and a laptop.</p>
-  </div>
+  <h2>What it checks, in order</h2>
+  <ul class="plain">
+    <li>Every device endorsement verifies under its identity’s root public key: a WebAuthn assertion over the endorsement commitment, with the relying party hash, the user presence bit and the clientData type all enforced.</li>
+    <li>Every event’s digest recomputes from its own fields; its P-256 signature verifies under the device key it names; that device is an endorsed device of the actor it names; and that actor is allowed to write that kind of event.</li>
+    <li>Every event’s link to the one before it names an event that is present in the capsule, or is empty.</li>
+    <li>Every epoch event’s commitments match the epoch material blob, and that blob’s digest matches what the owner signed.</li>
+    <li>Every key tap verifies under that key holder’s root key, over the release challenge naming that exact claim and that exact record head.</li>
+    <li>A release’s Estate Key matches the commitment the owner published for it.</li>
+    <li>Every RFC 3161 token: the status is granted, the token carries that event’s digest, and its time is printed. If <code>openssl</code> is on the path, the token’s signature is checked against the certificate inside it.</li>
+  </ul>
+  <p>Whether that certificate’s issuer deserves trust is a decision for the reader, and the script says so rather than deciding for you. <a href="limits.html">The authority Seal points at today is a placeholder.</a></p>
 
   <h2>What the verifier cannot tell you</h2>
-  <p>It proves that a particular credential did a particular thing at a particular time, and that the record has not been edited. It does not prove that the person holding that credential was who you think. Binding a credential to a human being is what standing next to them does, and after that it is what notaries are for.</p>
-  <p>It also cannot prove that nothing is <i>missing</i> from the record on its own. Hiding an event is detectable, but only by comparing capsules held by several different people, or through the timestamp tokens. That limit is stated in the threat model rather than glossed over. <a href="limits.html">The limits are here.</a></p>
+  <p><b>It cannot prove the record is complete.</b> The owner and several key holders write to it at the same time with no server to order them, so the record is a hash linked graph rather than one strict chain. Checking every link proves that each event points at an event that is present. It does not prove that nothing was left out by whoever built the file. Hiding an event is detectable, but only by comparing capsules held by different people, or through the timestamp tokens, which prove an event existed no later than the time they name.</p>
+  <p><b>It cannot check a share against its commitment.</b> The shares in a capsule are wrapped to their key holders’ devices, so the script checks that the commitments in the epoch material are the ones the owner signed, and nothing more. Catching a bad share is done later, by the claimant’s phone at the moment of release, and a bad one names the key holder who submitted it.</p>
+  <p><b>It cannot prove who anybody is.</b> It proves a particular credential did a particular thing at a particular time. Binding a credential to a human being is what standing next to them does, and after that it is what notaries are for.</p>
+
+  <div class="card">
+    <h3>If this project ends</h3>
+    <p class="dim">The capsule format is documented in <a href="https://github.com/jasonepage/Seal/blob/main/docs/CAPSULE.md"><code>docs/CAPSULE.md</code></a> in enough detail to write a fresh verifier from scratch, for somebody who has never seen Seal and has only the file and a laptop. The script also takes <code>--combine</code>, which recovers the Estate Key from raw shares for a family whose phones are gone.</p>
+  </div>
+
+  <p class="small">Checked against the source on 18 September 2026. This pass: the list of checks was replaced with the seven the script actually makes, and two claims it does not support were corrected.</p>
+
   <footer class="site">
     <p>Seal is built by Jason Page. The source is at
     <a href="https://github.com/jasonepage/Seal">github.com/jasonepage/Seal</a>.

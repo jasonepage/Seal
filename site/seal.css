@@ -78,6 +78,9 @@ th, td { text-align:left; vertical-align:top; padding:11px 12px 11px 0;
   border-bottom:1px solid var(--rule); }
 th { font-size:14px; letter-spacing:.04em; text-transform:uppercase;
   color:var(--faint); font-weight:650; }
+/* A file path in a header cell must keep its own case: Seal/Estate is a real
+   path and SEAL/ESTATE is not. */
+th code { text-transform:none; letter-spacing:0; color:var(--ink); }
 td code { font-size:14px; }
 
 pre { background:var(--paper2); border:1px solid var(--rule); border-radius:10px;
@@ -89,6 +92,20 @@ pre code { background:none; border:none; padding:0; font-size:inherit; }
 
 ul.plain { padding-left:22px; }
 ul.plain li { margin-bottom:10px; }
+
+/* A file path or a document name has no space to break at, so on a narrow
+   phone one table cell can push the whole page sideways. Let those break.
+   Headings are left alone: breaking a word like INDEPENDENT reads as damage.
+   The first-column widths are set inline per table and relax on a phone. */
+code, table a { overflow-wrap:break-word; }
+@media (max-width:620px) {
+  table th[style] { width:auto !important; }
+  table { font-size:15px; }
+  th, td { padding-right:8px; }
+  /* break-word keeps a path whole while it fits; anywhere also lets the
+     column itself shrink, which is only wanted on a narrow screen. */
+  code, table a { overflow-wrap:anywhere; }
+}
 
 .note { border-left:3px solid var(--brass); background:var(--paper2);
   padding:16px 20px; border-radius:0 8px 8px 0; margin:26px 0; }

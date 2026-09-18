@@ -8,7 +8,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png?v=2">
 <link rel="stylesheet" href="seal.css">
 <title>Seal: the objections, answered</title>
-<meta name="description" content="Why not a password manager? Has this not been done? It is not audited. What if the developer quits? The fair objections to Seal, answered plainly.">
+<meta name="description" content="It is not audited. Why not a password manager. What if the developer quits. Apple can read it. The objections people raise about Seal, answered one at a time.">
 </head>
 <body>
 <div class="wrap">
@@ -24,49 +24,50 @@
   </header>
 
   <h1>The objections, answered.</h1>
-  <p class="lede">These are the things people say when they first see Seal. Most of them are right, or partly right. Here is where each one lands, so you can decide with the whole picture rather than a pitch.</p>
+  <p class="lede">The things people say when they first see Seal. Most are right, or partly right.</p>
 
-  <h2>"Just use 1Password or Bitwarden. They have emergency access."</h2>
-  <p>They do, and they are audited, and if you already use one, keep using it. For a lot of people that is the right answer and you should stop reading here.</p>
-  <p>Here is what is different, so you can judge whether it matters to you. Emergency access hands one person your whole vault. Seal gives each person their own sealed envelope, and nobody, including the people holding the keys, can read anybody else's. Emergency access runs on the company's servers and needs that company to still exist and still be honest on the day it matters, which may be twenty years away. Seal has no server: the encrypted envelopes sit in Apple's iCloud, in Seal's own container, and the record of who did what can be checked with a script that has no Seal in it. And a vault does not hold a letter, a voice message or a video. For many people the letter turns out to be the part they came for.</p>
+  <h2>“It has not been audited.”</h2>
+  <p>True, and it says so on the front of this site and inside the app. An audit by an outside firm costs more than a one-person project has earned so far. It is planned for when the code stops moving, and the source is open so anybody can start earlier. <a href="limits.html">Everything else that is not done is listed here.</a></p>
+  <p>Until then, the advice from the <a href="how-it-works.html">technical page</a>: do not make Seal the only copy of a live seed phrase. Put in what your family cannot reconstruct without you, which is where things are and who to call, and add the words later.</p>
 
-  <h2>"A dead man's switch is not new."</h2>
-  <p>Correct. The idea is decades old and there are dozens of them. What is new here is the combination: no server that can be subpoenaed, hacked or shut down; one envelope per person, opened only on that person's phone; the key split among people you met in person, so no single one of them can act alone unless you chose that; weeks of daily warnings before anything opens, ended by one tap; and a signed record anybody can verify without trusting us. If you know of another tool that does all of that, use it, and tell us which one.</p>
+  <h2>“Just use 1Password or Bitwarden. They have emergency access.”</h2>
+  <p>They do, they are audited, and if you already use one, keep using it. For a lot of people that is the right answer.</p>
+  <p>What is different: emergency access hands one person your whole vault, while Seal gives each person their own sealed envelope that nobody else can read, including the people holding the keys. Emergency access runs on the company’s servers and needs that company to still exist and still be honest on the day it matters, which may be twenty years away. And a vault does not hold a letter, a voice message or a video. For many people the letter turns out to be the part they came for.</p>
 
-  <h2>"It has not been audited."</h2>
-  <p>True, and it says so on the front of this site and inside the app. Nobody independent has read the code yet. One design review before release found two real problems, both fixed, and the write-up is public in the source. An audit by an outside firm costs more than a one-person project has earned so far; it is planned for when the code stops moving, and the source is open so that anybody can start earlier.</p>
-  <p>Until then, the advice from our own <a href="how-it-works.html">technical page</a>: do not make Seal the only copy of a live seed phrase. Put in what your family cannot reconstruct without you, which is where things are and who to call, and add the words later.</p>
+  <h2>“A dead man’s switch is not new.”</h2>
+  <p>Correct. The idea is decades old and there are dozens of them. What is new here is the combination: no server that can be subpoenaed, hacked or shut down; one envelope per person, opened only on that person’s phone; the key split among people you met in person; weeks of daily warnings before anything opens, ended by one tap; and a signed record anybody can check without trusting us. If you know of another tool that does all of that, use it, and tell us which one.</p>
 
-  <h2>"One developer. What happens when you quit, or die?"</h2>
-  <p>Less than you would think, and that is by design. There is no Seal server to switch off. Your envelopes are in Apple's iCloud, encrypted with keys that never left your phones. The app keeps working on the phones that have it. And any key holder can export the whole signed record as one file and check it with a <a href="verify.html">short Python script</a> that does not need Seal, this website, or us. The source is open under a licence that lets anybody carry it on.</p>
+  <h2>“One developer. What happens when you quit, or die?”</h2>
+  <p>Less than you would think. There is no Seal server to switch off. Your envelopes are in Apple’s iCloud, encrypted with keys that never left your phones, and the app keeps working on the phones that have it. Any key holder can export the whole signed record as one file and check it with a <a href="verify.html">short Python script</a> that does not need Seal, this website, or us. The licence lets anybody carry the code on.</p>
   <p>What would stop: new downloads, if Apple removed the app, and fixes for new iOS versions. That is a real limit, and it is the same limit every small app has.</p>
 
-  <h2>"Apple can read it. It is in iCloud."</h2>
-  <p>Apple holds ciphertext, and a detail worth knowing: it is stored in Seal's CloudKit container, not in your personal iCloud storage. It does not count against your iCloud space, it does not show up in Settings under Manage Storage, and it cannot be deleted from there. Only the app, signed by your key, can remove your records. The keys that open an envelope are made on your phone and the recipient's phone and never leave them. What someone with full access to the stored data could learn is written out on the <a href="privacy.html">privacy page</a>: roughly how many people you wrote to, how much, who your key holders are by account ID, and when things happened. Not the titles, not the letters, not the secrets, not who any envelope is for.</p>
+  <h2>“Apple can read it. It is in iCloud.”</h2>
+  <p>Apple holds ciphertext. The keys that open an envelope are made on your phone and the recipient’s phone and never leave them. One detail worth knowing: it is stored in Seal’s own CloudKit container, not in your personal iCloud storage, so it does not count against your space and cannot be reached from Settings.</p>
+  <p>What somebody with full read access to that database gets is written out row by row on the <a href="how-it-works.html">technical page</a>, and in plainer words on the <a href="privacy.html">privacy page</a>. The short version: counts, times, your rule and your key holders’ account IDs, yes. Titles, letters, secrets and who any envelope is for, no.</p>
 
-  <h2>"Open source means nothing. The build Apple ships could be anything."</h2>
-  <p>That is true of every app on every phone, and we are not going to pretend it is not. You cannot prove the binary Apple ships is built from the source you read. What limits the damage is the shape of the thing: there is no server of ours for a bad update to send your secrets to, and a bad update can only reach what your own phone already holds. That is still a limit, not a solution, and it is why an audit and reproducible builds are on the list.</p>
+  <h2>“Open source means nothing. The build Apple ships could be anything.”</h2>
+  <p>You cannot prove the binary Apple ships is built from the source you read, and we are not going to pretend otherwise. What limits the damage is the shape of the thing: there is no server of ours for a bad update to send secrets to, and a bad update reaches only what your own phone already holds. That is a limit, not a solution, and <a href="limits.html">reproducible builds are on the list of things not done</a>.</p>
 
-  <h2>"Why does it cost money?"</h2>
-  <p>Because free things vanish. One purchase, once, pays for the time of the person building it. There is no subscription because there is no server to keep paying for, and you should be suspicious of a subscription on a product whose whole job is to still work in twenty years. Holding a key for someone, or receiving an envelope, is free. Only the person writing pays.</p>
+  <h2>“Meeting in person is a hassle.”</h2>
+  <p>It is, once per person, for about two minutes. It buys the one thing no remote channel gives you: certainty that the key your phone remembers is really theirs. Every alternative trusts a phone number, an email address or a support agent, and each of those is a thing a stranger can take without being near you.</p>
+  <p>The cost is real and it is not only the meeting. A key holder who replaces their phone loses their piece of your key until you seal again, which takes you one tap but needs you to notice. The app is meant to tell you.</p>
 
-  <h2>"iPhone only. Useless."</h2>
-  <p>For now, yes. It leans on things the iPhone does well: the Secure Enclave, passkeys, and iCloud as a filing cabinet that needs no server of ours. Android is the single most requested thing, and one developer can only build one at a time. If the people you need are on Android, say so; it decides how fast.</p>
+  <h2>“What if the key holders lose their phones, or die before I do?”</h2>
+  <p>Then the ones who remain still need to reach the number you set. If you chose any two of three and one is gone, the other two can still open. If too many are gone, your envelopes stay closed forever. The Keys tab shows you who still holds a working key while you are alive, so you can hand out a fresh one. The same arithmetic that stops one person opening early stops a lonely survivor opening late.</p>
 
-  <h2>"A long hospital stay looks the same as death."</h2>
-  <p>It does, from the outside. That is why nothing starts until you have been silent for months, and then you are warned every day for weeks, and then there is a further quiet period, and one tap on your phone stops all of it. No key needed for that tap. If you can pick up your phone, you are not dead as far as Seal is concerned.</p>
+  <h2>“A long hospital stay looks the same as death.”</h2>
+  <p>It does, from the outside, which is why nothing starts for months and then you are warned every day for weeks before anything opens. One tap on your phone stops all of it, and that tap needs no key. If you can pick up your phone, you are not dead as far as Seal is concerned.</p>
 
-  <h2>"What if the key holders lose their phones, or die before I do?"</h2>
-  <p>Then the ones who remain still need to reach the number you set. If you chose any two of three and one is gone, the other two can still open. If too many are gone, your envelopes stay closed forever, and the Keys tab shows you who still holds a working key while you are alive, so you can hand out a fresh one. Sealing again takes one tap and replaces every key. The same arithmetic that stops one person opening early stops a lonely survivor opening late.</p>
+  <h2>“iPhone only. Useless.”</h2>
+  <p>iPhone and iPad, and for now that is all. Seal leans on things Apple does well: the Secure Enclave, passkeys, and iCloud as a filing cabinet that needs no server of ours. Android is the single most requested thing, and one developer can only build one at a time. If the people you need are on Android, say so; it decides how fast.</p>
 
-  <h2>"Why do I have to meet people in person?"</h2>
-  <p>Because a name, a number, a voice and a face can all be faked over the internet, and standing next to someone cannot. The moment two phones are side by side is the only moment you can be sure the key your phone remembers is really theirs. Everything else in Seal rests on that.</p>
+  <h2>“Why does it cost money?”</h2>
+  <p>Because free things vanish. One purchase, once, pays for the time of the person building it. There is no subscription because there is no server to keep paying for, and a subscription on a product whose job is to still work in twenty years is worth being suspicious of. Holding a key for someone, or receiving an envelope, is free. Only the person writing pays.</p>
 
-  <h2>"Do I need a hardware security key?"</h2>
-  <p>No. A passkey with Face ID or Touch ID is enough. A physical key is an option for people who want the stronger protection against phishing, and Seal treats both the same.</p>
+  <h2>“Why should I trust you?”</h2>
+  <p>You should not have to. Read the code, run the verifier, and if you find something wrong, <a href="mailto:support@sealmessenger.com">tell us</a>.</p>
 
-  <h2>"Why should I trust you?"</h2>
-  <p>You should not have to. That is the point of the source being open, the record being checkable, the limits being written down, and the audit status being printed on the box. Read the code, and if you find something wrong, <a href="mailto:support@sealmessenger.com">tell us</a>.</p>
+  <p class="small">Checked against the source on 18 September 2026. This pass: two questions the support page already answered were removed, and the iPhone answer was corrected to iPhone and iPad.</p>
 
   <footer class="site">
     <p>Seal is built by Jason Page. The source is at

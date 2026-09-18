@@ -8,7 +8,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png?v=2">
 <link rel="stylesheet" href="seal.css">
 <title>What Seal does not do</title>
-<meta name="description" content="The threat model, the accepted limits, and what has not been done yet. Published by us, in public, including the absence of a third party audit.">
+<meta name="description" content="The threat model, the limits Seal accepts, and every item the source documents list as not built yet, including the missing audit and the untested hardware.">
 </head>
 <body>
 <div class="wrap">
@@ -24,16 +24,23 @@
   </header>
 
   <h1>What Seal does not do</h1>
-  <p class="lede">A product that holds secrets and lists only its strengths is telling you something about itself. This page is the other half, and it is the same page we keep internally. The common objections have <a href="objections.html">their own page</a>.</p>
+  <p class="lede">What is not built, what is not promised, and what an attacker gets. The common objections have <a href="objections.html">their own page</a>.</p>
 
   <h2>Not done yet, as of September 2026</h2>
   <table>
     <tr><th style="width:15em">No independent audit</th><td>Nobody outside this project has reviewed the cryptography or the code. That is the single biggest reason to keep a live seed phrase out of it for now. The source is open so that this can change.</td></tr>
-    <tr><th>Not on the App Store yet</th><td>Submitted for review in September 2026. Until it is approved, Seal is a free TestFlight beta used by a handful of families. Expect rough edges.</td></tr>
-    <tr><th>One design review, two fixes</th><td>Before release, one pass over the key handling, the release machine and the record found two things worth fixing: a key holder could date a claim in the past and skip the warning period, and sealing again after a release could let one recipient read new envelopes early. Both are fixed in the current build. The full write-up is <a href="https://github.com/jasonepage/Seal/blob/main/docs/REVIEW.md">docs/REVIEW.md</a> in the source. That was a review, not an audit.</td></tr>
-    <tr><th>One person</th><td>Built by one developer. There is no company, no team and no funding, which means nobody to be acquired by and also nobody to review a mistake before you see it.</td></tr>
-    <tr><th>Security keys partly untested</th><td>A fix for a PIN handling conflict with FIDO2.1 keys is in, and has not yet been verified on real hardware over both NFC and USB-C. Passkeys are the better tested path today.</td></tr>
-    <tr><th>iPhone only</th><td>No Android, and no second owner device: your working copy of drafts and media lives on one phone.</td></tr>
+    <tr><th>Not on the App Store</th><td>Submitted for review in September 2026 and still waiting. Until it is approved, Seal is a free TestFlight beta. Expect rough edges.</td></tr>
+    <tr><th>One design review, not an audit</th><td>One pass over the key handling, the release machine and the record, by the same assistant that wrote much of the code, which is a weaker check than a stranger. It found two things worth fixing: a key holder could date a claim in the past and skip the warning period, and sealing again after a release could let one recipient read new envelopes early. Both are fixed in the build that was submitted. The write-up is <a href="https://github.com/jasonepage/Seal/blob/main/docs/REVIEW.md">docs/REVIEW.md</a>. That was a review, not an audit.</td></tr>
+    <tr><th>One person</th><td>Built by one developer. No company, no team and no funding, which means nobody to be acquired by and also nobody to review a mistake before you see it.</td></tr>
+    <tr><th>Security keys are barely tested</th><td>A fix for a PIN handling conflict with FIDO2.1 keys is in, and has not been checked on real hardware over NFC or USB-C. The interop table in <a href="https://github.com/jasonepage/Seal/blob/main/docs/SECURITY_KEY_TEST_MATRIX.md">docs/SECURITY_KEY_TEST_MATRIX.md</a> has no rows filled in. Passkeys are the better tested path today.</td></tr>
+    <tr><th>Registering a key for somebody else has never met real hardware</th><td>This is the one place where private key material leaves a phone: locked under a secret only a physical security key can compute, and stored in the public database. It is new, it has never run against a real key, and <a href="https://github.com/jasonepage/Seal/blob/main/docs/PRE_AUDIT.md">docs/PRE_AUDIT.md</a> says it deserves the hardest look of anything here.</td></tr>
+    <tr><th>Most tests only run on a phone</th><td>There is no test target, because a passkey needs a real app to live in, so most suites run at launch in debug builds and only the developer watches them pass. One suite, <code>SecurityFixTests</code>, is not registered and so does not run at all. The key split and the countdown compile on their own and anybody can run them. <a href="https://github.com/jasonepage/Seal/blob/main/docs/TESTS.md">docs/TESTS.md</a> lists all 80 tests by name.</td></tr>
+    <tr><th>No reproducible builds</th><td>You cannot prove the app Apple ships is built from the source you read. That is true of every app on every phone, and it is on the list rather than solved.</td></tr>
+    <tr><th>Post-quantum only from iOS 26</th><td>ML-KEM-768 needs iOS 26. A wrap made to a device below that is X25519 alone, so the protection against recording now and decrypting later is per device, not per estate. The wrap records which of the two it used.</td></tr>
+    <tr><th>The timestamp authority is a placeholder</th><td>Seal points at a free public authority. <a href="https://github.com/jasonepage/Seal/blob/main/docs/RECORD.md">docs/RECORD.md</a> section 13 says why that is not yet a defensible choice, and the verifier leaves the question of whether to trust that authority to the reader.</td></tr>
+    <tr><th>The field arithmetic is not constant time</th><td>The multiply inside the key split branches on the bits of its operand. Shares are only ever handled on their holder’s own device and there is no remote timing channel into it, so this was accepted rather than rewritten. Test vectors are in place if a reviewer disagrees.</td></tr>
+    <tr><th>Claim reasons and objection notes are in the clear</th><td>A key holder types them when starting or objecting to a claim. They are signed, not encrypted, and anybody reading the stored record can read them.</td></tr>
+    <tr><th>iPhone and iPad only</th><td>No Android. Your working copy of drafts and media lives on one phone; a second device signed into the same identity can read the record but does not carry that working copy.</td></tr>
   </table>
 
   <div class="note" id="audit">
@@ -48,13 +55,16 @@
   <p>Seal proves that the credential acting later is the same one you stood next to. It cannot bind a credential to a passport. That is what notaries do, and we are not one.</p>
 
   <h3>That nothing at all is visible</h3>
-  <p>An onlooker with access to the stored records can work out how many people you wrote to, roughly how much you wrote, that a given identity has some part in some estate, and when things happened. They cannot work out titles, letters, secrets, or who any envelope is for.</p>
+  <p>Somebody reading the stored records can work out how many people you wrote to, roughly how much you wrote, who your key holders are, your rule, and when things happened. They cannot work out titles, letters, secrets, or who any envelope is for. <a href="how-it-works.html#read-the-code">The full list of what is readable is on the technical page.</a></p>
 
   <h3>That a stolen unlocked phone is harmless</h3>
-  <p>Secrets are shown only after a Face ID or Touch ID check, and key material is bound to the device. But a thief with your unlocked phone can keep sending heartbeats, which keeps you looking alive. That is a known limit and it is written down rather than hidden.</p>
+  <p>Secrets are shown only after a Face ID or Touch ID check, and key material is bound to the device. But a thief with your unlocked phone can keep sending heartbeats, which keeps you looking alive. Seal cannot tell that apart from you being alive.</p>
 
   <h3>That a letter can reach a child with no phone</h3>
-  <p>An envelope is wrapped to a specific person's devices, so that person has to have Seal and to have met you. A grandchild who is four today is a real gap. Every fix we know of weakens the isolation promise, so none has been built yet.</p>
+  <p>An envelope is wrapped to a specific person’s devices, so that person has to have Seal and to have met you. A grandchild who is four today is a real gap. Every fix we know of weakens the isolation promise, so none has been built.</p>
+
+  <h3>That a date opens anything</h3>
+  <p>An envelope can carry a date, and after the release the recipient’s phone keeps it closed until that day. There is no server and no clock everyone can trust, so the date is a wish the app honours, not a lock. Somebody determined, with the capsule and a computer, could read it sooner.</p>
 
   <h3>That one key holder can never act alone</h3>
   <p>That depends entirely on the rule the owner set. If they chose a threshold of one, one person can release the estate by themselves after the countdown. The app says so in those words, to that person, on the day they accept and every time they look.</p>
@@ -63,17 +73,19 @@
   <p>Once the Estate Key is published the seal is broken. A check-in after that changes nothing.</p>
 
   <h2>The threat model</h2>
-  <p>From <code>docs/SDS.md</code> section 7, unedited.</p>
+  <p>Every row of <a href="https://github.com/jasonepage/Seal/blob/main/docs/SDS.md">docs/SDS.md</a> section 7, with the word <i>custodian</i> written as <i>key holder</i>, and the row about acting early set out in full rather than in a clause.</p>
   <table>
     <tr><th style="width:17em">Threat</th><th>Defence</th></tr>
-    <tr><td>Apple or anyone reads an envelope</td><td>Content keys sit inside encrypted tables; a table needs the recipient's device key plus the Estate Key; the Estate Key needs the owner's device or M shares.</td></tr>
-    <tr><td>The directory swaps somebody's key</td><td>Pinned when you met; enforced on every single fetch; key holders pin each other from the owner's signed statement.</td></tr>
-    <tr><td>The directory forges or hides events</td><td>Every event is device signed and hash linked. Hiding is detectable through capsules held by several people and through timestamp tokens.</td></tr>
+    <tr><td>Apple or anyone reads an envelope</td><td>Content keys sit inside encrypted tables; a table needs the recipient’s device key plus the Estate Key; the Estate Key needs the owner’s device or M shares.</td></tr>
+    <tr><td>The directory swaps somebody’s key</td><td>Pinned when you met; enforced on every single fetch; key holders pin each other from the owner’s signed statement.</td></tr>
+    <tr><td>The directory forges or hides events</td><td>Every event is device signed and hash linked, and every device endorsement is re-checked. Hiding is detectable only through capsules held by several people and through timestamp tokens.</td></tr>
+    <tr><td>The directory un-verifies a device</td><td>An unsigned removal is ignored. Only a revocation signed by the identity itself counts.</td></tr>
     <tr><td>A signature from another site is replayed</td><td>Relying party hash, user presence bit and type are all enforced.</td></tr>
+    <tr><td>A re-split endorsement evades revocation</td><td>The current framing is length framed. The older one is accepted only at exact lengths.</td></tr>
     <tr><td>A key holder submits a bad share</td><td>A per share commitment in the signed record names them.</td></tr>
-    <tr><td>Key holders collude early</td><td>There is no cryptographic time lock; nothing can enforce one without a trusted third party, and Seal has none on purpose. The countdown is a signed public record that honest apps obey. To cheat it, M key holders would have to pull their pieces out with a modified app, and the recipient would have to run one too, because the Estate Key alone opens nothing. So the people you picked, plus the reader, could collude to open early. That is the trust you chose when you chose them, and the record shows it.</td></tr>
-    <tr><td>The owner is declared dead while alive</td><td>Silence, then weeks of warnings, then grace, with a one tap cancel that needs no hardware key, plus objections.</td></tr>
-    <tr><td>A phone's clock lies</td><td>Timestamp tokens on heartbeats, claims, taps and releases; the record prefers the authority's time.</td></tr>
+    <tr><td>Key holders act early</td><td>There is no cryptographic time lock. Nothing can enforce one without a trusted third party, and Seal has none on purpose. The countdown is a signed public record that honest apps obey. To cheat it, M key holders would have to pull their pieces out with a modified app, and the recipient would have to run one too, because the Estate Key alone opens nothing. So the people you picked, plus the reader, could act together to open early. That is the trust you chose when you chose them, and the record shows it.</td></tr>
+    <tr><td>The owner is declared dead while alive</td><td>Silence, then weeks of warnings, then a quiet period, with a one tap cancel that needs no hardware key, plus objections.</td></tr>
+    <tr><td>A phone’s clock lies</td><td>Timestamp tokens on heartbeats, claims, taps and releases; the record prefers the authority’s time, and each phone also refuses to treat a claim as older than the day it first saw it.</td></tr>
     <tr><td>Harvest now, decrypt later</td><td>ML-KEM-768 in every estate wrap, on iOS 26 and above.</td></tr>
     <tr><td>The company disappears</td><td>The capsule and its verifier. <a href="verify.html">See for yourself.</a></td></tr>
   </table>
@@ -84,6 +96,9 @@
   <div class="note">
     <p>If you find something wrong here, or something missing, email <a href="mailto:support@sealmessenger.com">support@sealmessenger.com</a>.</p>
   </div>
+
+  <p class="small">Checked against the source on 18 September 2026. This pass: seven rows were added for things the documents list as not done, the design review row now says it was done by the same assistant that wrote the code, and the claim that a handful of families use it was removed.</p>
+
   <footer class="site">
     <p>Seal is built by Jason Page. The source is at
     <a href="https://github.com/jasonepage/Seal">github.com/jasonepage/Seal</a>.

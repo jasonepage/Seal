@@ -8,7 +8,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png?v=2">
 <link rel="stylesheet" href="seal.css">
 <title>Seal: sealed envelopes for the people you leave behind</title>
-<meta name="description" content="Write one sealed envelope per person: a letter and the passwords they need. It opens on their phone only after you are gone. No server, no subscription, open source.">
+<meta name="description" content="One sealed envelope per person: a letter and the passwords they need, encrypted on your phone, opened only after months of silence. Open source, not audited.">
 </head>
 <body>
 <div class="wrap">
@@ -41,42 +41,28 @@
 
   <div class="hero">
     <h1>Sealed envelopes for the people you leave behind.</h1>
-    <p class="lede">Write a letter and your passwords for each person you love. Seal them on your phone. They open only after you die, and only on that person's phone.</p>
+    <p class="lede">Seal is an iPhone app for writing one sealed envelope per person: a letter, and the passwords and instructions that person needs. Everything is encrypted on your phone, and an envelope opens only after you have gone quiet for months and weeks of daily warnings have passed. There is no Seal server, the source is public, and nobody outside this project has audited it.</p>
     <a class="cta" href="https://testflight.apple.com/join/cYp9JRCG">Get Seal on TestFlight</a>
     <a class="cta ghost" href="how-it-works.html">Read the technical version</a>
-    <p class="small" style="margin-top:14px">iPhone and iPad. Free on TestFlight while it is in App Store review; one purchase, once, after that. No subscription, no account, no server of ours. Open source. <a href="limits.html">Not yet independently audited.</a></p>
+    <p class="small" style="margin-top:14px">iPhone and iPad. Free on TestFlight while the App Store reviews it, then one purchase, once. Open source under MPL 2.0. <a href="limits.html">The limits are here.</a></p>
   </div>
 
-  <div class="card">
-    <h3>How it works, in five lines</h3>
-    <ul class="steps">
-      <li><span class="n">1</span>Write one envelope per person. A letter, the passwords, where things are.</li>
-      <li><span class="n">2</span>Give two or three people you trust a piece of the key. In person, phones side by side.</li>
-      <li><span class="n">3</span>Open the app now and then. That is how it knows you are alive.</li>
-      <li><span class="n">4</span>Go quiet for months, and they can ask if you are gone. You get weeks of warnings first. One tap says "I am here" and stops it.</li>
-      <li><span class="n">5</span>Only then do the envelopes open. Each one only for its person. Not the key holders, not Apple, not us.</li>
-    </ul>
-    <p class="dim">Why not just put it in your will? A will filed for probate becomes a public court record. Passwords, seed phrases, safe combinations and private letters cannot go in one.</p>
-  </div>
+  <p>After you die, your will goes through a court, and what is in it becomes a public record that anyone can look up. So passwords, seed phrases, safe combinations and private letters cannot go in one. Those are the things Seal holds instead.</p>
 
-  <div class="note">
-    <p><b>Somebody asked you to be part of their Seal?</b> Install it, then set it up together the next time you are actually with them. Two minutes, once. After that there is nothing to do, possibly for years. Holding a key for someone costs nothing. <a href="https://testflight.apple.com/join/cYp9JRCG">Install Seal</a></p>
-  </div>
-
-  <h2>Do not take our word for any of this</h2>
-  <p>Everything below is a claim, and a claim about secrets is worth what you can check. So three things are public, and they are the reason to keep reading rather than close the tab.</p>
+  <h2>Do not take our word for it</h2>
+  <p>Three things are public, so you can check rather than trust.</p>
   <table>
     <tr>
       <th style="width:9em">The source</th>
-      <td>Every line, at <a href="https://github.com/jasonepage/Seal">github.com/jasonepage/Seal</a>. No third party code, no analytics library, nothing that phones home. You or somebody you trust can read what the app does with what you type.</td>
+      <td>Every line, at <a href="https://github.com/jasonepage/Seal">github.com/jasonepage/Seal</a>. No third party code, no analytics library, nothing that phones home. <a href="how-it-works.html#read-the-code">The six files to read first, in order.</a></td>
     </tr>
     <tr>
       <th>The record</th>
-      <td>Anybody holding part of your key can export the whole signed history as one file, and <a href="verify.html">a short script with no Seal in it</a> checks every signature and every timestamp. If this project ends, that still works.</td>
+      <td>Anybody holding part of an estate can export the whole signed history as one file, and <a href="verify.html">a Python script with no Seal in it</a> checks every signature and every timestamp token. If this project ends, that still works.</td>
     </tr>
     <tr>
       <th>The limits</th>
-      <td><a href="limits.html">What breaks Seal</a>, written by us, in public. Including the parts that are not finished and the fact that nobody independent has audited it yet.</td>
+      <td><a href="limits.html">What Seal does not do</a>, including the parts that are not built and the absence of an audit.</td>
     </tr>
   </table>
 
@@ -84,7 +70,7 @@
   <ul class="steps">
     <li><span class="n">1</span><b>Write the envelopes.</b> One for each person. A letter, a few photos, a voice message, and the secrets. You do not need anybody else to start: type a name and write tonight.</li>
     <li><span class="n">2</span><b>Choose who can open them.</b> A few people you trust, added face to face. They hold pieces of one key, and one piece on its own is no clue at all, not even a hint.</li>
-    <li><span class="n">3</span><b>Set the rule, then seal.</b> How long the silence, how many warnings, how many of them it takes. Ninety days, twenty one, fourteen, any two of three, by default.</li>
+    <li><span class="n">3</span><b>Set the rule, then seal.</b> How long the silence, how many days of warnings, how long after that, and how many of them it takes. Ninety days, twenty one, fourteen, any two of three, by default.</li>
     <li><span class="n">4</span><b>Open the app now and then.</b> That is the entire ongoing job. Opening it is the check-in that keeps everything closed.</li>
   </ul>
 
@@ -92,25 +78,27 @@
   <ul class="steps">
     <li><span class="n">1</span><b>You go quiet.</b> Nothing begins until you have been silent past the limit you chose. Nobody else sees your check-ins.</li>
     <li><span class="n">2</span><b>Somebody starts a claim.</b> One of the people you chose says they believe you are gone. Everybody else is told the same day.</li>
-    <li><span class="n">3</span><b>You are warned, every day, for weeks.</b> Then a further quiet period. One tap from you ends all of it, cold, at any point, and that tap needs no key.</li>
-    <li><span class="n">4</span><b>Only then do the envelopes open.</b> The people you chose act together, and each envelope opens on the phone of the person it was written for. Nobody reads anybody else's, including the people holding the keys.</li>
+    <li><span class="n">3</span><b>You are warned, every day, for weeks.</b> Then a further quiet period. One tap from you ends all of it at any point, and that tap needs no key.</li>
+    <li><span class="n">4</span><b>Only then do the envelopes open.</b> The people you chose act together, and each envelope opens on the phone of the person it was written for. Nobody reads anybody else’s, including the people holding the keys.</li>
   </ul>
-  <p class="dim">A long stay in hospital looks exactly like death from the outside. The warnings exist for precisely that, and they are loud on purpose.</p>
 
   <h2>Writing it is the hard part</h2>
-  <p>The way this goes wrong is not the mathematics. It is an empty vault that opens perfectly. So Seal asks questions, one at a time, and turns your answers into a draft you then edit. You can talk instead of typing.</p>
-  <p>Nothing you write or say in that part leaves your phone. Your voice becomes words on the phone itself, or not at all: a phone that cannot do that work alone gets no microphone button rather than a server.</p>
+  <p>The way this goes wrong is not the mathematics. It is an empty vault that opens perfectly. So Seal asks questions, one at a time, and turns your answers into a draft you then edit. You can talk instead of typing, and none of that work leaves the phone.</p>
 
-  <h2>The objections, answered</h2>
-  <p>"Just use a password manager." "This has been done." "It is not audited." "What if you quit?" All fair, and each one gets a real answer rather than a slogan. <a href="objections.html">Read them before you trust this with anything.</a></p>
+  <div class="note">
+    <p><b>Somebody asked you to hold a key?</b> Nothing is waiting for you to accept, because this is done in person. <a href="https://testflight.apple.com/join/cYp9JRCG">Install Seal</a> now and do the rest when you next see them. <a href="support.html">What holding a key involves.</a></p>
+  </div>
 
-  <h2>Built to outlive whoever built it</h2>
-  <p>There is no Seal server. The record of who did what, and when, is signed and hash linked, and the verifier is a single Python file you can read in an afternoon. <a href="verify.html">See how to check a capsule.</a></p>
+  <h2>The objections</h2>
+  <p>Just use a password manager. This has been done before. It is not audited. What if you quit? All fair. <a href="objections.html">Each one gets an answer.</a></p>
 
   <div class="card">
     <h3>The short technical answer</h3>
-    <p class="dim">X25519 plus ML-KEM-768 for wrapping, HKDF-SHA256, AES-256-GCM for content, P-256 ECDSA through WebAuthn for identity, Shamir over GF(256) for the key split, RFC 3161 for timestamps. Apple CryptoKit throughout. No third party dependencies, no backend of ours. <a href="how-it-works.html">The long answer is here.</a></p>
+    <p class="dim">X25519 plus ML-KEM-768 for wrapping, HKDF-SHA256, AES-256-GCM for content, P-256 ECDSA through WebAuthn for identity, Shamir over GF(256) for the key split, RFC 3161 for timestamps. Apple CryptoKit throughout, no third party dependencies. <a href="how-it-works.html">The long answer is here.</a></p>
   </div>
+
+  <p class="small">Checked against the source on 18 September 2026. This pass: the audit status moved into the opening paragraph, a step list that repeated the one below it was cut, and the probate sentence was rewritten in plain words.</p>
+
   <footer class="site">
     <p>Seal is built by Jason Page. The source is at
     <a href="https://github.com/jasonepage/Seal">github.com/jasonepage/Seal</a>.

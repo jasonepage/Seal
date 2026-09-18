@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="LICENSE"><img alt="MPL 2.0" src="https://img.shields.io/badge/license-MPL_2.0-8C6A2B"></a>
-  <img alt="iOS 26" src="https://img.shields.io/badge/iOS-26%2B-1A1714">
+  <img alt="iOS 18" src="https://img.shields.io/badge/iOS-18%2B-1A1714">
   <img alt="SwiftUI" src="https://img.shields.io/badge/SwiftUI-CryptoKit-F05138">
   <img alt="No server" src="https://img.shields.io/badge/backend-none-8C6A2B">
   <img alt="Audit" src="https://img.shields.io/badge/independent_audit-not_yet-B3261E">
@@ -24,9 +24,10 @@
 
 ---
 
-A will filed for probate becomes a public court record. So the password to
-your bank, the phrase that opens your wallet, where the safe deposit key is,
-the combination, the thing you never told anybody: none of it can go in one.
+After you die, your will goes through a court and what is in it becomes a
+public record that anyone can look up. So the password to your bank, the
+phrase that opens your wallet, where the safe deposit key is, the combination,
+the thing you never told anybody: none of it can go in one.
 
 Seal is where those things go instead. You write a small number of envelopes,
 one per person: a letter, photos, a voice message, a video, a file, and the
@@ -51,15 +52,44 @@ in it.
 | | |
 |---|---|
 | Stage | Submitted to the App Store, September 2026. Free on [TestFlight](https://testflight.apple.com/join/cYp9JRCG) until then. |
-| Audit | **None.** One design review before release found two things worth fixing; both are fixed. See [`docs/REVIEW.md`](docs/REVIEW.md). |
+| Audit | **None.** One design review before release, by the same assistant that wrote much of the code, found two things worth fixing; both are fixed. See [`docs/REVIEW.md`](docs/REVIEW.md). |
 | Team | One developer. No company, no funding, no investors. |
-| Platform | iPhone and iPad, iOS 26. No Android. One owner device. |
+| Platform | iPhone and iPad, iOS 18 and later. No Android. One owner device. ML-KEM and the on-phone writing help need iOS 26. |
 | Dependencies | None. No third party code, no analytics, no crash reporter, no backend of ours. |
 | Price | One purchase, once. No subscription. Holding a key or receiving an envelope is free. |
 
 `docs/GOTCHAS.md` is the running list of things that went wrong and what they
 actually were. It is unflattering on purpose, and it is the first thing to
 read before debugging anything.
+
+## What is not done
+
+Not a complete list. [`docs/PRE_AUDIT.md`](docs/PRE_AUDIT.md) is written for a
+reviewer and [the limits page](https://sealmessenger.com/limits.html) has the
+rest.
+
+- **Nobody independent has reviewed the cryptography or the code.**
+- **Registering a hardware key for somebody else has never met real hardware.**
+  It is the one place private key material leaves a phone, and it deserves the
+  hardest look of anything here.
+- **Security keys are barely tested.** The interop matrix in
+  `docs/SECURITY_KEY_TEST_MATRIX.md` has no rows filled in. Passkeys are the
+  better tested path today.
+- **Most tests only run on a phone**, at debug launch, watched only by the
+  developer. `SecurityFixTests` is not registered, so it does not run at all.
+  The key split and the countdown compile on their own and anybody can run
+  them: `sh tools/run_core_tests.sh`.
+- **No reproducible builds.** You cannot prove the binary Apple ships is built
+  from this source.
+- **There is no cryptographic time lock.** Nothing can enforce one without a
+  trusted third party, and Seal has none on purpose. The countdown is a signed
+  public record that honest apps obey, so M key holders plus the recipient
+  could act together to open early. That is the trust the owner chose.
+- **The timestamp authority is a placeholder.** `docs/RECORD.md` section 13
+  says why the current free public one is not yet a defensible choice.
+- **The field arithmetic in the key split is not constant time**, accepted
+  because shares are only ever handled on their holder's own device.
+- **Claim reasons and objection notes are stored in the clear.**
 
 ## What it looks like
 
@@ -97,6 +127,51 @@ of it, and that tap never needs your hardware key: a living person who lost a
 key must not be declared dead by their own software. Only after all of that can
 keys be tapped, and each envelope then opens on the phone of the person it was
 written for. Nobody reads anybody else's, including the people who released it.
+
+## Check it without trusting us
+
+Anybody holding part of an estate can export a **capsule**: one JSON file with
+the whole signed record. `tools/verify_capsule.py` is a single Python file with
+no Seal in it and no network access. It checks every device endorsement as a
+WebAuthn assertion, every event's digest and signature, that each event's link
+names an event that is present, that every epoch's commitments match what the
+owner signed, every key tap against the challenge naming that claim, and every
+RFC 3161 token. With `openssl` on the path it also checks the token signatures.
+
+```sh
+python3 tools/verify_capsule.py seal-capsule-XXXX.json --strict
+```
+
+What it cannot do is prove the record is complete. The owner and several key
+holders write to it at the same time with no server to order them, so hiding an
+event is only detectable by comparing capsules held by different people, or
+through the timestamp tokens.
+
+`tools/make_test_capsule.py` builds a synthetic one, so you can watch it pass,
+change a byte, and watch it fail. The format is documented in
+`docs/CAPSULE.md` in enough detail to write a fresh verifier from scratch,
+deliberately, in case this project is not here.
+
+## Read the code first
+
+The most useful thing a stranger can do today is read, not write. Six files, in
+the order [SECURITY.md](SECURITY.md) puts them. Between them they decide who can
+unwrap what, what one key holder learns alone, when a release is allowed, and
+whether a key was really tapped.
+
+| File | What |
+|---|---|
+| `Seal/Estate/EstateKeys.swift` | Every wrap and unwrap in the estate |
+| `Seal/Crypto/KEMBundle.swift` | X25519 plus ML-KEM-768 |
+| `Seal/Crypto/Shamir.swift` | The key split, over GF(256) |
+| `Seal/Estate/ReleaseMachine.swift` | The countdown, as a pure function |
+| `Seal/Crypto/WebAuthnParsing.swift` | Assertion checks: RP hash, user presence, type |
+| `tools/verify_capsule.py` | The standalone verifier |
+
+[`docs/PRE_AUDIT.md`](docs/PRE_AUDIT.md) is written for a reviewer: where to
+attack in order, and the weak spots already accepted. It ends with the commands
+that reproduce the key split, a synthetic capsule and its verification on any
+machine, with no Mac and no phone. Those same commands run on every push.
 
 ## The key hierarchy
 
@@ -142,27 +217,11 @@ All from Apple's CryptoKit and AuthenticationServices. Nothing rolled by hand.
 |---|---|
 | Identity | WebAuthn, P-256 ECDSA with SHA-256, in a security key or a passkey |
 | Device keys | P-256 in the Secure Enclave, non-exportable, endorsed by the identity |
-| Wrapping | X25519 ECDH plus ML-KEM-768, combined through HKDF-SHA256 |
+| Wrapping | X25519 ECDH plus ML-KEM-768, combined through HKDF-SHA256. ML-KEM needs iOS 26, so a wrap to a device below that is X25519 alone, and the wrap records which of the two it used |
 | Content | AES-256-GCM with a domain separated AAD naming estate, epoch and purpose |
 | Key split | Shamir over GF(256), checked against independent Python vectors |
-| Time | RFC 3161 tokens on check-ins, claims, taps and releases; each phone also clamps a claim to the day it first saw it, so nobody can backdate one past the warnings |
-| Storage | CloudKit public database: ciphertext and public keys. No Seal server. |
-
-## Check it without trusting us
-
-Anybody holding part of an estate can export a **capsule**: one JSON file with
-the whole signed record. `tools/verify_capsule.py` is a single Python file with
-no Seal in it and no network access, and it checks every signature, every
-endorsement, every hash link and every timestamp token.
-
-```sh
-python3 tools/verify_capsule.py seal-capsule-XXXX.json --strict
-```
-
-`tools/make_test_capsule.py` builds a synthetic one, so you can watch it pass,
-change a byte, and watch it fail. The format is documented in
-`docs/CAPSULE.md` in enough detail to write a fresh verifier from scratch,
-deliberately, in case this project is not here.
+| Time | RFC 3161 tokens on check-ins, cancellations, claims, taps, releases, departures and each published epoch; each phone also clamps a claim to the day it first saw it, so nobody can backdate one past the warnings |
+| Storage | CloudKit public database: ciphertext and public keys. World readable, and any signed-in Apple account can write to it, so every reader checks signatures and drops the rest. No Seal server. |
 
 ## Where things are
 
@@ -195,7 +254,7 @@ deliberately, in case this project is not here.
 
 ## Building
 
-Xcode 26, an iPhone or iPad on iOS 26, and an Apple Developer account for the
+Xcode 26 to compile, an iPhone or iPad on iOS 18 or later to run it, and an Apple Developer account for the
 CloudKit container and the WebAuthn associated domain. New Swift files under
 `Seal/` join the target automatically. The `EstateEvent` record type needs its
 `estate` field queryable in CloudKit, and `Identity` needs `recordName`
@@ -208,16 +267,13 @@ made-up envelopes and key holders, used for screenshots and demos.
 
 ## Contributing
 
-The most useful thing a stranger can do today is read, not write:
-`Seal/Crypto/`, `Seal/Estate/EstateKeys.swift`, `Seal/Estate/ReleaseMachine.swift`
-and `tools/verify_capsule.py`, in that order, and say what is wrong. A finding
-goes to [SECURITY.md](SECURITY.md) if it lets somebody read, forge, release or
-stop something; anything else is an issue.
-
 Pull requests are welcome for bugs, tests and documentation. Please read
 `docs/GOTCHAS.md` first, keep every new Swift file under the MPL notice, and do
 not add a dependency: there are none, and that is a feature the whole project
 rests on.
+
+A finding goes to [SECURITY.md](SECURITY.md) if it lets somebody read, forge,
+release or stop something; anything else is an issue.
 
 ## Paying for the audit
 
