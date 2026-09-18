@@ -12,7 +12,6 @@
   <img alt="SwiftUI" src="https://img.shields.io/badge/SwiftUI-CryptoKit-F05138">
   <img alt="No server" src="https://img.shields.io/badge/backend-none-8C6A2B">
   <img alt="Audit" src="https://img.shields.io/badge/independent_audit-not_yet-B3261E">
-  <a href="https://github.com/jasonepage/Seal/actions/workflows/checks.yml"><img alt="checks" src="https://github.com/jasonepage/Seal/actions/workflows/checks.yml/badge.svg"></a>
 </p>
 
 <p align="center">
@@ -36,7 +35,8 @@ piece of one key. You set the rule for how the envelopes open after you are
 gone. Then you open the app now and then, and that is the whole ongoing job.
 
 Nobody can open one early. Not Apple, not us. There is no Seal server: the
-encrypted envelopes sit in your own iCloud, the keys never leave the phones,
+encrypted envelopes sit in Apple's iCloud under Seal's own container (not your
+personal iCloud storage), the keys never leave the phones,
 and the record of who did what can be checked with a script that has no Seal
 in it.
 
@@ -54,8 +54,7 @@ in it.
 | Audit | **None.** One design review before release found two things worth fixing; both are fixed. See [`docs/REVIEW.md`](docs/REVIEW.md). |
 | Team | One developer. No company, no funding, no investors. |
 | Platform | iPhone and iPad, iOS 26. No Android. One owner device. |
-| Dependencies | None. No third party code, no analytics, no crash reporter, no backend of ours. Checked on every push. |
-| Checks | Five, on every push, none of which need a Mac: the Shamir vectors, a capsule built and verified end to end, a tampered capsule that must fail, the no dependency check, and the house rules. |
+| Dependencies | None. No third party code, no analytics, no crash reporter, no backend of ours. |
 | Price | One purchase, once. No subscription. Holding a key or receiving an envelope is free. |
 
 `docs/GOTCHAS.md` is the running list of things that went wrong and what they
@@ -165,30 +164,6 @@ change a byte, and watch it fail. The format is documented in
 `docs/CAPSULE.md` in enough detail to write a fresh verifier from scratch,
 deliberately, in case this project is not here.
 
-The same commands run in continuous integration on every push, so the green
-check above means what running them yourself means:
-
-```sh
-pip install cryptography
-python3 tools/shamir_vectors.py
-python3 tools/make_test_capsule.py > /tmp/capsule.json
-python3 tools/verify_capsule.py /tmp/capsule.json
-python3 tools/check_imports.py
-python3 tools/check_house_rules.py
-python3 tools/list_tests.py --check
-```
-
-On a Mac, Seal's own suites for the two pieces that need no app, compiled
-straight from the app's source files, no Xcode project involved:
-
-```sh
-sh tools/run_core_tests.sh
-```
-
-If you are here to review the security, start with
-[`docs/PRE_AUDIT.md`](docs/PRE_AUDIT.md): where to attack this first, and the
-weak spots already known, written before anybody asked.
-
 ## Where things are
 
 | Path | What |
@@ -215,10 +190,6 @@ weak spots already known, written before anybody asked.
 | `docs/CAPSULE.md` | The archive format, for an outsider with a file and a laptop |
 | `docs/RECORD.md` | The signed record and timestamping |
 | `docs/REVIEW.md` | The pre-release design review: what was found, what was fixed |
-| `docs/PRE_AUDIT.md` | Where to attack this, and the weak spots already known |
-| `docs/TESTS.md` | Every test in the app, by name, generated from the source |
-| `CHANGELOG.md` | What changed and when |
-| `CONTRIBUTING.md` | The house rules, and the checks to run before a pull request |
 | `docs/GOTCHAS.md` | What already went wrong, and what it turned out to be |
 | `HANDOFF.md` | Where this stands today, including what is blocking |
 
@@ -232,9 +203,7 @@ queryable, in both the development and production environments.
 
 Tests live in the app target under `Seal/SelfTest/`, because there is no test
 host for a passkey. They run on every DEBUG launch; a failure blacks the screen
-and prints which suite. [`docs/TESTS.md`](docs/TESTS.md) lists every one of
-them by name, generated from the source and checked on every push, so it
-cannot fall behind the code. The scheme has `-SealDemoMode` for a phone full of
+and prints which suite. The scheme has `-SealDemoMode` for a phone full of
 made-up envelopes and key holders, used for screenshots and demos.
 
 ## Contributing
@@ -249,6 +218,16 @@ Pull requests are welcome for bugs, tests and documentation. Please read
 `docs/GOTCHAS.md` first, keep every new Swift file under the MPL notice, and do
 not add a dependency: there are none, and that is a feature the whole project
 rests on.
+
+## Paying for the audit
+
+Seal has not been independently audited, and an audit by an outside firm
+costs more than a one-person project has earned. If you want to move that
+day closer, anything sent here goes toward it, and the audit report goes
+in this repo when it is done.
+
+[PayPal](https://www.paypal.com/paypalme/jasonepage) ·
+[Venmo](https://venmo.com/u/Jason-page-85)
 
 ## License
 
