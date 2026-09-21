@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1020 320" width="1020" height="320" role="img" aria-label="The countdown. Opening the app is the check-in. After 90 days of silence a key holder may start a claim, which begins 21 days of daily warnings and then 14 more days of grace. Only then can M of N key holders tap their keys, and the envelopes open, each on the device of the person it was written for. One tap from the owner stops all of it at any point, and never needs a hardware key.">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1A1714"/></marker>
+    <marker id="ab" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#8C6A2B"/></marker>
+  </defs>
+  <rect width="1020" height="320" fill="#FBF8F3"/>
+
+  <circle cx="72" cy="126" r="30" fill="#F4EFE6" stroke="#D8CFC0" stroke-width="1.5"/>
+  <path d="M72 84 a 42 42 0 1 1 -22 8" fill="none" stroke="#5C564E" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="72" y="122" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" fill="#1A1714">open</text>
+  <text x="72" y="137" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" fill="#1A1714">the app</text>
+  <text x="72" y="191" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" fill="#5C564E">that is the</text>
+  <text x="72" y="206" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" fill="#5C564E">check-in</text>
+
+  <rect x="150" y="110" width="196" height="32" fill="#F4EFE6" stroke="#D8CFC0" stroke-width="1.5"/>
+  <rect x="346" y="110" width="180" height="32" fill="#F4EFE6" stroke="#D8CFC0" stroke-width="1.5"/>
+  <rect x="526" y="110" width="130" height="32" fill="#F4EFE6" stroke="#D8CFC0" stroke-width="1.5"/>
+  <rect x="656" y="110" width="96" height="32" fill="#F4EFE6" stroke="#D8CFC0" stroke-width="1.5"/>
+  <text x="248" y="131" text-anchor="middle" font-family="system-ui,sans-serif" font-size="13" fill="#1A1714">90 days of silence</text>
+  <text x="436" y="131" text-anchor="middle" font-family="system-ui,sans-serif" font-size="13" fill="#1A1714">21 days of warnings</text>
+  <text x="591" y="131" text-anchor="middle" font-family="system-ui,sans-serif" font-size="13" fill="#1A1714">14 days grace</text>
+  <text x="704" y="131" text-anchor="middle" font-family="system-ui,sans-serif" font-size="13" fill="#1A1714">M of N tap</text>
+
+  <line x1="752" y1="126" x2="798" y2="126" stroke="#1A1714" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="806" y="122" font-family="system-ui,sans-serif" font-size="13" fill="#1A1714">envelopes open</text>
+  <text x="806" y="145" font-family="system-ui,sans-serif" font-size="12" fill="#5C564E">each on the device of</text>
+  <text x="806" y="160" font-family="system-ui,sans-serif" font-size="12" fill="#5C564E">the person it was for</text>
+
+  <line x1="346" y1="102" x2="346" y2="76" stroke="#5C564E" stroke-width="1.5"/>
+  <text x="346" y="66" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" fill="#5C564E">only now may a key holder start a claim</text>
+
+  <text x="436" y="166" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" fill="#5C564E">every day, to you</text>
+
+  <path d="M600 216 L150 216" fill="none" stroke="#8C6A2B" stroke-width="2" marker-end="url(#ab)"/>
+  <line x1="600" y1="146" x2="600" y2="212" stroke="#8C6A2B" stroke-width="2" stroke-dasharray="4 3"/>
+  <line x1="436" y1="180" x2="436" y2="212" stroke="#8C6A2B" stroke-width="2" stroke-dasharray="4 3"/>
+  <line x1="248" y1="146" x2="248" y2="212" stroke="#8C6A2B" stroke-width="2" stroke-dasharray="4 3"/>
+  <text x="375" y="240" text-anchor="middle" font-family="system-ui,sans-serif" font-size="13" font-weight="600" fill="#8C6A2B">one tap from you stops all of it, at any point</text>
+  <text x="375" y="258" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" fill="#5C564E">and it never needs your hardware key</text>
+
+  <text x="510" y="296" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" fill="#8A8278">Defaults. The owner picks all four numbers.</text>
+</svg>

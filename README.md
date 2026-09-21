@@ -7,6 +7,7 @@
 <p align="center"><b>Sealed envelopes for the people you leave behind.</b></p>
 
 <p align="center">
+  <a href="https://github.com/jasonepage/Seal/actions/workflows/checks.yml"><img alt="checks" src="https://github.com/jasonepage/Seal/actions/workflows/checks.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="MPL 2.0" src="https://img.shields.io/badge/license-MPL_2.0-8C6A2B"></a>
   <img alt="iOS 18" src="https://img.shields.io/badge/iOS-18%2B-1A1714">
   <img alt="SwiftUI" src="https://img.shields.io/badge/SwiftUI-CryptoKit-F05138">
@@ -40,6 +41,13 @@ encrypted envelopes sit in Apple's iCloud under Seal's own container (not your
 personal iCloud storage), the keys never leave the phones,
 and the record of who did what can be checked with a script that has no Seal
 in it.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/countdown-dark.svg">
+    <img alt="The countdown. Opening the app is the check-in. After 90 days of silence a key holder may start a claim, which begins 21 days of daily warnings and then 14 more days of grace. Only then can M of N key holders tap their keys, and the envelopes open, each on the device of the person it was written for. One tap from the owner stops all of it at any point, and never needs a hardware key." src="docs/diagrams/countdown-light.svg" width="100%">
+  </picture>
+</p>
 
 > **If you own a hardware wallet, do not make Seal the only copy of a live
 > seed phrase yet.** Nobody independent has audited it. What your family
