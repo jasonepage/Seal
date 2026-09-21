@@ -64,32 +64,33 @@ read before debugging anything.
 
 ## What is not done
 
-Not a complete list. [`docs/PRE_AUDIT.md`](docs/PRE_AUDIT.md) is written for a
-reviewer and [the limits page](https://sealmessenger.com/limits.html) has the
-rest.
+[`docs/PRE_AUDIT.md`](docs/PRE_AUDIT.md) is the long version, written for a
+reviewer. The short version:
 
-- **Nobody independent has reviewed the cryptography or the code.**
-- **Registering a hardware key for somebody else has never met real hardware.**
-  It is the one place private key material leaves a phone, and it deserves the
-  hardest look of anything here.
-- **Security keys are barely tested.** The interop matrix in
-  `docs/SECURITY_KEY_TEST_MATRIX.md` has no rows filled in. Passkeys are the
-  better tested path today.
-- **Most tests only run on a phone**, at debug launch, watched only by the
-  developer. `SecurityFixTests` is not registered, so it does not run at all.
-  The key split and the countdown compile on their own and anybody can run
-  them: `sh tools/run_core_tests.sh`.
-- **No reproducible builds.** You cannot prove the binary Apple ships is built
+- Nobody independent has reviewed the cryptography or the code.
+- Registering a hardware key for somebody else has never met real hardware. It
+  is the one place private key material leaves a phone. It deserves the hardest
+  look of anything here.
+- Security keys are barely tested. The interop matrix in
+  `docs/SECURITY_KEY_TEST_MATRIX.md` has no rows filled in.
+- Most tests only run at debug launch, on a phone, watched by one person.
+  `SecurityFixTests` is not even registered, so it never runs at all. The key
+  split and the countdown compile on their own, and anybody can run those:
+  `sh tools/run_core_tests.sh`.
+- Everything sits under one Apple developer account, including the CloudKit
+  container with every sealed envelope in it. If Apple closes that account the
+  storage goes with it. A capsule export is the only copy that lives outside.
+- No reproducible builds. You cannot prove the binary Apple ships was built
   from this source.
-- **There is no cryptographic time lock.** Nothing can enforce one without a
-  trusted third party, and Seal has none on purpose. The countdown is a signed
-  public record that honest apps obey, so M key holders plus the recipient
-  could act together to open early. That is the trust the owner chose.
-- **The timestamp authority is a placeholder.** `docs/RECORD.md` section 13
-  says why the current free public one is not yet a defensible choice.
-- **The field arithmetic in the key split is not constant time**, accepted
-  because shares are only ever handled on their holder's own device.
-- **Claim reasons and objection notes are stored in the clear.**
+- No cryptographic time lock, and there cannot be one without a trusted third
+  party. The countdown is a signed public record that honest apps obey. M key
+  holders plus the recipient could agree to ignore it. That is the trust the
+  owner chose when they chose those people.
+- The timestamp authority is a placeholder. `docs/RECORD.md` section 13 says why.
+- The field arithmetic in the key split is not constant time. Shares are only
+  ever handled on their holder's own device, so this was accepted rather than
+  rewritten.
+- Claim reasons and objection notes are stored in the clear.
 
 ## What it looks like
 
@@ -132,11 +133,10 @@ written for. Nobody reads anybody else's, including the people who released it.
 
 Anybody holding part of an estate can export a **capsule**: one JSON file with
 the whole signed record. `tools/verify_capsule.py` is a single Python file with
-no Seal in it and no network access. It checks every device endorsement as a
-WebAuthn assertion, every event's digest and signature, that each event's link
-names an event that is present, that every epoch's commitments match what the
-owner signed, every key tap against the challenge naming that claim, and every
-RFC 3161 token. With `openssl` on the path it also checks the token signatures.
+no Seal in it and no network access. It checks the device endorsements, every
+event's digest and signature, the links between events, the epoch commitments
+against what the owner signed, every key tap against its challenge, and the
+RFC 3161 tokens. Token signatures need `openssl` on the path.
 
 ```sh
 python3 tools/verify_capsule.py seal-capsule-XXXX.json --strict
@@ -155,9 +155,7 @@ deliberately, in case this project is not here.
 ## Read the code first
 
 The most useful thing a stranger can do today is read, not write. Six files, in
-the order [SECURITY.md](SECURITY.md) puts them. Between them they decide who can
-unwrap what, what one key holder learns alone, when a release is allowed, and
-whether a key was really tapped.
+the order [SECURITY.md](SECURITY.md) puts them.
 
 | File | What |
 |---|---|

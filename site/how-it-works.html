@@ -91,7 +91,7 @@ s_i        = Wrap(s_i, pk_holder_i)                   one piece per key holder</
     <tr><th style="width:12em">Their credential</th><td>The passkey or security key they registered with. It signs “I authorise this claim”, bound to the estate, the epoch, the claim and the record’s current head, so the signature means that one claim and nothing else.</td></tr>
     <tr><th>Their phone</th><td>A separate key pair held in that phone’s keychain, marked this-device-only. It does not sync to iCloud and does not restore onto a new phone. <b>This is what opens their Shamir share.</b></td></tr>
   </table>
-  <p>Both are required. A passkey syncs through iCloud, so somebody who takes over a key holder’s Apple account can produce the signature. They cannot produce the share, because the share can only be opened on the physical phone it was wrapped to. In practice the bar is <b>M unlocked phones, in M different people’s hands.</b></p>
+  <p>Both are required. A passkey syncs through iCloud, so somebody who takes over a key holder’s Apple account can produce the signature. They cannot produce the share, because the share can only be opened on the physical device it was wrapped to. In practice the bar is <b>M unlocked devices, in M different people’s hands.</b></p>
   <p class="dim">The direct consequence, which we would rather you read here than discover in a decade: a key holder who replaces their phone loses their share until the owner seals again. The owner’s app is meant to notice and say so.</p>
 
   <h2>Why people meet in person</h2>
