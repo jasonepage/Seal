@@ -14,8 +14,10 @@ import CryptoKit
 //  objected, who tapped). The log has signed events. This file is the pure
 //  function between them. It also decides what an event's TIME is:
 //
-//    - if the event carries an RFC 3161 token whose genTime can be read,
-//      that is the time, because it is the one nobody's phone clock chose;
+//    - if the event carries an RFC 3161 token whose signature verifies on
+//      this phone under the pinned authority (TimestampVerifier.swift),
+//      its genTime is the time, because it is the one nobody's phone clock
+//      chose;
 //    - otherwise the actor's own claim.
 //
 //  For a heartbeat this makes "the last heartbeat really was 100 days ago"
@@ -29,8 +31,11 @@ enum ReleaseFeed {
     /// Pure, so it can be handed around as a plain function value (the
     /// `timeOf` parameter below) without an actor hop.
     nonisolated static func effectiveTime(_ event: EstateEvent) -> Date {
+        // The authority's time only when its signature checks out on this
+        // phone (audit H2, TimestampVerifier.swift). An unverified token is
+        // treated as no token: the actor's own signed clock.
         if let token = event.timestampToken,
-           let stamped = TimestampDER.genTime(of: token, digest: event.digest) {
+           let stamped = TimestampVerifier.verifiedGenTime(token: token, digest: event.digest) {
             return stamped
         }
         return event.occurredAt

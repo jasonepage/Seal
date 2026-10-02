@@ -358,14 +358,18 @@ struct GuardedEstateView: View {
                 Text("Nothing yet.").font(.callout).foregroundStyle(.white.opacity(0.5))
             }
             ForEach(events.sorted { $0.occurredAtEpoch > $1.occurredAtEpoch }.prefix(30)) { e in
+                // "Timestamped" only when the authority's signature checks
+                // out on this phone (audit H2), not merely when a token is
+                // present. The time shown is the same one the feed used.
+                let stamped = e.timestampToken.flatMap { TimestampVerifier.verifiedGenTime(token: $0, digest: e.digest) } != nil
                 HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: e.timestampToken == nil ? "signature" : "checkmark.seal.fill")
-                        .font(.caption).foregroundStyle(e.timestampToken == nil ? .white.opacity(0.4) : SealTheme.brass)
+                    Image(systemName: stamped ? "checkmark.seal.fill" : "signature")
+                        .font(.caption).foregroundStyle(stamped ? SealTheme.brass : .white.opacity(0.4))
                         .padding(.top, 3)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(line(e)).font(.callout).foregroundStyle(.white.opacity(0.85))
                         Text(ReleaseFeed.effectiveTime(e).formatted(date: .abbreviated, time: .shortened)
-                             + (e.timestampToken == nil ? " (their clock)" : " (timestamped)"))
+                             + (stamped ? " (timestamped)" : " (their clock)"))
                             .font(.caption2).foregroundStyle(.white.opacity(0.4))
                     }
                 }

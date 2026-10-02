@@ -24,6 +24,7 @@ enum SelfTestRegistry {
             + RuleBookTests.suites
             + AttachedFileTests.suites
             + FirstSeenTests.suites
+            + TimestampVerifierTests.suites
     }
 }
 

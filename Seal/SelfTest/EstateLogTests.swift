@@ -17,7 +17,6 @@ enum EstateLogTests {
         .init(name: "estatelog.signing") { try signing($0) },
         .init(name: "estatelog.admission") { try admission($0) },
         .init(name: "estatelog.feed") { try feed($0) },
-        .init(name: "estatelog.genTime") { try genTime($0) },
         .init(name: "estatelog.releaseAdmission") { try releaseAdmission($0) },
     ] }
 
@@ -163,31 +162,6 @@ enum EstateLogTests {
         // Events are consumed in time order regardless of array order.
         let s3 = ReleaseFeed.snapshot(events: withHeartbeat.reversed(), ownerHash: owner.hash, fallbackPolicy: policy, estateCreatedAt: t0, timeOf: { $0.occurredAt })
         t.equal(s3, s2, "array order does not matter")
-    }
-
-    static func genTime(_ t: SelfTest.Context) throws {
-        // A minimal TSTInfo tail: ... messageImprint ends with the digest,
-        // then INTEGER serial, then GeneralizedTime. The parser walks from
-        // the digest, so the bytes before it can be anything.
-        let digest = Data(SHA256.hash(data: Data("x".utf8)))
-        let serial: [UInt8] = [0x02, 0x01, 0x07]
-        let time = Array("20260915120000Z".utf8)
-        let token = Data([0x30, 0x10, 0x04, 0x20]) + digest + Data(serial) + Data([0x18, UInt8(time.count)]) + Data(time)
-        let parsed = TimestampDER.genTime(of: token, digest: digest)
-        var c = DateComponents(); c.year = 2026; c.month = 9; c.day = 15; c.hour = 12
-        var cal = Calendar(identifier: .gregorian); cal.timeZone = TimeZone(identifier: "UTC")!
-        t.equal(parsed, cal.date(from: c), "genTime parses YYYYMMDDHHMMSSZ after the serial")
-        t.check(TimestampDER.genTime(of: token, digest: Data(repeating: 9, count: 32)) == nil, "wrong digest: nil")
-        let noTime = Data([0x04, 0x20]) + digest + Data(serial) + Data([0x02, 0x01, 0x01])
-        t.check(TimestampDER.genTime(of: noTime, digest: digest) == nil, "no GeneralizedTime: nil")
-        let fractional = Data([0x04, 0x20]) + digest + Data(serial) + Data([0x18, 19]) + Data("20260915120000.123Z".utf8)
-        t.equal(TimestampDER.genTime(of: fractional, digest: digest), cal.date(from: c), "fractional seconds are ignored")
-        // The feed prefers the token time.
-        let actor = Actor()
-        var e = try actor.event(.heartbeat, estate: "E", prev: Data(), at: t0)
-        let stamped = Data([0x04, 0x20]) + e.digest + Data(serial) + Data([0x18, UInt8(time.count)]) + Data(time)
-        e.timestampToken = stamped
-        t.equal(ReleaseFeed.effectiveTime(e), cal.date(from: c), "effective time is the authority's when a token is present")
     }
 
     // MARK: - Audit C1: a release counts only when it was earned
