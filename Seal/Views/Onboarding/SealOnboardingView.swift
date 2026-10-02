@@ -287,7 +287,7 @@ enum OnboardingScript {
         out.append(OnboardingScreen(
             id: "\(p).price",
             title: "What it costs.",
-            body: "\(priceSentence(price)) Nothing is charged until the first time you tap Seal. Writing envelopes and adding people are free. Security keys are bought separately; a YubiKey is one kind. Face ID works for everything, so a key is recommended, never required. The other choices are a sticky note in a drawer, or passwords written into legal papers that anyone can read once a court makes them public.",
+            body: "\(priceSentence(price)) Nothing is charged until the first time you tap Seal. Writing envelopes and adding people are free. Security keys are bought separately; a YubiKey is one kind. \(Biometry.title) works for everything, so a key is recommended, never required. The other choices are a sticky note in a drawer, or passwords written into legal papers that anyone can read once a court makes them public.",
             figure: .quiet))
 
         if couple {
@@ -315,7 +315,7 @@ enum OnboardingScript {
                 body: "It takes an evening. After that, opening the app now and then is the whole job.",
                 figure: .steps,
                 steps: [
-                    "Set up Seal with Face ID or a security key. Add a backup key when it asks.",
+                    "Set up Seal with \(Biometry.name) or a security key. Add a backup key when it asks.",
                     "Meet each person face to face and add them under People.",
                     "Write an envelope for each of them.",
                     hand,

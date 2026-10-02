@@ -106,8 +106,15 @@ struct SponsoredKeyView: View {
                 }
             }
             .buttonStyle(SealPrimaryButtonStyle())
-            .disabled(working || name.trimmingCharacters(in: .whitespaces).isEmpty || DemoFixtures.isActive)
+            .disabled(working || name.trimmingCharacters(in: .whitespaces).isEmpty || DemoFixtures.isActive
+                      || !CeremonyManager.securityKeySecretsAvailable)
             .parentTapTarget(60)
+
+            if !CeremonyManager.securityKeySecretsAvailable {
+                Text("This device needs iOS or iPadOS 26.4 or later to put a secret on a security key. Update it in Settings, General, Software Update, then come back.")
+                    .font(.callout).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             Text("Two taps: one makes the key theirs, one locks their secret to it. Your phone keeps nothing of theirs afterward.")
                 .font(.caption).foregroundStyle(.white.opacity(0.45))
@@ -140,6 +147,9 @@ struct SponsoredKeyView: View {
     }
 
     private func register() async {
+        // Put the keyboard away first, so a problem shown below the button is
+        // not hidden behind it (a TestFlight tester saw no message at all).
+        nameFocused = false
         working = true
         problem = nil
         defer { working = false }

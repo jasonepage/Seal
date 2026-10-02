@@ -97,6 +97,11 @@ enum SponsoredKey {
     }
 
     enum Failure: LocalizedError {
+        /// This device's iOS is older than 26.4, the first that lets a
+        /// security key carry a secret (PRF). Every key looks "unsupported"
+        /// there, so this is checked first and named for what it is: a
+        /// TestFlight tester on iPadOS 26.3 was told to get another key.
+        case osTooOld
         case prfUnsupported
         case prfMissing
         case badHalves
@@ -104,6 +109,8 @@ enum SponsoredKey {
 
         var errorDescription: String? {
             switch self {
+            case .osTooOld:
+                "This device needs iOS or iPadOS 26.4 or later to put a secret on a security key. Update it in Settings, General, Software Update, then try again. Nothing was changed."
             case .prfUnsupported:
                 "This security key cannot carry a secret. Seal needs a key with the PRF feature (a current YubiKey 5 does). The key was not changed."
             case .prfMissing:

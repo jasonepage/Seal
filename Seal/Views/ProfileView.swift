@@ -90,7 +90,7 @@ struct ProfileView: View {
                         Text("This is only a label, your key stays your identity. Friends see the new name next time they sync.")
                     }
                     Label(myRoot.tier == .verified ? "Verified, hardware key" : "Passkey",
-                          systemImage: myRoot.tier == .verified ? "key.radiowaves.forward.fill" : "faceid")
+                          systemImage: myRoot.tier == .verified ? "key.radiowaves.forward.fill" : Biometry.symbol)
                         .font(.subheadline)
                         .foregroundStyle(myRoot.tier == .verified ? SealTheme.brass : SealTheme.silver)
 
@@ -152,7 +152,7 @@ struct ProfileView: View {
                 }
             }
             .confirmationDialog(
-                "This deletes this device's copy of your envelopes and your people. They do not come back. Your identity survives; sign in again with your key or Face ID.",
+                "This deletes this device's copy of your envelopes and your people. They do not come back. Your identity survives; sign in again with your key or \(Biometry.name).",
                 isPresented: $confirmReset, titleVisibility: .visible
             ) {
                 Button("Sign out and delete local data", role: .destructive) {
@@ -270,8 +270,8 @@ struct ProfileView: View {
         sectionHeading("On this phone")
 
         if appLock.isAvailable {
-            SettingRow(icon: "faceid", tint: SealTheme.brass,
-                       title: "Require Face ID",
+            SettingRow(icon: Biometry.symbol, tint: SealTheme.brass,
+                       title: "Require \(Biometry.name)",
                        summary: "Lock Seal when you leave it",
                        isOn: .init(
                            get: { appLock.isEnabled },
@@ -285,7 +285,7 @@ struct ProfileView: View {
             // seal a card", copy left over from the messenger, about cards
             // and sending that this app no longer has.
             SettingRow(icon: "eye.fill", tint: SealTheme.brass,
-                       title: "Face ID to show a secret",
+                       title: "\(Biometry.title) to show a secret",
                        summary: "Check it's you before a secret is shown",
                        detail: "A password or a seed phrase stays hidden until Seal checks your face or your passcode. This happens when you tap Show on your own envelope, and when you open envelopes written for you. It does not ask on the rest of the app, and it does not ask when you seal.",
                        isOn: .init(
@@ -491,7 +491,7 @@ struct ProfileView: View {
         .padding(.horizontal, 24)
         .padding(.top, 16)
 
-        Text("Signing out deletes this device's copy of your envelopes and your people. Your identity stays in the directory. Sign back in with your key or Face ID.")
+        Text("Signing out deletes this device's copy of your envelopes and your people. Your identity stays in the directory. Sign back in with your key or \(Biometry.name).")
             .font(.caption2)
             .foregroundStyle(.white.opacity(0.5))
             .multilineTextAlignment(.center)

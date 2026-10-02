@@ -396,7 +396,7 @@ struct FriendsView: View {
                          ? "Verifying \(friend.displayName)'s key…"
                          : "Waiting for \(friend.displayName)'s key…")
             Text(friend.tier == .passkey
-                 ? "If \(friend.displayName) sees an Apple prompt, they pick a nearby device and approve with Face ID."
+                 ? "If \(friend.displayName) sees an Apple prompt, they pick a nearby device and approve with Face ID or Touch ID."
                  : "Hold the key flat against the top of the phone.")
                 .font(.caption)
                 .foregroundStyle(.white.opacity(0.45))

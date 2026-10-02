@@ -93,11 +93,11 @@ struct PasskeyHybridCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label("\(friendName) uses Face ID, not a security key", systemImage: "faceid")
+            Label("\(friendName) uses Face ID or Touch ID, not a security key", systemImage: "person.badge.key")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.white)
                 .fixedSize(horizontal: false, vertical: true)
-            Text("When you tap below, Apple shows a prompt on THIS phone. \(friendName) chooses “iPhone, iPad, or Android device,” scans the Apple QR with THEIR phone, and approves with Face ID. That second scan is expected.")
+            Text("When you tap below, Apple shows a prompt on THIS phone. \(friendName) chooses “iPhone, iPad, or Android device,” scans the Apple QR with THEIR phone, and approves there. That second scan is expected.")
                 .font(.caption)
                 .foregroundStyle(.white.opacity(0.7))
                 .fixedSize(horizontal: false, vertical: true)
@@ -119,7 +119,7 @@ struct ForgeHowToCard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             howToRow("1", "viewfinder", "Stand together. Open Seal on both phones.")
             howToRow("2", "qrcode.viewfinder", "They show their seal. You scan it on this phone.")
-            howToRow("3", "key.radiowaves.forward.fill", "They prove their key right here, with a tap or with Face ID on their own phone.")
+            howToRow("3", "key.radiowaves.forward.fill", "They prove their key right here, with a tap or with Face ID or Touch ID on their own phone.")
             // Step 4 used to say "swap and do it once more on their phone".
             // ForgeHandshake.swift removed that: the phone that ran the
             // ceremony publishes a device-signed handshake and the other side

@@ -157,7 +157,7 @@ struct PersonView: View {
                     // Nothing physical changes hands. iOS decides the path:
                     // a security key is tapped on this phone; a passkey goes
                     // through the cross-device QR code that iOS shows.
-                    Text("Do this with \(person.identity.displayName) next to you. Tap the button, then hand \(person.identity.displayName) this phone. If they use a security key, they tap it on this phone. If they use Face ID, this phone shows a square code: they scan it with their own phone and confirm with their face. That confirmation, plus this phone's signature, is the record that they agreed to hold a key. Nothing else changes hands.")
+                    Text("Do this with \(person.identity.displayName) next to you. Tap the button, then hand \(person.identity.displayName) this phone. If they use a security key, they tap it on this phone. If they use Face ID or Touch ID, this phone shows a square code: they scan it with their own phone and confirm there. That confirmation, plus this phone's signature, is the record that they agreed to hold a key. Nothing else changes hands.")
                         .font(.caption).foregroundStyle(.white.opacity(0.45)).fixedSize(horizontal: false, vertical: true)
                 }
                 // The printed page that goes in the drawer with the key

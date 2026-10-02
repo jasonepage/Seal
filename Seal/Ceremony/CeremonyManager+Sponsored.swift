@@ -39,6 +39,9 @@ extension CeremonyManager {
     func registerSponsoredKey(displayName: String, directory: SyncEngine) async throws -> RootIdentity {
         setPhase(.searching)
         do {
+            // Before any tap: below 26.4 no key can carry a secret, and the
+            // honest message is "update", not "get another key".
+            guard Self.securityKeySecretsAvailable else { throw SponsoredKey.Failure.osTooOld }
             var excluded: [Data] = []
             do { excluded = try await directory.fetchAllCredentialIDs() } catch {
                 WebAuthnDiag.log.error("sponsored: exclusion query failed: \(error.localizedDescription, privacy: .public)")
@@ -122,6 +125,12 @@ extension CeremonyManager {
     // Guarded, because one build configuration still carries an older
     // deployment target. Below 26.4 a security key simply reports "cannot
     // carry a secret", which is the truth on that OS.
+
+    /// Whether this OS lets a security key carry a secret (PRF) at all.
+    static var securityKeySecretsAvailable: Bool {
+        if #available(iOS 26.4, *) { return true }
+        return false
+    }
 
     static func askPRFSupport(on request: ASAuthorizationRequest) {
         if #available(iOS 26.4, *),

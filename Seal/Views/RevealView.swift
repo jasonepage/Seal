@@ -246,7 +246,7 @@ struct RevealPager: View {
                             if await AppLock.confirmReveal() { secretsShownFor.insert(page.id) }
                         }
                     } label: {
-                        Label("Show the secrets", systemImage: "faceid").frame(maxWidth: .infinity).padding(.vertical, 6)
+                        Label("Show the secrets", systemImage: Biometry.symbol).frame(maxWidth: .infinity).padding(.vertical, 6)
                     }
                     .buttonStyle(.bordered).tint(SealTheme.brass)
                     .parentTapTarget()

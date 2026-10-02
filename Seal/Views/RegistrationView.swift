@@ -83,7 +83,7 @@ struct RegistrationView: View {
                             // first told most people they were in the wrong app.
                             Group {
                                 Button { Task { await start(.passkey) } } label: {
-                                    Label("Set up with Face ID", systemImage: "faceid")
+                                    Label("Set up with \(Biometry.name)", systemImage: Biometry.symbol)
                                 }
                                 .buttonStyle(SealPrimaryButtonStyle())
 
@@ -115,7 +115,7 @@ struct RegistrationView: View {
                         .disabled(busy)
                         .padding(.top, 4)
                         .confirmationDialog("Sign in with", isPresented: $showSignInOptions, titleVisibility: .visible) {
-                            Button("Face ID (passkey)") { Task { await signIn(.passkey) } }
+                            Button("\(Biometry.title) (passkey)") { Task { await signIn(.passkey) } }
                             Button("Security key") { Task { await signIn(.verified) } }
                             Button("Cancel", role: .cancel) {}
                         }
@@ -134,7 +134,7 @@ struct RegistrationView: View {
                         .disabled(busy)
                         .confirmationDialog("Retire a key. Tap the key or passkey you want to retire. The identity under it is deleted for good, and nothing is signed in to.",
                                             isPresented: $showRetireOptions, titleVisibility: .visible) {
-                            Button("Face ID (passkey)", role: .destructive) { Task { await retire(.passkey) } }
+                            Button("\(Biometry.title) (passkey)", role: .destructive) { Task { await retire(.passkey) } }
                             Button("Security key", role: .destructive) { Task { await retire(.verified) } }
                             Button("Cancel", role: .cancel) {}
                         }

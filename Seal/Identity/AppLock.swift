@@ -42,8 +42,8 @@ final class AppLock {
     /// holding an unlocked phone could quietly disable the lock.
     func setEnabled(_ enabled: Bool) async {
         guard await Self.authenticate(reason: enabled
-            ? "Confirm to require Face ID for Seal"
-            : "Confirm to remove the Face ID lock") else { return }
+            ? "Confirm to require \(Biometry.name) for Seal"
+            : "Confirm to remove the \(Biometry.name) lock") else { return }
         if enabled {
             KeychainStore.save(Data([1]), for: storageKey)
             isEnabled = true
@@ -91,8 +91,8 @@ final class AppLock {
     /// caller's toggle snaps back on a failed or cancelled prompt.
     static func setCardLockEnabled(_ enabled: Bool, ownerHash: String) async -> Bool {
         guard await authenticate(reason: enabled
-            ? "Confirm to require Face ID before a secret is shown"
-            : "Confirm to remove the Face ID check on secrets") else {
+            ? "Confirm to require \(Biometry.name) before a secret is shown"
+            : "Confirm to remove the \(Biometry.name) check on secrets") else {
             return isCardLockEnabled(ownerHash: ownerHash)
         }
         if enabled {

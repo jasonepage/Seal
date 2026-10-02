@@ -193,7 +193,7 @@ struct BackupKeysSection: View {
 
     private func backupRow(_ backup: BackupCredential) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: backup.tier == .verified ? "key.radiowaves.forward.fill" : "faceid")
+            Image(systemName: backup.tier == .verified ? "key.radiowaves.forward.fill" : Biometry.symbol)
                 // Tier decides the colour here exactly as it decides ring
                 // colour everywhere else (UI.md §1.1), brass for a hardware
                 // key, silver for a passkey. It is not a claim that one is a
@@ -322,7 +322,7 @@ struct AddBackupKeySheet: View {
                             .tint(SealTheme.brass)
 
                             Button { Task { await add(tier: .passkey) } } label: {
-                                actionLabel("Use a passkey", system: "faceid")
+                                actionLabel("Use a passkey", system: Biometry.symbol)
                             }
                             .buttonStyle(.bordered)
                             .tint(SealTheme.silver)

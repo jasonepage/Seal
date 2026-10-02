@@ -341,6 +341,12 @@ final class CeremonyManager: NSObject {
             // BACKUP key and the endorsement this device gets is signed by the
             // backup, which peers accept because `verifiedDevices` verifies
             // against the whole authority set rather than the root alone.
+            // A key registered for someone else carries their secret, and only
+            // iOS 26.4 and later can read it back. Say so before the tap,
+            // instead of "make sure the key's PIN is set" after it.
+            if sponsored?.lockedPrivate != nil, !Self.securityKeySecretsAvailable {
+                throw SponsoredKey.Failure.osTooOld
+            }
             let endorseRequest = makeAssertionRequest(tier: tier, challenge: commitment, allowedCredentialID: assertion.credentialID)
             if let salt = sponsored?.prfSalt { Self.attachPRF(salt: salt, to: endorseRequest) }
             let endorseCredential = try await performRequest(endorseRequest)
