@@ -42,7 +42,16 @@ struct FirstSeen: Codable, Hashable {
     /// `.released` joined in the audit C1 fix: a release is judged against
     /// the events before it, so a release dated back past an owner's
     /// check-in would otherwise outrun that check-in.
-    static let clampedKinds: Set<EstateEvent.Kind> = [.releaseClaimed, .authorization, .released]
+    ///
+    /// Objections and withdrawals joined in the review of that fix (B2). A
+    /// key holder's own clock otherwise placed them anywhere: an objection
+    /// dated back into a claim that already earned its release undid the
+    /// release on every phone, and on a phone that heard of everything late
+    /// (the claim dated from then) a real veto, dated earlier, was ignored.
+    /// The cost, on a late phone only: an objection posted after a release
+    /// counts there until withdrawn. That stalls; it never opens early.
+    static let clampedKinds: Set<EstateEvent.Kind> = [.releaseClaimed, .authorization, .released,
+                                                      .objection, .objectionWithdrawn]
 
     /// Records ids not seen before. Returns true when anything was new.
     @discardableResult

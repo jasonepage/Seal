@@ -395,7 +395,12 @@ struct GuardedEstateView: View {
         case .objectionWithdrawn: return "\(who) withdrew an objection."
         case .cancellation: return "\(who) stopped the claim."
         case .authorization: return "\(who) tapped a key."
-        case .released: return "\(who) combined the keys. Released."
+        case .released:
+            // Only the release this phone judged earned reads as one (audit
+            // C1 review). Any other is a key holder's claim, shown as that.
+            return e.id == snapshot?.releaseEventID
+                ? "\(who) combined the keys. Released."
+                : "\(who) published a release Seal did not accept."
         case .custodyConfirmed: return "\(who) confirmed they still have their key."
         case .ownerDeparted:
             return DepartureRules.historyLine(name: who, keep: e.body(DepartureBody.self)?.keepEnvelopes ?? false)

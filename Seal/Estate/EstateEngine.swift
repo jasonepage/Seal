@@ -843,7 +843,7 @@ final class EstateEngine {
             let admitted = EstateLogVerifier.admitted(fetched, ownerHash: ownerHash,
                                                       custodianHashes: Set(e.custodians.map(\.rootHash)),
                                                       directory: directory)
-            ownerEvents = EstateLogStore.merged(ownerEvents, admitted)
+            ownerEvents = EstateLogVerifier.recheckedTaps(EstateLogStore.merged(ownerEvents, admitted), directory: directory)
             noteSeen(admitted, at: clock.now)
             saveLogs()
             recomputeAll()
@@ -921,7 +921,8 @@ final class EstateEngine {
             }
             let admitted = EstateLogVerifier.admitted(fetched, ownerHash: g.ownerHash,
                                                       custodianHashes: custodianHashes, directory: directory)
-            guardedEvents[g.estateID] = EstateLogStore.merged(guardedEvents[g.estateID] ?? [], admitted)
+            guardedEvents[g.estateID] = EstateLogVerifier.recheckedTaps(
+                EstateLogStore.merged(guardedEvents[g.estateID] ?? [], admitted), directory: directory)
             noteSeen(admitted, at: clock.now)
             guarded[i] = g
             saveGuarded()

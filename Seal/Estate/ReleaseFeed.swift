@@ -41,10 +41,48 @@ enum ReleaseFeed {
         return event.occurredAt
     }
 
-    /// One admitted event and the time this phone gives it.
+    /// What this file needs from an event's payload, decoded ONCE per
+    /// snapshot. Judging a release replays the log several times, and
+    /// decoding JSON on every replay is what let a flooded log stall a
+    /// phone (audit C1 review, B1).
+    private enum Body {
+        /// Nothing this file reads, or a payload that did not decode.
+        case other
+        case created(EstateCreatedBody)
+        case policy(ReleasePolicy)
+        case claim(ClaimBody)
+        case objection(ObjectionBody)
+        case authorization(claimID: String)
+        case released(ReleasedBody)
+        case epoch(EpochBody)
+    }
+
+    /// One admitted event, the time this phone gives it, and its payload.
     private struct Timed {
         let event: EstateEvent
         let at: Date
+        let body: Body
+    }
+
+    private static func decode(_ e: EstateEvent) -> Body {
+        switch e.kind {
+        case .estateCreated:
+            return e.body(EstateCreatedBody.self).map { Body.created($0) } ?? .other
+        case .policyChanged:
+            return e.body(PolicyBody.self).map { Body.policy($0.policy) } ?? .other
+        case .releaseClaimed:
+            return e.body(ClaimBody.self).map { Body.claim($0) } ?? .other
+        case .objection, .objectionWithdrawn:
+            return e.body(ObjectionBody.self).map { Body.objection($0) } ?? .other
+        case .authorization:
+            return e.body(AuthorizationBody.self).map { Body.authorization(claimID: $0.claimID) } ?? .other
+        case .released:
+            return e.body(ReleasedBody.self).map { Body.released($0) } ?? .other
+        case .epochPublished:
+            return e.body(EpochBody.self).map { Body.epoch($0) } ?? .other
+        default:
+            return .other
+        }
     }
 
     /// Builds the snapshot from ADMITTED events (EstateLogVerifier ran first).
@@ -90,16 +128,38 @@ enum ReleaseFeed {
         let timeOf = timeOf ?? effectiveTime
         let timed = events
             .sorted(by: { ($0.occurredAtEpoch, $0.id) < ($1.occurredAtEpoch, $1.id) })
-            .map { Timed(event: $0, at: timeOf($0)) }
+            .map { Timed(event: $0, at: timeOf($0), body: decode($0)) }
         var snapshot = base(timed, ownerHash: ownerHash, fallbackPolicy: fallbackPolicy, estateCreatedAt: estateCreatedAt)
 
-        // The owner's signed Estate Key commitments, per epoch. Normally one
-        // per epoch; a seal retried after a lost reply can leave two under
-        // the same number, and the owner signed both.
+        // One pass for everything judging needs: the owner's signed Estate
+        // Key commitments and thresholds per epoch (a seal retried after a
+        // lost reply can leave two statements under one number, both
+        // signed), who opened which claim, who tapped which claim, and the
+        // moments at which the answer about a claim can change.
         var commitments: [UInt64: Set<Data>] = [:]
-        for t in timed where t.event.kind == .epochPublished && t.event.actorHash == ownerHash {
-            if let body = t.event.body(EpochBody.self) {
+        var thresholds: [UInt64: Int] = [:]
+        var opened: [String: (count: Int, epoch: UInt64)] = [:]    // "claimID|claimant"
+        var tappers: [String: Set<String>] = [:]                     // claimID: key holders
+        var claimMoments: [String: [Date]] = [:]                     // claimID: taps, withdrawals
+        var releases: [(timed: Timed, body: ReleasedBody)] = []
+        for t in timed {
+            switch t.body {
+            case .epoch(let body):
+                guard t.event.actorHash == ownerHash else { break }
                 commitments[body.epoch, default: []].insert(body.estateKeyCommitment)
+                thresholds[body.epoch] = min(thresholds[body.epoch] ?? body.threshold, body.threshold)
+            case .claim(let body):
+                let key = body.claimID + "|" + t.event.actorHash
+                opened[key] = (count: (opened[key]?.count ?? 0) + 1, epoch: body.epoch)
+            case .authorization(let claimID):
+                tappers[claimID, default: []].insert(t.event.actorHash)
+                claimMoments[claimID, default: []].append(t.at)
+            case .objection(let body):
+                if t.event.kind == .objectionWithdrawn { claimMoments[body.claimID, default: []].append(t.at) }
+            case .released(let body):
+                releases.append((timed: t, body: body))
+            case .other, .created, .policy:
+                break
             }
         }
 
@@ -112,21 +172,25 @@ enum ReleaseFeed {
         let newestEpoch = commitments.keys.max()
 
         // Rule 1 for every release, whoever sent it and whenever.
-        let genuine: [(timed: Timed, body: ReleasedBody)] = timed.compactMap { t -> (timed: Timed, body: ReleasedBody)? in
-            guard t.event.kind == .released,
-                  let body = t.event.body(ReleasedBody.self),
-                  commitments[body.epoch]?.contains(Data(SHA256.hash(data: body.estateKey))) == true else { return nil }
-            return (t, body)
+        let genuine = releases.filter {
+            commitments[$0.body.epoch]?.contains(Data(SHA256.hash(data: $0.body.estateKey))) == true
         }
         snapshot.keyPublishedAt = genuine.map(\.timed.at).min()
 
-        // Rules 2 and 3. The earliest release per publisher and claim is
-        // judged, those naming the current claim first, then by time. The
-        // first one that passes is THE release, and `openEnvelopes` uses
-        // exactly that event.
+        // Rules 2 and 3. Necessary conditions first, so a flood of releases
+        // costs one look each and not a replay each: the newest key set, a
+        // sender who opened the claim it names exactly once and for that
+        // same set, and at least as many key holders who ever tapped that
+        // claim as the rule needs. Then the earliest such release per sender
+        // and claim, those naming the current claim first, then by time.
         var earliest: [String: (timed: Timed, body: ReleasedBody)] = [:]
         for g in genuine {
-            let key = g.timed.event.actorHash + "|" + g.body.claimID
+            let sender = g.timed.event.actorHash
+            guard g.body.epoch == newestEpoch,
+                  let open = opened[g.body.claimID + "|" + sender], open.count == 1, open.epoch == g.body.epoch,
+                  (tappers[g.body.claimID]?.count ?? 0) >= max(1, thresholds[g.body.epoch] ?? snapshot.policy.threshold)
+            else { continue }
+            let key = sender + "|" + g.body.claimID
             if let have = earliest[key], (have.timed.at, have.timed.event.id) <= (g.timed.at, g.timed.event.id) { continue }
             earliest[key] = g
         }
@@ -136,35 +200,36 @@ enum ReleaseFeed {
             if aCurrent != bCurrent { return aCurrent }
             return (a.timed.at, a.timed.event.id) < (b.timed.at, b.timed.event.id)
         }
+
+        // Each sender has their own allowance of replays, so one key holder's
+        // junk can never use up what an honest claimant's release needs
+        // (audit C1 review, B1). The whole snapshot has a ceiling as well.
         var budget = maxJudgements
-        for (candidate, body) in ordered where body.epoch == newestEpoch {
+        var left: [String: Int] = [:]
+        for (candidate, body) in ordered {
+            guard budget > 0 else { break }
+            let sender = candidate.event.actorHash
+            var senderLeft = left[sender] ?? maxJudgementsPerSender
+            guard senderLeft > 0 else { continue }
             var ownBudget = maxJudgementsPerRelease
             // The moments at which the answer can change: the release itself,
             // and every later tap or withdrawn objection on its claim. The
             // moment the claim opens on THIS phone is added when it is found.
-            var moments: Set<Date> = [candidate.at]
-            for t in timed where t.at > candidate.at {
-                switch t.event.kind {
-                case .authorization:
-                    if t.event.body(AuthorizationBody.self)?.claimID == body.claimID { moments.insert(t.at) }
-                case .objectionWithdrawn:
-                    if t.event.body(ObjectionBody.self)?.claimID == body.claimID { moments.insert(t.at) }
-                default:
-                    break
-                }
-            }
+            var moments = Set((claimMoments[body.claimID] ?? []).filter { $0 > candidate.at })
+            moments.insert(candidate.at)
             var tried = Set<Date>()
-            while budget > 0, ownBudget > 0, let moment = moments.subtracting(tried).min() {
+            while budget > 0, senderLeft > 0, ownBudget > 0, let moment = moments.subtracting(tried).min() {
                 tried.insert(moment)
                 budget -= 1
+                senderLeft -= 1
                 ownBudget -= 1
                 let then = base(timed.filter { $0.at <= moment }, ownerHash: ownerHash,
                                 fallbackPolicy: fallbackPolicy, estateCreatedAt: estateCreatedAt,
-                                focus: (claimID: body.claimID, claimantHash: candidate.event.actorHash))
+                                focus: (claimID: body.claimID, claimantHash: sender))
                 guard let claim = then.claim,
                       claim.id == body.claimID,
                       claim.epoch == body.epoch,
-                      claim.claimantHash == candidate.event.actorHash else { continue }
+                      claim.claimantHash == sender else { continue }
                 if ReleaseMachine.releaseEarned(then, at: moment) {
                     snapshot.releasedAt = moment
                     snapshot.releaseEventID = candidate.event.id
@@ -178,15 +243,17 @@ enum ReleaseFeed {
                     moments.insert(opens)
                 }
             }
+            left[sender] = senderLeft
         }
         return snapshot
     }
 
-    /// Ceilings on how many moments one snapshot may judge, in all and per
-    /// release, so a key holder who floods the log with releases and taps
-    /// cannot stall the phone. An honest estate needs a handful.
-    private static let maxJudgements = 512
-    private static let maxJudgementsPerRelease = 64
+    /// Ceilings on how many replays one snapshot may run: per release, per
+    /// sender, and in all. An honest estate needs a handful. A key holder who
+    /// floods the log spends only their own allowance.
+    private static let maxJudgementsPerRelease = 32
+    private static let maxJudgementsPerSender = 128
+    private static let maxJudgements = 1_024
 
     /// Everything but the release: policy, silence, the current claim and
     /// what has been said about it. `timed` is already in log order.
@@ -226,39 +293,39 @@ enum ReleaseFeed {
             }
             switch e.kind {
             case .estateCreated:
-                if let body = e.body(EstateCreatedBody.self) {
+                if case .created(let body) = t.body {
                     policy = body.policy
                     createdAt = Date(timeIntervalSince1970: TimeInterval(body.createdAtEpoch))
                 }
             case .policyChanged:
-                if let body = e.body(PolicyBody.self) { policy = body.policy }
+                if case .policy(let changed) = t.body { policy = changed }
             case .heartbeat:
                 lastHeartbeat = max(lastHeartbeat ?? at, at)
             case .cancellation:
                 cancellations.append(at)
             case .releaseClaimed:
-                if let body = e.body(ClaimBody.self) {
+                if case .claim(let body) = t.body {
                     claims.append(.init(id: body.claimID, epoch: body.epoch, claimantHash: e.actorHash, openedAt: at))
                     claimEvents[body.claimID + "|" + e.actorHash, default: []].insert(e.id)
                 }
             case .objection:
-                if let body = e.body(ObjectionBody.self), !body.withdrawn {
+                if case .objection(let body) = t.body, !body.withdrawn {
                     objections.append((body.claimID, .init(custodianHash: e.actorHash, at: at, withdrawnAt: nil)))
                 }
             case .objectionWithdrawn:
-                if let body = e.body(ObjectionBody.self) {
+                if case .objection(let body) = t.body {
                     withdrawals.append((body.claimID, e.actorHash, at))
                 }
             case .authorization:
-                if let body = e.body(AuthorizationBody.self) {
-                    authorizations.append((body.claimID, .init(custodianHash: e.actorHash, at: at)))
+                if case .authorization(let claimID) = t.body {
+                    authorizations.append((claimID, .init(custodianHash: e.actorHash, at: at)))
                 }
             case .released:
                 // Judged in `snapshot`, never taken on its word (audit C1).
                 break
             case .epochPublished:
                 // The threshold travels with the shares; the days do not.
-                if let body = e.body(EpochBody.self) { policy.threshold = body.threshold }
+                if case .epoch(let body) = t.body { policy.threshold = body.threshold }
             case .vaultUpdated, .silenceObserved:
                 break
             case .ownerDeparted:

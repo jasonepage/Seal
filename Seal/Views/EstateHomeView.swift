@@ -877,7 +877,7 @@ struct EstateHomeView: View {
                 }
             }
             .confirmationDialog(
-                "Start a new set? The released envelopes leave this phone (the people who received them keep theirs). Your rule and your key holders stay. Save a copy of the old record first if you want it.",
+                newSetPrompt,
                 isPresented: Binding(get: { startingNewSet != nil }, set: { if !$0 { startingNewSet = nil } }),
                 titleVisibility: .visible
             ) {
@@ -1085,6 +1085,16 @@ struct EstateHomeView: View {
         return OnboardingNumbers(policy: estate.policy, custodianCount: estate.custodians.count)
     }
 
+    /// What "Start a new set" warns about. After a real release the
+    /// recipients already have their envelopes. After a key published early
+    /// nobody does, and this phone's envelopes do not carry over.
+    private var newSetPrompt: String {
+        if let engine = startingNewSet?.engine, engine.ownerState != .released {
+            return "Start a new set? These envelopes leave this phone and are not carried over, so copy anything you want to keep first, then write them again in the new set. Your rule and your key holders stay."
+        }
+        return "Start a new set? The released envelopes leave this phone (the people who received them keep theirs). Your rule and your key holders stay. Save a copy of the old record first if you want it."
+    }
+
     /// The loud card for one rule's engine. The default rule's most of the
     /// time; whichever rule has a claim running when one does.
     private func statusCard(_ engine: EstateEngine) -> some View {
@@ -1096,6 +1106,23 @@ struct EstateHomeView: View {
             if let ruleName {
                 Text(ruleName).font(.caption.weight(.semibold)).foregroundStyle(.white.opacity(0.5))
             }
+            // A key holder published this set's key without an earned release
+            // (audit C1). No phone opened anything or believes it, but the key
+            // is out, so the set refuses to seal again. Before this card the
+            // owner met that only as an error, with no way forward.
+            if let published = snapshot?.keyPublishedAt, state != .released {
+                Label("Your key was published early.", systemImage: "exclamationmark.octagon.fill")
+                    .font(.system(.title3, design: .rounded, weight: .semibold))
+                    .foregroundStyle(.orange)
+                Text("On \(published.formatted(date: .abbreviated, time: .omitted)), a key holder published the key to these envelopes without a real release. Seal opened nothing and does not trust it. But the key is out, so this set cannot be sealed again. Talk to your key holders, then start a new set.")
+                Button { startingNewSet = EngineRef(engine: engine) } label: {
+                    Text("Start a new set of envelopes")
+                        .font(.system(.headline, design: .rounded))
+                        .frame(maxWidth: .infinity).padding(.vertical, 8)
+                }
+                .buttonStyle(.borderedProminent).tint(.orange)
+                .parentTapTarget(60)
+            }
             switch state {
             case .none:
                 HStack(alignment: .center, spacing: 14) {
@@ -1103,7 +1130,7 @@ struct EstateHomeView: View {
                     SealMark(size: 44, trust: false, pressOnAppear: true)
                     Text("Sealed envelopes").font(.system(.title2, design: .rounded, weight: .semibold))
                 }
-                Text("Write a few envelopes. Hand keys to people you trust. Set the rule for how they open after you are gone. Nobody, including us, can open one early.")
+                Text("Write a few envelopes. Hand keys to people you trust. Set the rule for how they open after you are gone. Seal opens nothing early, and we cannot open anything at all.")
             case .active?, .cancelled?:
                 // This banner reads the RELEASE state, which only says whether
                 // a claim is running. It used to announce "Your envelopes are

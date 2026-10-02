@@ -109,9 +109,12 @@ enum DemoFixtures {
     private static func install() {
         if let real = KeychainStore.load(IdentityManager.identityKey),
            (try? JSONDecoder().decode(RootIdentity.self, from: real))?.credentialIDHash != me.credentialIDHash {
-            KeychainStore.save(real, for: backupIdentityKey)
+            // The real identity is overwritten below, so only once its backup
+            // is safely stored. If the backup fails, no demo: losing a real
+            // identity to a demo is the one outcome that cannot be undone.
+            guard KeychainStore.save(real, for: backupIdentityKey) else { return }
             if let endorsement = KeychainStore.load(IdentityManager.endorsementKey) {
-                KeychainStore.save(endorsement, for: backupEndorsementKey)
+                guard KeychainStore.save(endorsement, for: backupEndorsementKey) else { return }
             }
         }
         KeychainStore.delete(IdentityManager.endorsementKey)
@@ -145,14 +148,16 @@ enum DemoFixtures {
         FriendStore.wipe(ownerHash: me.credentialIDHash)
         EstateEngine.wipe(ownerHash: me.credentialIDHash)
         ParentMode.wipe(ownerHash: me.credentialIDHash)
-        KeychainStore.delete(IdentityManager.identityKey)
+        // Put the real identity back over the demo one in place, and drop
+        // each backup only once it is back. No delete first: a failed
+        // restore must leave the backup where the next launch can find it.
         if let real = KeychainStore.load(backupIdentityKey) {
-            KeychainStore.save(real, for: IdentityManager.identityKey)
-            KeychainStore.delete(backupIdentityKey)
+            if KeychainStore.save(real, for: IdentityManager.identityKey) { KeychainStore.delete(backupIdentityKey) }
+        } else {
+            KeychainStore.delete(IdentityManager.identityKey)
         }
         if let endorsement = KeychainStore.load(backupEndorsementKey) {
-            KeychainStore.save(endorsement, for: IdentityManager.endorsementKey)
-            KeychainStore.delete(backupEndorsementKey)
+            if KeychainStore.save(endorsement, for: IdentityManager.endorsementKey) { KeychainStore.delete(backupEndorsementKey) }
         }
     }
 

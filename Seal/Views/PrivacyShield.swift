@@ -31,6 +31,19 @@ final class PrivacyShield {
     static let shared = PrivacyShield()
 
     private var covers: [UIWindow] = []
+    private var observer: NSObjectProtocol?
+
+    /// Called once at launch (SealApp). UIKit posts this while the scene is
+    /// going to the background, before the snapshot is taken; SwiftUI's
+    /// scenePhase change is not promised to arrive in time. The scenePhase
+    /// path below stays as a second chance, and is what lifts the cover.
+    func install() {
+        guard observer == nil else { return }
+        observer = NotificationCenter.default.addObserver(forName: UIScene.didEnterBackgroundNotification,
+                                                          object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { PrivacyShield.shared.raise() }
+        }
+    }
 
     func update(for phase: ScenePhase) {
         switch phase {
@@ -40,7 +53,7 @@ final class PrivacyShield {
         }
     }
 
-    private func raise() {
+    fileprivate func raise() {
         guard covers.isEmpty else { return }
         for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
             let window = UIWindow(windowScene: scene)

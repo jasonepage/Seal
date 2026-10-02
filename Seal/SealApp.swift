@@ -71,6 +71,8 @@ struct SealApp: App {
         // any failure so a broken crypto or state machine change cannot be
         // missed by a developer running the app.
         SelfTest.runAtLaunchIfDebug()
+        // Covers the app switcher's snapshot (PrivacyShield.swift).
+        PrivacyShield.shared.install()
     }
 
     var body: some Scene {

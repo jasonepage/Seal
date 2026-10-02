@@ -255,7 +255,10 @@ enum RecordBuilder {
             case .authorization:
                 kind = .keyTapped; summary = "\(who) tapped a key to authorise the release."
             case .released:
-                kind = .released; summary = "\(who) combined the keys. The envelopes are released."
+                // Says what the event is, not what it achieved: a release event
+                // proves nothing until the feed judges it earned (audit C1).
+                // Whether the envelopes opened is on the status card.
+                kind = .released; summary = "\(who) published a release."
             case .ownerDeparted:
                 let keep = e.body(DepartureBody.self)?.keepEnvelopes ?? true
                 kind = .ownerDeparted

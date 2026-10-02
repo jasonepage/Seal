@@ -380,6 +380,19 @@ enum EstateLogVerifier {
         }
     }
 
+    /// Stored taps, checked again by the key holder's root key alone (audit
+    /// C1 review). Builds before that fix kept taps without checking the
+    /// physical-key signature, and a phone's saved log is never re-admitted.
+    /// A tap whose key holder this refresh could not look up is kept as it
+    /// was, so a failed lookup never drops one.
+    static func recheckedTaps(_ events: [EstateEvent], directory: Directory) -> [EstateEvent] {
+        events.filter { e in
+            guard e.kind == .authorization, let entry = directory.identities[e.actorHash] else { return true }
+            guard let body = e.body(AuthorizationBody.self) else { return false }
+            return ReleaseChallenge.tapVerifies(body, estateID: e.estateID, rootPublicKey: entry.0.publicKey)
+        }
+    }
+
     /// Every event's `previousDigest` must name an event in the set (or be
     /// empty). Returns the ids that dangle, for the record screen to show.
     static func danglingLinks(_ events: [EstateEvent]) -> [String] {

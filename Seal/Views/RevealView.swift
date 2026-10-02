@@ -426,7 +426,7 @@ struct RevealPager: View {
                               .expirationDate: Date().addingTimeInterval(SealedCard.clipboardLifetime)])
                 if let back = UIPasteboard.general.string {
                     copied = back == card.value
-                        ? SealedCard.copyConfirmation(for: back) + " The clipboard clears itself in 90 seconds."
+                        ? SealedCard.copyConfirmation(for: back) + " The clipboard clears itself in \(Int(SealedCard.clipboardLifetime)) seconds."
                         : "Something changed the clipboard between the copy and the check. Do not paste it."
                 } else {
                     copied = "Copied, but the clipboard would not confirm what it holds. Check before you paste."

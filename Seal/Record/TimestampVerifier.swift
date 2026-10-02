@@ -57,6 +57,7 @@ nonisolated enum TimestampVerifier {
     /// check above passes. Remembered per token, because the feed and the
     /// record screen ask about the same events over and over.
     static func verifiedGenTime(token: Data, digest: Data) -> Date? {
+        guard token.count <= maxTokenBytes else { return nil }
         var hasher = SHA256()
         hasher.update(data: token)
         hasher.update(data: digest)
@@ -383,7 +384,9 @@ nonisolated final class TimestampVerdicts: @unchecked Sendable {
     func store(_ key: Data, _ verdict: Date?) {
         lock.lock()
         defer { lock.unlock() }
-        if verdicts.count >= 4_096 { verdicts.removeAll(keepingCapacity: true) }
+        // An owner who checks in daily for years stamps a few thousand
+        // events; this holds far more, so a busy estate never thrashes.
+        if verdicts.count >= 65_536 { verdicts.removeAll(keepingCapacity: true) }
         verdicts[key] = .some(verdict)
     }
 }

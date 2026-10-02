@@ -347,5 +347,38 @@ enum EstateLogTests {
         let stale = try snap(base + [resealed, claim(brother, at: claimAt), tap(brother, at: tapAt), good])
         t.check(stale.releasedAt == nil, "a release of an older key set is not honored")
         t.equal(stale.keyPublishedAt, releaseAt, "but its key is on record as published")
+
+        // 15. Review B2: an objection dated back into a claim that already
+        //     earned its release cannot undo it. This phone watched it all
+        //     live, so the objection counts from when this phone saw it.
+        var witness = FirstSeen()
+        witness.seed(honest + [good])
+        let lateObjection = try wife.event(.objection, estate: "E", prev: Data(),
+                                           payload: try EstateEvent.encodeBody(ObjectionBody(claimID: "c1", withdrawn: false, note: "")),
+                                           at: claimAt.addingTimeInterval(2 * day))
+        witness.note([lateObjection], at: releaseAt.addingTimeInterval(day))
+        let undone = snap(honest + [good, lateObjection], seenBy: witness)
+        t.equal(undone.releasedAt, releaseAt, "an objection dated back after the release does not undo it")
+        t.equal(ReleaseMachine.state(undone, now: releaseAt.addingTimeInterval(2 * day)), .released, "and released stays terminal")
+
+        // 16. Review B2: a phone that hears of everything late dates the
+        //     claim from then. A veto made during the claim counts from then
+        //     too, not from its own earlier clock, where it would fall before
+        //     the claim and be ignored.
+        var vetoPolicy = ReleasePolicy(threshold: 1)
+        vetoPolicy.objectionBehavior = .veto
+        let vetoCreated = try owner.event(.estateCreated, estate: "E", prev: Data(),
+                                          payload: try EstateEvent.encodeBody(EstateCreatedBody(policy: vetoPolicy, createdAtEpoch: RecordEvent.epochSeconds(t0))),
+                                          at: t0)
+        let vetoBase = [vetoCreated] + Array(base.dropFirst())
+        let veto = try wife.event(.objection, estate: "E", prev: Data(),
+                                  payload: try EstateEvent.encodeBody(ObjectionBody(claimID: "c1", withdrawn: false, note: "")),
+                                  at: claimAt.addingTimeInterval(day))
+        let overVeto = try [claim(brother, at: claimAt), veto, tap(brother, at: tapAt), good]
+        var lateWitness = FirstSeen()
+        lateWitness.seed(vetoBase)
+        lateWitness.note(overVeto, at: releaseAt.addingTimeInterval(10 * day))
+        let vetoed = snap(vetoBase + overVeto, seenBy: lateWitness)
+        t.check(vetoed.releasedAt == nil, "a late phone does not open a release published over a veto")
     }
 }
