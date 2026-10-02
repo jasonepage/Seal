@@ -537,9 +537,14 @@ final class EstateEngine {
         // REVIEW.md finding 2: once the Estate Key is out, a recipient who
         // opened their table holds its key, and anything sealed into the
         // same table afterwards is theirs to read at once. So a released
-        // set never seals again; the owner starts a new set.
+        // set never seals again; the owner starts a new set. The same goes
+        // for a key that was published WITHOUT an earned release (audit C1):
+        // the phones will not open for it, but the key is public all the same.
         guard ownerSnapshot?.releasedAt == nil else {
             throw EngineError.notAllowed("These envelopes have been released and cannot be sealed again. Start a new set.")
+        }
+        guard ownerSnapshot?.keyPublishedAt == nil else {
+            throw EngineError.notAllowed("The key for this set was published without a proper release, so nothing more can be sealed into it. Start a new set.")
         }
         guard let mine = identity.kemPrivateBundle else { throw EngineError.noDeviceKey }
         try e.policy.validate(custodianCount: e.custodians.count)
@@ -1131,11 +1136,7 @@ final class EstateEngine {
         for event in (guardedEvents[estateID] ?? []) where event.kind == .authorization {
             guard let body = event.body(AuthorizationBody.self), body.claimID == claim.id, body.epoch == epoch.epoch,
                   let found = try? await lookup(event.actorHash),
-                  let key = try? P256.Signing.PublicKey(rawRepresentation: found.0.publicKey) else { continue }
-            let challenge = ReleaseChallenge.challenge(estateID: estateID, epoch: epoch.epoch, claimID: claim.id,
-                                                       recordHeadDigest: body.recordHeadDigest)
-            guard body.assertion.verify(with: key),
-                  CeremonyManager.clientDataChallengeMatches(body.assertion.clientDataJSON, expected: challenge) else { continue }
+                  ReleaseChallenge.tapVerifies(body, estateID: estateID, rootPublicKey: found.0.publicKey) else { continue }
             out.append((event: event, body: body))
         }
         return out
@@ -1191,9 +1192,24 @@ final class EstateEngine {
         let (g, s) = try guardedEstate(estateID)
         let bundles = identity.kemPrivateBundles
         guard !bundles.isEmpty else { throw EngineError.noDeviceKey }
-        guard s.releasedAt != nil,
-              let released = (guardedEvents[estateID] ?? []).last(where: { $0.kind == .released })?.body(ReleasedBody.self)
+        // Exactly the release the feed judged (audit C1 and N2), never
+        // simply the newest `released` event in the log.
+        let log = guardedEvents[estateID] ?? []
+        guard let releasedAt = s.releasedAt, releasedAt <= clock.now,
+              let releaseID = s.releaseEventID,
+              let released = log.first(where: { $0.id == releaseID && $0.kind == .released })?.body(ReleasedBody.self)
         else { throw EngineError.notReleased }
+        // Check the key against the owner's own signed commitment before a
+        // single table is tried. The feed already did; this is the last line,
+        // and it fails loudly rather than skipping tables in silence.
+        let keyHash = Data(SHA256.hash(data: released.estateKey))
+        guard log.contains(where: { event in
+            guard event.kind == .epochPublished, event.actorHash == g.ownerHash,
+                  let statement = event.body(EpochBody.self) else { return false }
+            return statement.epoch == released.epoch && statement.estateKeyCommitment == keyHash
+        }) else {
+            throw EngineError.notReady("The published key does not match what the owner sealed. Nothing was opened.")
+        }
         var out: [OpenedEnvelope] = []
         for tableID in g.vault?.tableIDs ?? [] {
             guard let data = try await sync.fetchEstateBlob(name: EstateNames.tableBlob(estateID, tableID)),

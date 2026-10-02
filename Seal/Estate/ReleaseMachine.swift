@@ -83,7 +83,21 @@ struct ReleaseSnapshot: Hashable {
     var objections: [Objection] = []
     /// Authorizations that name the current claim.
     var authorizations: [Authorization] = []
+    /// When the release took effect. Set by the feed ONLY for a release it
+    /// has judged earned (ReleaseFeed.snapshot, audit C1): the right key,
+    /// sent by the claimant, once the claim had run its full course on this
+    /// phone with enough taps and no word from the owner. The machine
+    /// believes it once `now` reaches it, and from then on it is terminal.
     var releasedAt: Date?
+    /// The id of the `released` event behind `releasedAt`, so the phone
+    /// opens envelopes with exactly the key that was judged, not whichever
+    /// release event happens to come last in the log.
+    var releaseEventID: String?
+    /// The first time ANY `released` event carried a key matching the
+    /// owner's signed commitment, earned or not. The key is public from that
+    /// moment whatever the machine says, so the owner must not seal more
+    /// into this set.
+    var keyPublishedAt: Date?
 
     /// The moment silence started counting: the last heartbeat, or the
     /// estate's creation if there has never been one.
@@ -183,7 +197,8 @@ enum ReleaseMachine {
     // MARK: - The state
 
     static func state(_ s: ReleaseSnapshot, now: Date) -> ReleaseState {
-        if s.releasedAt != nil { return .released }
+        // A release dated in the future proves nothing yet (audit C1).
+        if let released = s.releasedAt, released <= now { return .released }
 
         let silentFor = now.timeIntervalSince(s.silenceAnchor)
         let overdue = silentFor > s.policy.silence
@@ -213,16 +228,53 @@ enum ReleaseMachine {
     /// When the state next changes with nobody doing anything, or nil if it
     /// will not (a stopped claim, a release, an open objection).
     static func nextTransition(_ s: ReleaseSnapshot, now: Date) -> Date? {
+        let natural: Date?
         switch state(s, now: now) {
         case .active, .cancelled:
-            return s.silenceAnchor.addingTimeInterval(s.policy.silence)
+            natural = s.silenceAnchor.addingTimeInterval(s.policy.silence)
         case .warning:
-            return timeline(s, now: now)?.warningEndsAt
+            natural = timeline(s, now: now)?.warningEndsAt
         case .grace:
-            return timeline(s, now: now)?.claimOpensAt
-        case .overdue, .claimOpen, .authorized, .released, .objected:
+            natural = timeline(s, now: now)?.claimOpensAt
+        case .released:
             return nil
+        case .overdue, .claimOpen, .authorized, .objected:
+            natural = nil
         }
+        // A release this phone judged earned but dated ahead of its own
+        // clock (a phone that heard of the claim late, or a claimant whose
+        // clock runs fast) takes effect then, whatever the state reads until
+        // that moment (audit C1).
+        if let released = s.releasedAt, released > now {
+            return natural.map { min($0, released) } ?? released
+        }
+        return natural
+    }
+
+    // MARK: - Judging a published release (audit C1)
+
+    /// Whether a release judged at `moment` was earned. `s` must be built
+    /// from only the events up to `moment`; ReleaseFeed does that.
+    ///
+    /// The same gates as `.authorized`, with one difference. Phones hear of
+    /// a claim at different times (FirstSeen dates a claim and a tap from
+    /// when THIS phone first saw them), so a tap made the second the
+    /// tapper's phone opened can look early here, and `validAuthorizations`
+    /// would throw it away for good. When judging a release, such a tap
+    /// counts from the moment the claim opened on this phone instead. The
+    /// time gate itself is untouched: nothing is earned until this phone's
+    /// own view of the claim has run its full warnings and grace with no
+    /// word from the owner, and no objection standing.
+    static func releaseEarned(_ s: ReleaseSnapshot, at moment: Date) -> Bool {
+        guard let claim = s.claim, voidReason(s) == .notVoid,
+              let t = timeline(s, now: moment),
+              moment >= t.claimOpensAt,
+              !hasOpenObjection(s, now: moment) else { return false }
+        var tappers = Set<String>()
+        for a in s.authorizations where a.at >= claim.openedAt && a.at <= moment && !hasOpenObjection(s, now: a.at) {
+            tappers.insert(a.custodianHash)
+        }
+        return tappers.count >= max(1, s.policy.threshold)
     }
 
     // MARK: - What each party may do now

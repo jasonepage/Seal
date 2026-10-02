@@ -99,6 +99,12 @@ extension SyncEngine {
     /// Every event for one estate. Follows the query cursor so a long record
     /// is not silently cut at CloudKit's page size. Events that fail to
     /// decode are skipped; signature checking is the verifier's job.
+    ///
+    /// An event counts only from the record named for it. The timestamp
+    /// token sits outside the signature, so a copy of someone else's event
+    /// saved under another name could carry a token of the copier's
+    /// choosing and move that event in time (audit C1 review). Only a
+    /// record's creator can change it, so the named record is the author's.
     func fetchEstateEvents(estateID: String) async throws -> [EstateEvent] {
         let query = CKQuery(recordType: "EstateEvent", predicate: NSPredicate(format: "estate == %@", estateID))
         var out: [EstateEvent] = []
@@ -107,7 +113,8 @@ extension SyncEngine {
             for (_, result) in results {
                 if let record = try? result.get(), let data = record["payload"] as? Data,
                    let event = try? JSONDecoder().decode(EstateEvent.self, from: data),
-                   event.estateID == estateID {
+                   event.estateID == estateID,
+                   record.recordID.recordName == EstateNames.event(estateID, event.id) {
                     out.append(event)
                 }
             }

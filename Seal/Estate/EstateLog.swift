@@ -265,6 +265,20 @@ enum ReleaseChallenge {
     static func shareAAD(estateID: String, epoch: UInt64, claimID: String) -> Data {
         Data("seal.release.share.v1|\(estateID)|\(epoch)|\(claimID)".utf8)
     }
+
+    /// Whether an authorization carries a real tap: the key holder's ROOT
+    /// credential signed `challenge(...)` over exactly the claim, epoch and
+    /// record head its body names. Admission runs this on every phone, and
+    /// the claimant runs it again before combining, so the two can never
+    /// disagree about which taps count. A device signature alone proves
+    /// which phone sent the event, not that the key was tapped (audit C1).
+    static func tapVerifies(_ body: AuthorizationBody, estateID: String, rootPublicKey: Data) -> Bool {
+        guard let key = try? P256.Signing.PublicKey(rawRepresentation: rootPublicKey) else { return false }
+        let expected = challenge(estateID: estateID, epoch: body.epoch, claimID: body.claimID,
+                                 recordHeadDigest: body.recordHeadDigest)
+        return body.assertion.verify(with: key)
+            && CeremonyManager.clientDataChallengeMatches(body.assertion.clientDataJSON, expected: expected)
+    }
 }
 
 // MARK: - Building events
@@ -353,7 +367,16 @@ enum EstateLogVerifier {
             }
             guard let entry = directory.identities[event.actorHash] else { return false }
             let trusted = IdentityManager.verifiedDevices(root: entry.0, endorsements: entry.1)
-            return trusted.contains { $0.devicePublicKey == event.actorDevicePublicKey }
+            guard trusted.contains(where: { $0.devicePublicKey == event.actorDevicePublicKey }) else { return false }
+            // A tap counts only with its physical-key signature over the very
+            // claim it names, checked here on every phone rather than only on
+            // the claimant's (audit C1). A release is judged against these.
+            if event.kind == .authorization {
+                guard let body = event.body(AuthorizationBody.self),
+                      ReleaseChallenge.tapVerifies(body, estateID: event.estateID,
+                                                   rootPublicKey: entry.0.publicKey) else { return false }
+            }
+            return true
         }
     }
 

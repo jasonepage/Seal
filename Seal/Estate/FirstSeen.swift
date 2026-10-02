@@ -38,7 +38,11 @@ struct FirstSeen: Codable, Hashable {
 
     /// The kinds whose time may not be earlier than this phone's own
     /// first sight of them.
-    static let clampedKinds: Set<EstateEvent.Kind> = [.releaseClaimed, .authorization]
+    ///
+    /// `.released` joined in the audit C1 fix: a release is judged against
+    /// the events before it, so a release dated back past an owner's
+    /// check-in would otherwise outrun that check-in.
+    static let clampedKinds: Set<EstateEvent.Kind> = [.releaseClaimed, .authorization, .released]
 
     /// Records ids not seen before. Returns true when anything was new.
     @discardableResult

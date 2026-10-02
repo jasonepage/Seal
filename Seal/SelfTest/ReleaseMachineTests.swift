@@ -25,6 +25,8 @@ enum ReleaseMachineTests {
         .init(name: "release.earlyClaim") { try earlyClaim($0) },
         .init(name: "release.policy") { try policy($0) },
         .init(name: "release.ninetySecondRun") { try ninetySecondRun($0) },
+        .init(name: "release.futureRelease") { try futureRelease($0) },
+        .init(name: "release.judgingARelease") { try judgingARelease($0) },
     ] }
 
     static let day: TimeInterval = 86_400
@@ -326,5 +328,54 @@ enum ReleaseMachineTests {
         seen.append(ReleaseMachine.state(s, now: clock.now))
         t.equal(seen, [.active, .active, .overdue, .warning, .grace, .claimOpen, .authorized, .released],
                 "the full story runs through every state in order")
+    }
+
+    // MARK: audit C1: a release dated ahead of this clock
+
+    static func futureRelease(_ t: SelfTest.Context) throws {
+        var s = fresh()
+        let claimAt = t0.addingTimeInterval(100 * day)
+        s.claim = claim(at: claimAt)
+        let openAt = claimAt.addingTimeInterval(35 * day)
+        s.authorizations = [.init(custodianHash: "wife", at: openAt), .init(custodianHash: "attorney", at: openAt)]
+        let now = openAt.addingTimeInterval(day)
+        s.releasedAt = now.addingTimeInterval(60)
+        t.equal(ReleaseMachine.state(s, now: now), .authorized, "a release dated ahead of this clock is not believed yet")
+        t.equal(ReleaseMachine.nextTransition(s, now: now), s.releasedAt, "the next change is the moment it takes effect")
+        t.equal(ReleaseMachine.state(s, now: now.addingTimeInterval(60)), .released, "and at that moment it is released")
+    }
+
+    // MARK: audit C1: judging a published release
+
+    static func judgingARelease(_ t: SelfTest.Context) throws {
+        var s = fresh()
+        let claimAt = t0.addingTimeInterval(100 * day)
+        s.claim = claim(at: claimAt)
+        let opens = claimAt.addingTimeInterval(35 * day)
+        // Taps this phone first saw a little before its own view of the claim opened.
+        s.authorizations = [.init(custodianHash: "wife", at: opens.addingTimeInterval(-60)),
+                            .init(custodianHash: "attorney", at: opens.addingTimeInterval(-30))]
+        t.equal(ReleaseMachine.state(s, now: opens.addingTimeInterval(day)), .claimOpen,
+                "the machine does not count taps seen before this phone's claim opened")
+        t.check(!ReleaseMachine.releaseEarned(s, at: opens.addingTimeInterval(-1)),
+                "a release is never earned before the claim opens on this phone")
+        t.check(ReleaseMachine.releaseEarned(s, at: opens),
+                "from that moment those taps count toward judging a release")
+        var one = s
+        one.authorizations.removeLast()
+        t.check(!ReleaseMachine.releaseEarned(one, at: opens.addingTimeInterval(day)), "one tap is not two")
+        var twice = s
+        twice.authorizations = [.init(custodianHash: "wife", at: opens), .init(custodianHash: "wife", at: opens.addingTimeInterval(60))]
+        t.check(!ReleaseMachine.releaseEarned(twice, at: opens.addingTimeInterval(day)), "the same key holder twice is one tap")
+        var alive = s
+        alive.lastHeartbeatAt = claimAt.addingTimeInterval(day)
+        t.check(!ReleaseMachine.releaseEarned(alive, at: opens.addingTimeInterval(day)), "a heartbeat after the claim: nothing is earned")
+        var objected = s
+        objected.objections = [.init(custodianHash: "attorney", at: opens.addingTimeInterval(-3_600), withdrawnAt: nil)]
+        t.check(!ReleaseMachine.releaseEarned(objected, at: opens.addingTimeInterval(day)), "nothing is earned while an objection stands")
+        var noThreshold = s
+        noThreshold.policy.threshold = 0
+        noThreshold.authorizations = []
+        t.check(!ReleaseMachine.releaseEarned(noThreshold, at: opens.addingTimeInterval(day)), "a rule of zero still needs one tap")
     }
 }
