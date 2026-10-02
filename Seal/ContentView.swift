@@ -21,6 +21,10 @@ struct ContentView: View {
     @State private var appLock: AppLock?
     @State private var showBackupPrompt = false
     @State private var showRecoveryNotice = false
+    /// A keychain write failed (KeychainStore.writeFailed). Shown at most
+    /// once a minute so a phone that keeps failing is not a wall of alerts.
+    @State private var showKeychainFailure = false
+    @State private var keychainFailureShownAt: Date?
     @Environment(\.scenePhase) private var scenePhase
 
     /// The ceremony has to exist before the first frame is drawn.
@@ -104,6 +108,16 @@ struct ContentView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .background { appLock?.lockIfEnabled() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: KeychainStore.writeFailed)) { _ in
+            if let last = keychainFailureShownAt, Date().timeIntervalSince(last) < 60 { return }
+            keychainFailureShownAt = Date()
+            showKeychainFailure = true
+        }
+        .alert("Seal could not save that", isPresented: $showKeychainFailure) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("This phone would not store your latest change. Everything saved before it is still here. Try again in a moment. If this keeps happening, restart the phone.")
         }
         // FR-23: the demo watermark used to be a top-trailing overlay, which
         // sat straight on top of the home screen's toolbar buttons and hid
