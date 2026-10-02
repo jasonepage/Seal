@@ -425,7 +425,14 @@ struct ProfileView: View {
         // button. Somebody whose estate sealed before there was a price
         // never meets the paywall, and somebody who wants to pay ahead of
         // writing should be able to. Hidden once it is paid for.
-        if !purchase.isUnlocked && !DemoFixtures.isActive {
+        //
+        // Shown in the demo account too. App Review uses the demo (it needs
+        // no security key and no second person), the demo cannot seal, and
+        // so with this row hidden there the reviewer had no way to reach the
+        // purchase at all (rejection 2.1(b), 2026-10-02). The purchase is
+        // Apple's, not the demo identity's, so buying here is a real
+        // sandbox purchase on the reviewer's Apple ID.
+        if !purchase.isUnlocked {
             Button { showPaywall = true } label: {
                 HStack(spacing: 12) {
                     Image(systemName: "seal")
