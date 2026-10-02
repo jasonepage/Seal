@@ -61,6 +61,8 @@ struct SealApp: App {
     /// check happens once at launch and the transaction listener never
     /// goes away. Read with @Environment(SealPurchase.self).
     @State private var purchase = SealPurchase()
+    /// For the app switcher cover (PrivacyShield.swift).
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         // FR-22: must run before ContentView creates the stores.
@@ -76,6 +78,9 @@ struct SealApp: App {
             ContentView()
                 .environment(purchase)
                 .task { await purchase.refresh() }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            PrivacyShield.shared.update(for: phase)
         }
     }
 }
