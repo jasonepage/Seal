@@ -88,6 +88,20 @@ struct ReleasePolicy: Codable, Hashable {
     var grace: TimeInterval { TimeInterval(graceDays) * 86_400 }
 
     /// One line a 60 year old can read back and agree with.
+    /// What a rule of one really allows, for the owner, in the same words
+    /// on every screen that shows it (audit H1). At a rule of one every key
+    /// share IS the Estate Key, so one key holder who rebuilt the app could
+    /// use it early. The app's own gate does not stop a rebuilt app. The
+    /// second lock on every envelope, the recipient's own phone, still holds,
+    /// and that is what limits what they could read.
+    static func oneKeyCaution(custodianCount: Int) -> String {
+        let who = custodianCount <= 1 ? "your key holder" : "each key holder"
+        let fix = custodianCount <= 1
+            ? "To close this gap, add a second key holder and ask for both keys."
+            : "To close this gap, ask for two keys or more."
+        return "With a rule of one, you trust \(who) fully. Seal opens nothing early, but someone who rebuilt the app could use their key before the warnings end. They could read the envelopes you wrote to them, or give the key to someone you wrote to, who could then read theirs. Each envelope still needs the phone of the person it was written for. \(fix)"
+    }
+
     func summary(custodianCount: Int) -> String {
         custodianCount == 1
             ? "Your one key holder, after \(silenceDays) days of silence, \(warningDays) days of warnings and \(graceDays) days of grace."

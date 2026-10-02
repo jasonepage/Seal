@@ -1025,8 +1025,21 @@ final class EstateEngine {
     }
 
     /// My share, opened and checked. Stays in memory only.
-    func myShare(estateID: String) async throws -> Shamir.Share {
-        let (g, _) = try guardedEstate(estateID)
+    ///
+    /// Opened only inside the tap: while a claim is open for keys and this
+    /// key holder has not tapped yet (audit H1). At a rule of one the share
+    /// IS the Estate Key, so a share opened at any other time would be the
+    /// whole key in hand early. Not "after release": the tap needs the share
+    /// BEFORE release, to pass it on to the claimant.
+    ///
+    /// This stops the shipped app. It cannot stop a rebuilt one, because the
+    /// share is wrapped to this person's own phone. That is why the rule-of-
+    /// one screens now say plainly what one key holder could do.
+    private func myShare(estateID: String) async throws -> Shamir.Share {
+        let (g, s) = try guardedEstate(estateID)
+        guard ReleaseMachine.custodianCanAuthorize(s, now: clock.now, custodianHash: ownerHash) else {
+            throw EngineError.notAllowed("Your key can only be used once a claim is open for keys.")
+        }
         guard let mine = identity.kemPrivateBundle else { throw EngineError.noDeviceKey }
         let material = try await epochMaterial(for: g)
         return try EstateKeyHierarchy.openMyShare(material, custodianHash: ownerHash, mine: mine)

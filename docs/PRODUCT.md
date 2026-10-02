@@ -71,7 +71,10 @@ secrets, with a byte-exact copy button.
 
 ## 7. What is promised, precisely
 
-- **Nobody can open an envelope early.** An envelope's content key sits in a
+- **Nobody outside the people the owner chose can open an envelope early.**
+  At a rule of one, one key holder who rebuilt the app, together with the
+  envelope's own recipient, is enough; the app says so on the rule screen
+  and during onboarding. An envelope's content key sits in a
   key table under a random key that is reachable only two ways: the owner's
   devices, or the recipient's devices plus the Estate Key. The Estate Key
   is reachable only by the owner's devices or by combining M of N Shamir

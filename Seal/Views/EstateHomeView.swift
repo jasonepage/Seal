@@ -970,7 +970,7 @@ struct EstateHomeView: View {
             }
             return "How long the silence has to be, how many warnings you get, and how many of them it takes."
         case .seal:
-            return "Everything is encrypted on this phone and published. Nobody can open an envelope early."
+            return "Everything is encrypted on this phone and published. Seal opens nothing early."
         }
     }
 
@@ -1554,7 +1554,13 @@ struct EstateHomeView: View {
     }
 
     private var footer: some View {
-        Text("Nobody can open an envelope early. Not Apple, not us. It takes your key holders' physical keys, after a long silence from you, after weeks of warnings you can stop with one tap.")
+        // At a rule of one the old first sentence, "Nobody can open an
+        // envelope early", was not true of a key holder who rebuilt the app
+        // (audit H1). The rule screen carries the whole story.
+        let oneKey = estate.map { $0.policy.threshold == 1 && !$0.custodians.isEmpty } ?? false
+        var line = "Apple cannot open an envelope, and neither can we. Seal opens nothing early. It takes your key holders' physical keys, after a long silence from you, after weeks of warnings you can stop with one tap."
+        if oneKey { line += " With a rule of one, you trust each key holder fully. The rule screen says why." }
+        return Text(line)
             .font(.caption2).foregroundStyle(.white.opacity(0.4))
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)

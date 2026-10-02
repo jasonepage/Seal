@@ -58,13 +58,13 @@ struct GuardedRoleCard<Details: View>: View {
     private var promise: String {
         var lines: [String] = []
         if guarded.isRecipient {
-            lines.append("You can open them when the time comes. Nobody can open them early. Not Apple, not us, not anyone holding a key.")
+            lines.append("You can open them when the time comes. Nobody else can open them. Not Apple, not us, not anyone holding a key.")
         }
         if guarded.isCustodian {
             // Same check as HandoverDoneView: at a threshold of 1 the
             // reassuring sentence is the untrue one.
             if numbers.oneIsEnough {
-                lines.append("\(name) chose a rule that needs only one person, so your key alone can open everything once the silence and the warnings have run their course. Nothing opens before that. Your job is to keep this app installed and to still be findable in ten years.")
+                lines.append("\(name) chose a rule that needs only one person, so your key alone can open everything once the silence and the warnings have run their course. Seal opens nothing before that. Your job is to keep this app installed and to still be findable in ten years.")
             } else {
                 let who = numbers.exact
                     ? "You are one of \(numbers.custodianCount) key holders, and it takes \(numbers.threshold) of you together."
@@ -279,7 +279,7 @@ struct HandoverDoneView: View {
                         // direction: it tells this person they are powerless
                         // while handing them sole control of the estate.
                         if numbers.oneIsEnough {
-                            bullet("\(ownerName) chose a rule that needs only one person, so your key alone can open everything, once they have been quiet for \(numbers.silenceDays) days and all the warnings have run. Nobody can open anything before that.")
+                            bullet("\(ownerName) chose a rule that needs only one person, so your key alone can open everything, once they have been quiet for \(numbers.silenceDays) days and all the warnings have run. Seal opens nothing before that.")
                         } else {
                             bullet("You cannot open anything with this key, and neither can anyone else holding one. It takes \(numbers.threshold) of \(ownerName)'s \(numbers.custodianCount) key holders, acting together.")
                         }

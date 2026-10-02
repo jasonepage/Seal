@@ -87,7 +87,7 @@ struct SponsoredKeyView: View {
                 Text("Whoever holds this key and its PIN is \(name.isEmpty ? "them" : name). Set a PIN on the key before you start. Give it the way you would give a house key.")
                     .font(.callout).foregroundStyle(.white.opacity(0.85))
                     .fixedSize(horizontal: false, vertical: true)
-                Text("The key cannot open anything by itself. Nothing opens before your key holders release everything. If the key is lost, hand them a new one and seal again while you are alive.")
+                Text("The key cannot open anything by itself. Seal opens nothing before your key holders release everything. If the key is lost, hand them a new one and seal again while you are alive.")
                     .font(.callout).foregroundStyle(.white.opacity(0.65))
                     .fixedSize(horizontal: false, vertical: true)
                 Text("It needs a key that can carry a secret (a current YubiKey 5 can). Seal checks on the first tap and refuses a key that cannot, before anything is saved.")

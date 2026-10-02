@@ -20,6 +20,19 @@ struct PolicyView: View {
 
     private var custodianCount: Int { max(estateEngine.estate?.custodians.count ?? 0, 1) }
 
+    /// Under the "how many must agree" stepper. At a rule of one it says
+    /// plainly what one key holder could do (audit H1).
+    private var thresholdFooter: String {
+        let count = estateEngine.estate?.custodians.count ?? 0
+        guard policy.threshold == 1 else {
+            return "Any \(policy.threshold) of your \(count) key holders must each tap their key. One tap from you stops all of it."
+        }
+        let who = count <= 1
+            ? "Your one key holder can act alone."
+            : "Any one of your \(count) key holders can act alone."
+        return who + " One tap from you stops all of it. " + ReleasePolicy.oneKeyCaution(custodianCount: count)
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -39,8 +52,7 @@ struct PolicyView: View {
                             .pickerStyle(.segmented)
                         }
 
-                        block("How many key holders must agree",
-                              "Any \(policy.threshold) of your \(estateEngine.estate?.custodians.count ?? 0) key holders must each tap their key. One tap from you stops all of it.") {
+                        block("How many key holders must agree", thresholdFooter) {
                             Stepper("\(policy.threshold) of \(estateEngine.estate?.custodians.count ?? 0)", value: $policy.threshold, in: 1...custodianCount)
                                 .foregroundStyle(.white)
                         }

@@ -193,7 +193,7 @@ enum OnboardingScript {
             OnboardingScreen(
                 id: "why",
                 title: "For the things only you know.",
-                body: "The passwords. The seed phrase. Where the papers are. A letter to each of them. You seal them in envelopes now, for the people you leave behind. They stay closed while you are here. Nobody can open one early. Not Apple, not us.",
+                body: "The passwords. The seed phrase. Where the papers are. A letter to each of them. You seal them in envelopes now, for the people you leave behind. They stay closed while you are here. Seal opens none of them early. Apple cannot open them, and neither can we.",
                 figure: .mark),
             OnboardingScreen(
                 id: "ask",
@@ -365,7 +365,7 @@ enum OnboardingScript {
             return OnboardingScreen(
                 id: "\(p).curve",
                 title: "With two keys or more, one key alone sees nothing.",
-                body: "Your rule right now needs only one key, so one key holder can act alone after the warnings. If you ask for two keys or more, each key holds one point on a hidden line. One point alone could sit on any line at all, so one key holder learns nothing. Two points fix the line, and where it meets the edge is the secret. That is arithmetic, and it holds against us too.",
+                body: "Your rule right now needs only one key, so each key holds the whole secret. \(ReleasePolicy.oneKeyCaution(custodianCount: n.custodianCount)) If you ask for two keys or more, each key holds one point on a hidden line. One point alone could sit on any line at all, so one key holder learns nothing. Two points fix the line, and where it meets the edge is the secret. That is arithmetic, and it holds against us too.",
                 figure: .curve)
         }
         let shape = n.threshold <= 2 ? "line" : "curve"
@@ -386,8 +386,8 @@ enum OnboardingScript {
         if n.oneIsEnough {
             nothing = OnboardingScreen(
                 id: "k.nothing",
-                title: "Nothing opens until the countdown ends.",
-                body: "Until the person who asked you has gone quiet for a long time and every warning has run, nothing opens for anybody, including you. One tap from them stops it at any point. After all of that, their rule lets you act on your own.",
+                title: "Seal opens nothing until the countdown ends.",
+                body: "Until the person who asked you has gone quiet for a long time and every warning has run, Seal opens nothing for anybody, including you. One tap from them stops it at any point. After all of that, their rule lets you act on your own.",
                 figure: .curve)
         } else {
             nothing = OnboardingScreen(
@@ -404,13 +404,13 @@ enum OnboardingScript {
             several = OnboardingScreen(
                 id: "k.several",
                 title: "You are the only one.",
-                body: "The rule they chose needs only one person, and that person is you. Once they have gone quiet and every warning has run, your tap alone opens the envelopes for the people they were written for. Nothing opens before that, and one tap from them stops all of it at any point.",
+                body: "The rule they chose needs only one person, and that person is you. Once they have gone quiet and every warning has run, your tap alone opens the envelopes for the people they were written for. Seal opens nothing before that, and one tap from them stops all of it at any point.",
                 figure: .keys)
         } else if n.oneIsEnough {
             several = OnboardingScreen(
                 id: "k.several",
                 title: "Any one of you can act.",
-                body: "They asked \(otherPeople) too. Their rule needs only one key, so once they have gone quiet and every warning has run, your tap alone opens the envelopes. So does any other key holder's. Nothing opens before that, and one tap from them stops all of it.",
+                body: "They asked \(otherPeople) too. Their rule needs only one key, so once they have gone quiet and every warning has run, your tap alone opens the envelopes. So does any other key holder's. Seal opens nothing before that, and one tap from them stops all of it.",
                 figure: .keys)
         } else if n.exact {
             let together: String
@@ -458,7 +458,7 @@ enum OnboardingScript {
             OnboardingScreen(
                 id: "r.sealed",
                 title: "Someone wrote you an envelope.",
-                body: "It is sealed. Nobody can open it early. Not Apple, not us, and not anyone holding a key. It opens here, on your phone, only after a long silence from the person who wrote it, and only after their key holders act.",
+                body: "It is sealed. Nobody else can open it. Not Apple, not us, and not anyone holding a key. It opens here, on your phone, only after a long silence from the person who wrote it, and only after their key holders act.",
                 figure: .envelope),
             OnboardingScreen(
                 id: "r.opens",

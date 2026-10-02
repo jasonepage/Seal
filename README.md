@@ -36,7 +36,9 @@ secrets. You choose a few people you trust, face to face, and hand each a
 piece of one key. You set the rule for how the envelopes open after you are
 gone. Then you open the app now and then, and that is the whole ongoing job.
 
-Nobody can open one early. Not Apple, not us. There is no Seal server: the
+Seal opens nothing early, and Apple and we cannot open anything at all. (At
+a rule of one, the trust you place in each key holder is total; see
+[the limits page](https://sealmessenger.com/limits.html).) There is no Seal server: the
 encrypted envelopes sit in Apple's iCloud under Seal's own container (not your
 personal iCloud storage), the keys never leave the phones,
 and the record of who did what can be checked with a script that has no Seal

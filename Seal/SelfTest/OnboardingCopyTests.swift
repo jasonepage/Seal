@@ -187,6 +187,15 @@ enum OnboardingCopyTests {
             for r in [OnboardingRole.sealer, .couple] {
                 for s in OnboardingScript.screens(for: r, numbers: n) where s.id.hasSuffix(".curve") {
                     t.check(!s.title.hasPrefix("One key alone sees nothing"), "the sealer curve title is honest at a threshold of 1", "\(r.rawValue)/\(s.id)")
+                    // Audit H1: one key is the whole secret, and the owner
+                    // is told what a key holder with a rebuilt app could do.
+                    t.check(s.body.contains("rebuilt the app"), "at a threshold of 1 the sealer is told what one key really allows", "\(r.rawValue)/\(s.id) c\(n.custodianCount)")
+                }
+            }
+            for s in OnboardingScript.screens(for: .keyHolder, numbers: n) + OnboardingScript.screens(for: .recipient, numbers: n) {
+                for l in lines(s) {
+                    t.check(!l.contains("Nothing opens before") && !l.contains("Nobody can open"),
+                            "no promise at a threshold of 1 that a rebuilt app could break", "\(s.id): \(l)")
                 }
             }
         }
