@@ -73,7 +73,7 @@ enum CBOR {
         subscript(key: Int64) -> Value? {
             if case .map(let pairs) = self {
                 for (k, v) in pairs {
-                    if case .unsigned(let u) = k, Int64(u) == key { return v }
+                    if case .unsigned(let u) = k, Int64(exactly: u) == key { return v }
                     if case .negative(let n) = k, n == key { return v }
                 }
             }
@@ -83,21 +83,27 @@ enum CBOR {
         /// COSE labels like `alg` (3) and `crv` (-1) are signed integers.
         var intValue: Int64? {
             switch self {
-            case .unsigned(let u): return Int64(u)
+            case .unsigned(let u): return Int64(exactly: u)
             case .negative(let n): return n
             default: return nil
             }
         }
     }
 
-    enum DecodeError: Error { case truncated, unsupported(UInt8) }
+    enum DecodeError: Error { case truncated, unsupported(UInt8), tooDeep, tooLarge }
+
+    /// Deeper nesting than this is not an attestation object. Without a cap,
+    /// a broken or hostile key could nest arrays until the stack overflowed
+    /// (audit, medium: malformed registration data must not crash).
+    static let maxDepth = 16
 
     static func decode(_ data: Data) throws -> Value {
         var offset = data.startIndex
-        return try decodeItem(data, &offset)
+        return try decodeItem(data, &offset, depth: 0)
     }
 
-    private static func decodeItem(_ data: Data, _ offset: inout Data.Index) throws -> Value {
+    private static func decodeItem(_ data: Data, _ offset: inout Data.Index, depth: Int) throws -> Value {
+        guard depth <= maxDepth else { throw DecodeError.tooDeep }
         guard offset < data.endIndex else { throw DecodeError.truncated }
         let initial = data[offset]; offset += 1
         let major = initial >> 5
@@ -116,28 +122,38 @@ enum CBOR {
             }
         }
 
+        /// A byte length or item count. It must fit in an Int (a converting
+        /// `Int(_:)` traps on 2^63 and up) and in what is left of the input:
+        /// every byte string byte, array item and map key is at least a byte.
+        func boundedCount() throws -> Int {
+            guard let n = Int(exactly: try length()) else { throw DecodeError.tooLarge }
+            guard n <= data.distance(from: offset, to: data.endIndex) else { throw DecodeError.truncated }
+            return n
+        }
+
         switch major {
         case 0: return .unsigned(try length())
-        case 1: return .negative(-1 - Int64(try length()))
+        case 1:
+            guard let n = Int64(exactly: try length()) else { throw DecodeError.tooLarge }
+            return .negative(-1 - n)
         case 2, 3:
-            let len = Int(try length())
-            guard data.distance(from: offset, to: data.endIndex) >= len else { throw DecodeError.truncated }
+            let len = try boundedCount()
             let slice = Data(data[offset..<data.index(offset, offsetBy: len)])
             offset = data.index(offset, offsetBy: len)
             if major == 2 { return .bytes(slice) }
             guard let s = String(data: slice, encoding: .utf8) else { throw DecodeError.unsupported(initial) }
             return .text(s)
         case 4:
-            let len = Int(try length())
+            let len = try boundedCount()
             var items: [Value] = []
-            for _ in 0..<len { items.append(try decodeItem(data, &offset)) }
+            for _ in 0..<len { items.append(try decodeItem(data, &offset, depth: depth + 1)) }
             return .array(items)
         case 5:
-            let len = Int(try length())
+            let len = try boundedCount()
             var pairs: [(Value, Value)] = []
             for _ in 0..<len {
-                let k = try decodeItem(data, &offset)
-                let v = try decodeItem(data, &offset)
+                let k = try decodeItem(data, &offset, depth: depth + 1)
+                let v = try decodeItem(data, &offset, depth: depth + 1)
                 pairs.append((k, v))
             }
             return .map(pairs)
@@ -162,9 +178,11 @@ enum WebAuthnParsing {
         case unsupportedCurve(Int64?)
         case oversizedCoordinate
         case badPublicKey(Error)
+        case malformedAuthData
 
         var errorDescription: String? {
             switch self {
+            case .malformedAuthData: "Authenticator data was cut short or malformed."
             case .noAuthData: "Attestation had no authenticator data."
             case .noAttestedCredential: "Authenticator data carried no credential (AT flag unset)."
             case .missingCoordinates: "COSE key was missing its x/y coordinates."
@@ -212,8 +230,14 @@ enum WebAuthnParsing {
             WebAuthnDiag.log.error("register: AT flag unset (fmt=\(fmt, privacy: .public) flags=\(WebAuthnDiag.flagsSummary(flags), privacy: .public))")
             throw ParseError.noAttestedCredential   // AT flag not set
         }
+        // Check every length before reading with it: a broken or hostile
+        // authenticator must get an error, never a crash (audit, medium).
+        // Header 37, aaguid 16, then the 2-byte credential ID length.
+        guard authData.count >= 37 + 16 + 2 else { throw ParseError.malformedAuthData }
         var i = authData.startIndex + 37 + 16       // skip header + aaguid
         let idLen = Int(authData[i]) << 8 | Int(authData[i + 1]); i += 2
+        // WebAuthn caps a credential ID at 1023 bytes, and a key must follow it.
+        guard idLen > 0, idLen <= 1023, idLen < authData.endIndex - i else { throw ParseError.malformedAuthData }
         let credentialID = Data(authData[i..<(i + idLen)]); i += idLen
 
         // COSE_Key: alg 3, EC2 params -1 curve, -2 x, -3 y.
