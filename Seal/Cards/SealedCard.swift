@@ -273,6 +273,12 @@ struct SealedCard: Codable, Hashable {
     ///
     /// Short values are shown whole. Abbreviating a 10-character string would
     /// both reveal essentially all of it anyway and read as corruption.
+    /// How long a copied secret stays in the clipboard before the system
+    /// clears it. Long enough to switch to a wallet or a bank and paste,
+    /// short enough that it is not still there tomorrow. The confirmation
+    /// in RevealView says "90 seconds" in words; change both together.
+    static let clipboardLifetime: TimeInterval = 90
+
     static func copyConfirmation(for copied: String) -> String {
         copied.count <= 16
             ? "Copied \(copied)"
