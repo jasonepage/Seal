@@ -46,9 +46,11 @@ enum DemoFixtures {
         isActive && !ProcessInfo.processInfo.arguments.contains(hideWatermarkArgument)
     }
 
+    /// The demo is on only if it installed. A failed install (the real
+    /// identity's backup would not save) leaves the real account as it was,
+    /// not loaded under a demo flag that skips check-ins.
     static func activate() {
-        runtimeActive = true
-        install()
+        runtimeActive = install()
     }
 
     static func deactivate() {
@@ -106,15 +108,16 @@ enum DemoFixtures {
     private static let backupIdentityKey = "seal.demo.backup.rootIdentity"
     private static let backupEndorsementKey = "seal.demo.backup.deviceEndorsement"
 
-    private static func install() {
+    @discardableResult
+    private static func install() -> Bool {
         if let real = KeychainStore.load(IdentityManager.identityKey),
            (try? JSONDecoder().decode(RootIdentity.self, from: real))?.credentialIDHash != me.credentialIDHash {
             // The real identity is overwritten below, so only once its backup
             // is safely stored. If the backup fails, no demo: losing a real
             // identity to a demo is the one outcome that cannot be undone.
-            guard KeychainStore.save(real, for: backupIdentityKey) else { return }
+            guard KeychainStore.save(real, for: backupIdentityKey) else { return false }
             if let endorsement = KeychainStore.load(IdentityManager.endorsementKey) {
-                guard KeychainStore.save(endorsement, for: backupEndorsementKey) else { return }
+                guard KeychainStore.save(endorsement, for: backupEndorsementKey) else { return false }
             }
         }
         KeychainStore.delete(IdentityManager.endorsementKey)
@@ -139,6 +142,7 @@ enum DemoFixtures {
             KeychainStore.save(data, for: "seal.friends.\(owner)")
         }
         EstateStore.save(seedEstate(owner: owner), ownerHash: owner)
+        return true
     }
 
     private static func uninstallIfPresent() {

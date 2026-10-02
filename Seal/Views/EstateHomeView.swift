@@ -1114,7 +1114,7 @@ struct EstateHomeView: View {
                 Label("Your key was published early.", systemImage: "exclamationmark.octagon.fill")
                     .font(.system(.title3, design: .rounded, weight: .semibold))
                     .foregroundStyle(.orange)
-                Text("On \(published.formatted(date: .abbreviated, time: .omitted)), a key holder published the key to these envelopes without a real release. Seal opened nothing and does not trust it. But the key is out, so this set cannot be sealed again. Talk to your key holders, then start a new set.")
+                Text("On \(published.formatted(date: .abbreviated, time: .omitted)), a key holder published the key to these envelopes without a real release. Seal opened nothing and does not trust it. But the key is out: someone you wrote to who rebuilt the app could now read the envelopes written to them. Nobody can read envelopes written to someone else. This set cannot be sealed again. Talk to your key holders, then start a new set.")
                 Button { startingNewSet = EngineRef(engine: engine) } label: {
                     Text("Start a new set of envelopes")
                         .font(.system(.headline, design: .rounded))

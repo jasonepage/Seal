@@ -140,7 +140,9 @@ enum ReleaseFeed {
         var thresholds: [UInt64: Int] = [:]
         var opened: [String: (count: Int, epoch: UInt64)] = [:]    // "claimID|claimant"
         var tappers: [String: Set<String>] = [:]                     // claimID: key holders
-        var claimMoments: [String: [Date]] = [:]                     // claimID: taps, withdrawals
+        var firstTaps: [String: Date] = [:]                          // "claimID|tapper": earliest tap
+        var objectionCounts: [String: Int] = [:]                     // "claimID|objector"
+        var withdrawalTimes: [String: [Date]] = [:]                  // "claimID|objector"
         var releases: [(timed: Timed, body: ReleasedBody)] = []
         for t in timed {
             switch t.body {
@@ -153,14 +155,35 @@ enum ReleaseFeed {
                 opened[key] = (count: (opened[key]?.count ?? 0) + 1, epoch: body.epoch)
             case .authorization(let claimID):
                 tappers[claimID, default: []].insert(t.event.actorHash)
-                claimMoments[claimID, default: []].append(t.at)
+                let key = claimID + "|" + t.event.actorHash
+                firstTaps[key] = min(firstTaps[key] ?? t.at, t.at)
             case .objection(let body):
-                if t.event.kind == .objectionWithdrawn { claimMoments[body.claimID, default: []].append(t.at) }
+                let key = body.claimID + "|" + t.event.actorHash
+                if t.event.kind == .objectionWithdrawn {
+                    withdrawalTimes[key, default: []].append(t.at)
+                } else if !body.withdrawn {
+                    objectionCounts[key, default: 0] += 1
+                }
             case .released(let body):
                 releases.append((timed: t, body: body))
             case .other, .created, .policy:
                 break
             }
+        }
+
+        // The moments at which the answer about a claim can change: each key
+        // holder's first tap, and as many withdrawals as that key holder made
+        // objections. Junk taps and unmatched withdrawals add none, so a
+        // flood of them cannot use up a release's replays (review, B1).
+        var claimMoments: [String: [Date]] = [:]
+        for (key, at) in firstTaps {
+            let claimID = String(key[..<(key.lastIndex(of: "|") ?? key.endIndex)])
+            claimMoments[claimID, default: []].append(at)
+        }
+        for (key, times) in withdrawalTimes {
+            let claimID = String(key[..<(key.lastIndex(of: "|") ?? key.endIndex)])
+            let matched = times.sorted().prefix(objectionCounts[key] ?? 0)
+            claimMoments[claimID, default: []].append(contentsOf: matched)
         }
 
         // Only the owner's newest key set can be released. Every owner event
@@ -187,7 +210,7 @@ enum ReleaseFeed {
         for g in genuine {
             let sender = g.timed.event.actorHash
             guard g.body.epoch == newestEpoch,
-                  let open = opened[g.body.claimID + "|" + sender], open.count == 1, open.epoch == g.body.epoch,
+                  let opening = opened[g.body.claimID + "|" + sender], opening.count == 1, opening.epoch == g.body.epoch,
                   (tappers[g.body.claimID]?.count ?? 0) >= max(1, thresholds[g.body.epoch] ?? snapshot.policy.threshold)
             else { continue }
             let key = sender + "|" + g.body.claimID

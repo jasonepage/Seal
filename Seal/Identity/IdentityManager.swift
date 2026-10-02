@@ -238,17 +238,18 @@ final class IdentityManager {
         // so the existing install keeps its device slot instead of orphaning.
         if KeychainStore.load(Self.deviceKeyTag(hash)) == nil,
            let legacy = KeychainStore.load(Self.legacyDeviceKeyTag) {
-            let movedKey = KeychainStore.save(legacy, for: Self.deviceKeyTag(hash))
-            var movedKem = true
-            if let legacyKem = KeychainStore.load(Self.legacyKemKeyTag) {
-                movedKem = KeychainStore.save(legacyKem, for: Self.kemKeyTag(hash))
-            }
-            // Drop the old copies only once both sit safely under the new
-            // tags. A failed move used to delete this phone's only key.
-            if movedKey && movedKem {
+            // Drop the old copy only once it sits safely under the new tag.
+            // A failed move used to delete this phone's only key.
+            if KeychainStore.save(legacy, for: Self.deviceKeyTag(hash)) {
                 KeychainStore.delete(Self.legacyDeviceKeyTag)
-                KeychainStore.delete(Self.legacyKemKeyTag)
             }
+        }
+        // The encryption key on its own, so a move that failed last launch
+        // is tried again even after the signing key made it across.
+        if KeychainStore.load(Self.kemKeyTag(hash)) == nil,
+           let legacyKem = KeychainStore.load(Self.legacyKemKeyTag),
+           KeychainStore.save(legacyKem, for: Self.kemKeyTag(hash)) {
+            KeychainStore.delete(Self.legacyKemKeyTag)
         }
         if let data = KeychainStore.load(Self.deviceKeyTag(hash)) {
             deviceKey = try? SecureEnclave.P256.Signing.PrivateKey(dataRepresentation: data)

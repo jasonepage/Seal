@@ -30,43 +30,66 @@ import UIKit
 final class PrivacyShield {
     static let shared = PrivacyShield()
 
-    private var covers: [UIWindow] = []
-    private var observer: NSObjectProtocol?
+    /// One cover per window scene. On iPad Seal can have several windows,
+    /// and one going to the background must never cover another that is
+    /// still in use (review of this fix).
+    private var covers: [ObjectIdentifier: UIWindow] = [:]
+    private var observers: [NSObjectProtocol] = []
 
-    /// Called once at launch (SealApp). UIKit posts this while the scene is
-    /// going to the background, before the snapshot is taken; SwiftUI's
-    /// scenePhase change is not promised to arrive in time. The scenePhase
-    /// path below stays as a second chance, and is what lifts the cover.
+    /// Called once at launch (SealApp). UIKit posts these per scene, and
+    /// posts the background one before the snapshot is taken; SwiftUI's
+    /// scenePhase change is not promised to arrive in time. Queue `.main`
+    /// runs the block at once on the main thread.
     func install() {
-        guard observer == nil else { return }
-        observer = NotificationCenter.default.addObserver(forName: UIScene.didEnterBackgroundNotification,
-                                                          object: nil, queue: .main) { _ in
-            MainActor.assumeIsolated { PrivacyShield.shared.raise() }
-        }
+        guard observers.isEmpty else { return }
+        let center = NotificationCenter.default
+        observers.append(center.addObserver(forName: UIScene.didEnterBackgroundNotification,
+                                            object: nil, queue: .main) { note in
+            MainActor.assumeIsolated {
+                if let scene = note.object as? UIWindowScene { PrivacyShield.shared.raise(over: scene) }
+            }
+        })
+        observers.append(center.addObserver(forName: UIScene.willEnterForegroundNotification,
+                                            object: nil, queue: .main) { note in
+            MainActor.assumeIsolated {
+                if let scene = note.object as? UIWindowScene { PrivacyShield.shared.lift(from: scene) }
+            }
+        })
+        observers.append(center.addObserver(forName: UIScene.didDisconnectNotification,
+                                            object: nil, queue: .main) { note in
+            MainActor.assumeIsolated {
+                if let scene = note.object as? UIWindowScene { PrivacyShield.shared.lift(from: scene) }
+            }
+        })
     }
 
+    /// The SwiftUI path (SealApp), a second chance either way. On
+    /// background it only covers; on active it only uncovers the scenes
+    /// that are not in the background. It never undoes what UIKit just did.
     func update(for phase: ScenePhase) {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
         switch phase {
-        case .background: raise()
-        case .active: lift()
-        default: break
+        case .background:
+            for scene in scenes where scene.activationState == .background { raise(over: scene) }
+        case .active:
+            for scene in scenes where scene.activationState != .background { lift(from: scene) }
+        default:
+            break
         }
     }
 
-    fileprivate func raise() {
-        guard covers.isEmpty else { return }
-        for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
-            let window = UIWindow(windowScene: scene)
-            window.windowLevel = UIWindow.Level(rawValue: UIWindow.Level.alert.rawValue + 1)
-            window.rootViewController = UIHostingController(rootView: PrivacyCover())
-            window.isHidden = false
-            covers.append(window)
-        }
+    fileprivate func raise(over scene: UIWindowScene) {
+        let key = ObjectIdentifier(scene)
+        guard covers[key] == nil else { return }
+        let window = UIWindow(windowScene: scene)
+        window.windowLevel = UIWindow.Level(rawValue: UIWindow.Level.alert.rawValue + 1)
+        window.rootViewController = UIHostingController(rootView: PrivacyCover())
+        window.isHidden = false
+        covers[key] = window
     }
 
-    private func lift() {
-        for window in covers { window.isHidden = true }
-        covers.removeAll()
+    fileprivate func lift(from scene: UIWindowScene) {
+        covers.removeValue(forKey: ObjectIdentifier(scene))?.isHidden = true
     }
 }
 

@@ -1183,9 +1183,18 @@ final class EstateEngine {
            !shares.contains(where: { $0.index == own.index }) {
             shares.append(own)
         }
-        let estateKey = try EstateKeyHierarchy.recoverEstateKey(material, submitted: shares)
+        // A share that does not match the owner's commitment for its slot is
+        // dropped, not fatal: one key holder sending a bad share must not stop
+        // everyone else's release. Too few good shares still fails, by name.
+        let checked = shares.filter { share in
+            material.custodianShares.contains { $0.shareIndex == share.index && $0.commitment == share.commitment }
+        }
+        if checked.count < shares.count {
+            Self.log.error("release: dropped \(shares.count - checked.count, privacy: .public) share(s) that did not match their commitment")
+        }
+        let estateKey = try EstateKeyHierarchy.recoverEstateKey(material, submitted: checked)
         let body = try EstateEvent.encodeBody(ReleasedBody(claimID: claim.id, epoch: epoch.epoch,
-                                                           shareIndexes: shares.map(\.index).sorted(),
+                                                           shareIndexes: checked.map(\.index).sorted(),
                                                            estateKey: estateKey))
         let event = try sign(.released, estateID: estateID, payload: body,
                              previous: EstateLogStore.headDigest(guardedEvents[estateID] ?? []))

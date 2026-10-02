@@ -48,8 +48,12 @@ struct FirstSeen: Codable, Hashable {
     /// dated back into a claim that already earned its release undid the
     /// release on every phone, and on a phone that heard of everything late
     /// (the claim dated from then) a real veto, dated earlier, was ignored.
-    /// The cost, on a late phone only: an objection posted after a release
-    /// counts there until withdrawn. That stalls; it never opens early.
+    /// The cost: on any phone that judges a release later than the release
+    /// itself (one that heard of the claim late, or whose own view of the
+    /// claim had not opened yet), an objection that arrives first counts
+    /// there until withdrawn. That stalls; it never opens early. Ignoring
+    /// objections that come after a release is not safe: a rebuilt app could
+    /// publish an early, unearned release to make every later veto vanish.
     static let clampedKinds: Set<EstateEvent.Kind> = [.releaseClaimed, .authorization, .released,
                                                       .objection, .objectionWithdrawn]
 
