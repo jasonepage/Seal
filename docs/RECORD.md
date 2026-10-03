@@ -378,10 +378,16 @@ The DER code was tested against real artefacts rather than assumed:
    parser, ported line for line, read `PKIStatus = 0` from it.
 3. **Digest guard.** That same real response was confirmed to contain the digest
    bytes, so the reject-only guard does not throw away valid tokens.
+4. **A real FreeTSA token.** A response freetsa.org returned on 2026-10-03
+   (fetched with curl, not by the app) is now a self-test,
+   `timestamp.realFreeTSA`: it must verify under the app's own pinned
+   certificate. An earlier pin, copied from FreeTSA's web page, was the hash
+   of the certificate FILE rather than the certificate, so it matched no real
+   token; only a real token in the tests could have caught that.
 
-What is still untested: the live round trip against a public authority, and
-whether the chosen operator is reliable. That is open question 1 and it stays
-open. `TimestampService.defaultAuthority` is FreeTSA, chosen only because it is
+What is still untested: the app's own request to a public authority from a
+phone, and whether the chosen operator is reliable. That is open question 1
+and it stays open. `TimestampService.defaultAuthority` is FreeTSA, chosen only because it is
 public and free, which is not a good enough reason to keep it.
 
 ### What makes a timestamp "official", and what does not

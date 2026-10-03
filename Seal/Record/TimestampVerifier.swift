@@ -40,12 +40,20 @@ import CryptoKit
 nonisolated enum TimestampVerifier {
 
     /// SHA-256 of the DER of each timestamp signing certificate this phone
-    /// believes. FreeTSA's TSA certificate: ECDSA P-384, in service since
-    /// 2026-03-16, valid to 2040. The value is the one published at
-    /// https://freetsa.org/index_en.php and in its CPS.
+    /// believes. FreeTSA's TSA certificate: ECDSA P-384, valid 2026-02-15 to
+    /// 2040-02-02, issued by the FreeTSA Root CA (DER SHA-256 a6379e7c...aabc).
+    ///
+    /// Computed from the certificate inside a real FreeTSA token, never from
+    /// a web page. Build 36 (never released) pinned 8bfb0305...3467, the
+    /// value FreeTSA's site lists: that is the SHA-256 of the tsa.crt FILE,
+    /// which is PEM text, so it matched no certificate and every FreeTSA
+    /// token was refused (fail safe: no authority time, never a wrong one).
+    /// Found by an independent review; `timestamp.realFreeTSA` now checks a
+    /// real token against this set, so a wrong pin fails the self-tests
+    /// instead of failing silently.
     static let pinnedCertificates: Set<Data> = [
-        Data([0x8b, 0xfb, 0x03, 0x05, 0xbb, 0x64, 0xe2, 0x57, 0x1c, 0xa5, 0x07, 0x55, 0x2e, 0xf3, 0x24, 0x5c,
-              0xb1, 0xc2, 0xfe, 0xe8, 0x72, 0x8e, 0x0f, 0xf8, 0x68, 0x92, 0x25, 0x08, 0x1e, 0xa1, 0x34, 0x67]),
+        Data([0x32, 0xe8, 0x41, 0xa9, 0x5c, 0xc1, 0x16, 0x41, 0x01, 0xff, 0xde, 0x41, 0x29, 0x8e, 0xf2, 0xfc,
+              0x75, 0xc1, 0xc4, 0x37, 0x2e, 0xf0, 0x95, 0xe8, 0x8a, 0x6b, 0xbd, 0x47, 0xdf, 0xb1, 0x91, 0xfc]),
     ]
 
     /// A timestamp token is a couple of kilobytes. Anything this large is not one.

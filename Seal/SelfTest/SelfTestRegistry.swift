@@ -26,6 +26,7 @@ enum SelfTestRegistry {
             + FirstSeenTests.suites
             + TimestampVerifierTests.suites
             + WebAuthnParsingTests.suites
+            + FreeTSATests.suites
     }
 }
 
