@@ -8,7 +8,7 @@ is no test host for a passkey. They run on every DEBUG launch. A
 failure blacks the screen on purpose and names the suite. The debug
 Time Travel screen runs them again on demand.
 
-**80 tests in 17 suites.**
+**89 tests in 20 suites.**
 
 ## AttachedFileTests
 
@@ -51,7 +51,7 @@ Time Travel screen runs them again on demand.
 - `estatelog.signing`
 - `estatelog.admission`
 - `estatelog.feed`
-- `estatelog.genTime`
+- `estatelog.releaseAdmission`
 
 ## FirstSeenTests
 
@@ -70,6 +70,10 @@ Time Travel screen runs them again on demand.
 - `firststeps.starters`
 - `firststeps.videoInMedia`
 - `firststeps.openOnADate`
+
+## FreeTSATests
+
+- `timestamp.realFreeTSA`
 
 ## GoneAccountTests
 
@@ -99,6 +103,8 @@ Time Travel screen runs them again on demand.
 - `release.earlyClaim`
 - `release.policy`
 - `release.ninetySecondRun`
+- `release.futureRelease`
+- `release.judgingARelease`
 
 ## RuleBookTests
 
@@ -140,3 +146,15 @@ Time Travel screen runs them again on demand.
 
 - `survivalkit.words`
 - `survivalkit.renders`
+
+## TimestampVerifierTests
+
+- `timestamp.verify`
+- `timestamp.hostile`
+- `timestamp.generalizedTime`
+- `timestamp.feed`
+
+## WebAuthnParsingTests
+
+- `webauthn.hostileCBOR`
+- `webauthn.registration`
