@@ -65,7 +65,11 @@ extension FriendStore {
     /// Returns how many people were newly marked.
     @discardableResult
     func refreshGone(sync: SyncEngine, alsoCheck: [String] = [], force: Bool,
-                     now: Date = Clocks.current.now) async -> Int {
+                     now nowOverride: Date? = nil) async -> Int {
+        // The clock is read here, inside the main actor, not in a default
+        // argument: the compiler treats that as nonisolated, and Clocks is
+        // main-actor state (the two "Main actor-isolated" warnings).
+        let now = nowOverride ?? Clocks.current.now
         guard !DemoFixtures.isActive else { return 0 }
         guard force || goneCheckDue(now: now) else { return 0 }
         var hashes: [String] = []
