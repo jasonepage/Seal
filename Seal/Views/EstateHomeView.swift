@@ -1327,7 +1327,10 @@ struct EstateHomeView: View {
     /// or skipped, and it is recorded before the sheet appears so a crash
     /// mid-answer cannot ask the same thing again next week.
     private func offerWeeklyIfDue(force: Bool) {
-        guard weeklyShowing == nil, !DemoFixtures.isActive, interviewFor == nil, editing == nil else { return }
+        // The demo is allowed in: it is the easiest place to try the
+        // question. Nothing is scheduled for it (WeeklyQuestion.schedule)
+        // and it cannot seal (runSeal), so the paragraph stays a draft.
+        guard weeklyShowing == nil, interviewFor == nil, editing == nil else { return }
         let ownerHash = myRoot.credentialIDHash
         let settings = WeeklyQuestion.load(ownerHash: ownerHash)
         guard let pick = settings.pending else { return }
