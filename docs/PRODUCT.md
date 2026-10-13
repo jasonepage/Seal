@@ -129,8 +129,10 @@ theme and Bigger text mode. Everything else was retired in commit
 
 ## 11. The blank page, and the interview that is meant to fix it
 
-**Not built. Specified here so it is not reinvented from scratch, and so the
-promise below is decided before anybody writes code.**
+**Built and shipped in 1.0** (`Seal/Views/Interview/`): the eleven questions
+as data, the plain fallback, the on-device drafter, one follow-up, and a
+dictation button on every answer. The text below is the design it was built
+to. Section 13 is what comes next.
 
 ### The failure this exists for
 
@@ -275,3 +277,98 @@ proposed steps out, each ticked by the owner). A zip or an export folder
 attaches and seals but is not read yet. Jason's call to build it now
 rather than after section 11; the ordering argument above still stands
 for what to show real people first.
+
+## 13. One question a week (planned for 1.1)
+
+**Not built. Decided 2026-10-13. Nothing here touches cryptography, the
+wire format, or the release machine.**
+
+### The failure this exists for
+
+Section 11 fixed the blank page for people who sit down for half an hour.
+Most people never sit down for half an hour. They buy Seal, run the
+interview once or not at all, seal three thin envelopes, and the vault
+stays thin for years. The second failure is the check-in: the owner has to
+open the app for no reason, so the heartbeat feels like a chore and a
+missed one feels like a false alarm waiting to happen.
+
+One feature answers both. The app asks one question a week about one
+person. Answering it is the check-in.
+
+### What it is
+
+Once a week, at a time the owner picks, the phone shows one notification.
+The notification never names a person, an envelope or a secret, exactly
+like the password reminder in `SecretReview.line`. Something like: "One
+question this week. It takes a minute." Tapping it opens Seal on one
+question, big, with the recipient's name, the dictation button, and skip.
+
+- The question comes from the section 11 list, rotated across the people
+  in the vault so each recipient gets a new paragraph every few weeks, and
+  across the letter questions so nobody is asked the same thing twice in a
+  year. Secret questions (logins, codes, where things are) are asked at
+  most once per person and never by notification, because a notification
+  is the wrong moment to type a password.
+- The answer is drafted the same way the interview drafts: `OnDeviceDrafter`
+  when the phone has a model, plain text when it does not. It is appended
+  to that person's envelope as a new paragraph. The owner sees it in the
+  editor before anything else happens.
+- Up to two follow-ups instead of one, from the same on-device model, with
+  the same twenty word cap and the same secret-word filter in
+  `InterviewFollowUp.clean`. A follow-up that fails the filter is dropped
+  and the week ends.
+- Answering, or even opening the question and skipping it, calls
+  `heartbeat()`. That is the whole check-in. The release machine sees an
+  ordinary heartbeat and nothing in it changes.
+
+### Sealing
+
+`updateEnvelope` un-seals on any edit, and `sealAndPublish` needs only the
+device key and a network publish, never a hardware key tap. So after an
+answer the envelope is a changed draft, the home screen says so, and the
+owner taps Seal once. The app does not seal on its own. That keeps the
+section 11 promise that the helper never signs, seals or sends anything,
+and it means the owner reads the paragraph at least once. If weeks of
+answers pile up unsealed, the home screen says "three envelopes have
+changed since you sealed" and nothing worse happens: an unsealed change is
+on this phone only, and the sealed copies the custodians hold are the last
+ones the owner approved.
+
+### The promise, unchanged
+
+Nothing the owner says or writes leaves the phone. The notification
+carries no content. The model is Apple's on-device framework or nothing.
+
+### What it must not do
+
+- It does not ask about the rule or the custodians (section 11).
+- It does not nag. One notification a week, one reminder if it was missed,
+  then silence until next week. Missing a question is not a missed
+  heartbeat; the heartbeat still fires on every launch as it does today.
+- It does not ask two people's questions in one sitting unless the owner
+  asks for more ("Another one?" at the end, never pushed).
+- It does not run for a released set.
+
+### A real run of it
+
+She seals three envelopes in October. Every Tuesday at eight her phone
+says there is one question. Some weeks she talks for two minutes about her
+daughter while the coffee brews; some weeks she skips. By Christmas each
+envelope has eight or ten paragraphs that did not exist in October, her
+custodians have seen a heartbeat every week, and she has never once opened
+Seal "to check in."
+
+### Build order
+
+1. The scheduler and the one notification, copied from `SecretReview`.
+2. Rotation: which person, which question, stored per owner like
+   `SecretReview` settings, wiped by `EstateStore.wipe`.
+3. The single-question screen, reusing the section 11 question view.
+4. Append to the envelope through `updateEnvelope`; the home screen's
+   "changed since you sealed" line.
+5. Two follow-ups.
+6. Tests: rotation never repeats a letter question within a year for the
+   same person, secret questions never come by notification, a skipped
+   week leaves no trace, answering calls `heartbeat()` once.
+
+Ship 1.1 with the new icon from `docs/icon.png`.
