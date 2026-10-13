@@ -13,6 +13,9 @@ import UserNotifications
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     /// Posted whenever a push arrives, HomeView listens and refreshes chats.
     static let messageArrived = Notification.Name("seal.messageArrived")
+    /// Posted when the owner taps the weekly question notification
+    /// (WeeklyQuestion). EstateHomeView listens and opens the question.
+    static let weeklyQuestionTapped = Notification.Name("seal.weeklyQuestionTapped")
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
@@ -39,6 +42,18 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
                                 willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
         NotificationCenter.default.post(name: Self.messageArrived, object: nil)
         return [.banner, .sound, .list]
+    }
+
+    /// A tap on one of our local notifications. Only the weekly question
+    /// opens somewhere in particular; everything else lands on the home
+    /// screen, which already says what is going on.
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                didReceive response: UNNotificationResponse,
+                                withCompletionHandler completionHandler: @escaping () -> Void) {
+        if response.notification.request.identifier.hasPrefix("seal.owner.weekly.") {
+            NotificationCenter.default.post(name: Self.weeklyQuestionTapped, object: nil)
+        }
+        completionHandler()
     }
 
     // APNs registration diagnostics, surfaced for triaging "push didn't work"

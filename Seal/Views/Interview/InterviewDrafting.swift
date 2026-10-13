@@ -407,3 +407,82 @@ enum InterviewFollowUp {
         return text
     }
 }
+
+// MARK: - One paragraph, for the weekly question (PRODUCT.md section 13)
+
+/// The weekly answer becomes one paragraph, not a whole letter: it is
+/// appended to a letter that already has a greeting. Same model, same
+/// rules, same fallback (the owner's words as said). Letter answers only;
+/// the weekly set has no secret questions, and this refuses them anyway.
+enum WeeklyParagraph {
+
+    struct Result {
+        var text: String
+        var helperFellBack: Bool
+    }
+
+    static let instructions = """
+    You help someone add one paragraph to a letter to a person they love, \
+    to be read after the writer has died. Write in the first person, as the \
+    writer, in their own voice.
+
+    Rules you follow exactly:
+    Use plain words a person of any age reads easily.
+    Keep every fact you are given and add none. Invent nothing: no names, no \
+    dates, no places, no events that are not in the notes.
+    Do not add advice, comfort or sayings of your own.
+    Keep close to the writer's own wording. You are tidying, not rewriting.
+    One paragraph, under 120 words. No greeting, no sign-off.
+    Never use an em dash.
+    Return only the paragraph.
+    """
+
+    /// The owner's own words, in order, as the fallback.
+    static func plain(from answers: [InterviewAnswer]) -> String {
+        InterviewDraftingShared.letterAnswers(answers)
+            .map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .joined(separator: " ")
+    }
+
+    static func draft(from answers: [InterviewAnswer], recipientName: String) async -> Result {
+        let fallback = Result(text: plain(from: answers), helperFellBack: false)
+        let material = InterviewDraftingShared.letterAnswers(answers)
+        guard !material.isEmpty else { return fallback }
+        guard InterviewHelper.isAvailable else { return fallback }
+        #if canImport(FoundationModels)
+        if #available(iOS 26, *) {
+            let notes = material.map { "Question: \($0.questionText)\nAnswer: \($0.text)" }
+                .joined(separator: "\n\n")
+            let prompt = """
+            The letter is to \(recipientName). Here are the writer's notes for \
+            one new paragraph, in the order they were spoken.
+
+            \(notes)
+
+            Turn these notes into one paragraph from the writer to \
+            \(recipientName). Keep every fact. Add nothing.
+            """
+            do {
+                let result = try await OnDeviceDrafter.respond(instructions: instructions,
+                                                              prompt: prompt,
+                                                              as: DraftedParagraph.self)
+                let text = OnDeviceDrafter.houseStyle(result.paragraph)
+                guard !text.isEmpty else { return Result(text: fallback.text, helperFellBack: true) }
+                return Result(text: text, helperFellBack: false)
+            } catch {
+                return Result(text: fallback.text, helperFellBack: true)
+            }
+        }
+        #endif
+        return fallback
+    }
+}
+
+#if canImport(FoundationModels)
+@available(iOS 26, *)
+@Generable
+struct DraftedParagraph {
+    @Guide(description: "One paragraph, first person, under 120 words, no greeting and no sign-off.")
+    var paragraph: String
+}
+#endif

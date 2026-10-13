@@ -7,9 +7,13 @@ Dates are the day the work landed in the repository. Anything marked
 
 ### Added (not built yet)
 
-- One question a week. The schedule, the rotation and the two local
-  notifications for PRODUCT.md section 13, plus eight new letter questions.
-  No screen yet. (`Seal/Estate/WeeklyQuestion.swift`)
+- One question a week (PRODUCT.md section 13). Once a week the phone
+  shows one notification that names nobody; tapping it opens one question
+  about one person, with dictation and up to two on-device follow-ups.
+  The answer becomes one paragraph in that person's envelope, with Seal
+  right there. Opening it is the week's check-in, answered or skipped.
+  Eight new letter questions. (`WeeklyQuestion.swift`,
+  `WeeklyQuestionView.swift`, `WeeklyParagraph`)
 
 ### Security
 

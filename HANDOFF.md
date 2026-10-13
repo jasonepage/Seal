@@ -27,10 +27,37 @@ notifications in `schedule` (if Swift complains about the tuple type,
 split it into two plain calls). `KeychainStore.save` returns Bool and is
 discarded with `_ =`.
 
-Not done yet (steps 3 to 5): the single-question screen, the append
-through `updateEnvelope` with the in-flow Seal button, the "changed since
-you sealed" line, two follow-ups. The notification tap also needs a
-route into that screen once it exists.
+## STEPS 3 TO 5, SAME DAY (UNCOMPILED)
+
+- `Seal/Views/Interview/WeeklyQuestionView.swift` (new): one question
+  with the name on it, dictation, skip; up to two follow-ups through the
+  existing `InterviewFollowUp.ask` (a skipped follow-up ends the asking);
+  the drafted paragraph in an editor with "Seal it now" and "Not now"
+  right under it. Writes nothing itself; hands an `Outcome` back.
+- `WeeklyParagraph` at the end of `InterviewDrafting.swift`: one
+  paragraph, under 120 words, same rules as the letter drafter, fallback
+  is the owner's words joined. `DraftedParagraph` is the `@Generable`.
+- `EstateHomeView`: `weeklyShowing` sheet; `offerWeeklyIfDue(force:)` on
+  appear, on foreground, and on the notification tap; `finishWeekly`
+  appends through `updateEnvelope` (adds "Dear Name," if the letter was
+  empty) and, for "Seal it now", runs the one shared `runSeal()` after
+  the sheet closes, paywall and all. Opening the sheet calls
+  `WeeklyQuestion.opened` and `heartbeat()` before it appears.
+- `SealApp.swift`: `AppDelegate` now implements `didReceive response`
+  and posts `weeklyQuestionTapped` for identifiers starting
+  `seal.owner.weekly.`.
+- The "changed since you sealed" line already existed (`unsealedLine`),
+  so "Not now" needs nothing new.
+
+Most likely to fail to compile: the `followUps` state is an array of
+tuples (`[(question: String, answer: String)]`); if SwiftUI complains,
+make it a small struct. `.onChange(of:) { _, phase in }` is the two
+argument iOS 17 form. `@Generable` on `DraftedParagraph` sits inside the
+existing `#if canImport(FoundationModels)` at the end of the file.
+
+Not done: a settings row for the weekday and hour (defaults Tuesday 8),
+and the "Another one?" offer at the end. Both are small and neither
+blocks 1.1.
 
 
 **Updated:** 2026-09-16 (night: the review fixes) · **Owner:** Nathan (Jason Page) · natepage67@gmail.com

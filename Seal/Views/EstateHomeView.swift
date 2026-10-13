@@ -58,6 +58,11 @@ struct EstateHomeView: View {
     /// editor, as it always was, or the interview.
     @State private var pickerMode: PickerMode = .blank
     @State private var interviewFor: InterviewSubject?
+    /// This week's question, when it is due and the owner is looking
+    /// (WeeklyQuestion). Set on appear, on foreground, and on the
+    /// notification tap; cleared when the sheet closes.
+    @State private var weeklyShowing: WeeklyShowing?
+    @State private var weeklySealAfter = false
     /// The envelope the interview drafted, held until its sheet has fully
     /// gone. Dismissing one sheet and presenting another in the same turn
     /// is the classic SwiftUI trap: the second never shows. So the draft
@@ -79,6 +84,7 @@ struct EstateHomeView: View {
     @Environment(SealPurchase.self) private var purchase
     @State private var explain: ExplainRequest?
     @Environment(\.parentMode) private var parentMode
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     /// iPad, or a phone on its side: one wider centred column, and the
@@ -839,6 +845,22 @@ struct EstateHomeView: View {
                 .environment(\.parentMode, parentMode)
                 .parentTypeScale()
             }
+            .sheet(item: $weeklyShowing, onDismiss: {
+                if weeklySealAfter { weeklySealAfter = false; runSeal() }
+            }) { showing in
+                WeeklyQuestionView(recipientName: showing.recipientName,
+                                   question: showing.question,
+                                   onDone: { outcome in finishWeekly(showing, outcome) })
+                    .environment(\.parentMode, parentMode)
+                    .parentTypeScale()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: AppDelegate.weeklyQuestionTapped)) { _ in
+                offerWeeklyIfDue(force: true)
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { offerWeeklyIfDue(force: false) }
+            }
+            .onAppear { offerWeeklyIfDue(force: false) }
             .sheet(item: $interviewFor, onDismiss: {
                 if let drafted = draftedEnvelope {
                     draftedEnvelope = nil
@@ -1289,6 +1311,58 @@ struct EstateHomeView: View {
     /// and `updateEnvelope(_:)` to save the letter and the secrets. Nothing
     /// new was added to the engine for this. The envelope lands unsealed,
     /// like every other draft, and the editor opens on it next.
+    // MARK: - One question a week (WeeklyQuestion, PRODUCT.md section 13)
+
+    struct WeeklyShowing: Identifiable {
+        let pick: WeeklyQuestion.Pick
+        let question: InterviewQuestion
+        let recipientName: String
+        var id: String { pick.envelopeID + "/" + pick.questionID }
+    }
+
+    /// Show this week's question if one is waiting. `force` is the
+    /// notification tap: the owner asked for it, so a pick whose time is
+    /// a few minutes off still opens. Opening is the heartbeat, answered
+    /// or skipped, and it is recorded before the sheet appears so a crash
+    /// mid-answer cannot ask the same thing again next week.
+    private func offerWeeklyIfDue(force: Bool) {
+        guard weeklyShowing == nil, !DemoFixtures.isActive, interviewFor == nil, editing == nil else { return }
+        let ownerHash = myRoot.credentialIDHash
+        let settings = WeeklyQuestion.load(ownerHash: ownerHash)
+        guard let pick = settings.pending else { return }
+        guard force || WeeklyQuestion.isDue(settings, now: estateEngine.now) else { return }
+        guard let estate = estateEngine.estate,
+              let envelope = estate.envelopes.first(where: { $0.id == pick.envelopeID }),
+              let question = InterviewQuestions.weeklyQuestion(id: pick.questionID) else {
+            // The envelope is gone or the question id is unknown: drop the
+            // pick; the next heartbeat makes a fresh one.
+            var s = settings; s.pending = nil; s.scheduledFor = nil
+            WeeklyQuestion.save(s, ownerHash: ownerHash)
+            return
+        }
+        let name = envelope.isAddressed
+            ? (estate.recipients.first { $0.rootHash == envelope.recipientHash }?.displayName ?? "Someone")
+            : (envelope.draftRecipientName ?? "Someone")
+        WeeklyQuestion.opened(ownerHash: ownerHash, now: estateEngine.now)
+        Task { await estateEngine.heartbeat() }
+        weeklyShowing = WeeklyShowing(pick: pick, question: question, recipientName: name)
+    }
+
+    /// Append the paragraph through the one edit path, which un-seals the
+    /// envelope like any other edit, then close. Sealing runs after the
+    /// sheet is gone, through the one shared seal path and its paywall.
+    private func finishWeekly(_ showing: WeeklyShowing, _ outcome: WeeklyQuestionView.Outcome) {
+        defer { weeklyShowing = nil }
+        guard case .answered(let paragraph, let sealNow) = outcome else { return }
+        let text = paragraph.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty,
+              var envelope = estateEngine.estate?.envelopes.first(where: { $0.id == showing.pick.envelopeID }) else { return }
+        let letter = envelope.letter.trimmingCharacters(in: .whitespacesAndNewlines)
+        envelope.letter = letter.isEmpty ? "Dear \(showing.recipientName),\n\n\(text)" : letter + "\n\n" + text
+        estateEngine.updateEnvelope(envelope)
+        weeklySealAfter = sealNow
+    }
+
     private func envelopeFromDraft(_ draft: InterviewDraft, for subject: InterviewSubject) -> Envelope {
         let name = subject.name
         let title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
