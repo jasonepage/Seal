@@ -61,7 +61,7 @@ in it.
 
 | | |
 |---|---|
-| Stage | Submitted to the App Store, September 2026. Free on [TestFlight](https://testflight.apple.com/join/cYp9JRCG) until then. |
+| Stage | Version 1.0 on the [App Store](https://apps.apple.com/app/id6779471126) since October 2026. |
 | Audit | **None.** One design review before release, by the same assistant that wrote much of the code, found two things worth fixing; both are fixed. See [`docs/REVIEW.md`](docs/REVIEW.md). |
 | Team | One developer. No company, no funding, no investors. |
 | Platform | iPhone and iPad, iOS 18 and later. No Android. One owner device. ML-KEM and the on-phone writing help need iOS 26. |

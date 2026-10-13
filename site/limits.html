@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="icon" href="favicon.ico?v=2" sizes="any">
-<link rel="icon" type="image/png" href="favicon.png?v=2">
-<link rel="apple-touch-icon" href="apple-touch-icon.png?v=2">
+<link rel="icon" href="favicon.ico?v=3" sizes="any">
+<link rel="icon" type="image/png" href="favicon.png?v=3">
+<link rel="apple-touch-icon" href="apple-touch-icon.png?v=3">
 <link rel="stylesheet" href="seal.css">
 <title>What Seal does not do</title>
 <meta name="description" content="The threat model, the limits Seal accepts, and every item the source documents list as not built yet, including the missing audit and the untested hardware.">
@@ -29,7 +29,7 @@
   <h2>Not done yet, as of September 2026</h2>
   <table>
     <tr><th style="width:15em">No independent audit</th><td>Nobody outside this project has reviewed the cryptography or the code. That is the single biggest reason to keep a live seed phrase out of it for now. The source is open so that this can change.</td></tr>
-    <tr><th>Not on the App Store</th><td>Submitted for review in September 2026 and still waiting. Until it is approved, Seal is a free TestFlight beta. Expect rough edges.</td></tr>
+    <tr><th>New on the App Store</th><td>Version 1.0 was approved in October 2026. It is a first release from one developer; expect rough edges, and tell us about them.</td></tr>
     <tr><th>One design review, not an audit</th><td>One pass over the key handling, the release machine and the record, by the same assistant that wrote much of the code, which is a weaker check than a stranger. It found two things worth fixing: a key holder could date a claim in the past and skip the warning period, and sealing again after a release could let one recipient read new envelopes early. Both are fixed in the build that was submitted. The write-up is <a href="https://github.com/jasonepage/Seal/blob/main/docs/REVIEW.md">docs/REVIEW.md</a>. That was a review, not an audit.</td></tr>
     <tr><th>One person</th><td>Built by one developer. No company, no team and no funding, which means nobody to be acquired by and also nobody to review a mistake before you see it.</td></tr>
     <tr><th>Security keys are barely tested</th><td>A fix for a PIN handling conflict with FIDO2.1 keys is in, and has not been checked on real hardware over NFC or USB-C. The interop table in <a href="https://github.com/jasonepage/Seal/blob/main/docs/SECURITY_KEY_TEST_MATRIX.md">docs/SECURITY_KEY_TEST_MATRIX.md</a> has no rows filled in. Passkeys are the better tested path today.</td></tr>
