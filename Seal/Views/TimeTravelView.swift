@@ -18,7 +18,10 @@ import SwiftUI
 #if DEBUG
 struct TimeTravelView: View {
     @Bindable var estateEngine: EstateEngine
+    let ownerHash: String
     let onClose: () -> Void
+
+    @State private var weeklyForced = false
 
     @State private var simulated = Clocks.isSimulated
     @State private var report: SelfTest.Report?
@@ -44,6 +47,31 @@ struct TimeTravelView: View {
                         }
                         Text("Advancing the clock re-evaluates every estate on this phone. To run the story: seal, travel 91 days, have a key holder's phone claim, travel 21 then 14, tap keys, combine. The owner opening the app at any point cancels.")
                             .font(.caption).foregroundStyle(.white.opacity(0.5)).fixedSize(horizontal: false, vertical: true)
+
+                        Divider().overlay(.white.opacity(0.2))
+
+                        // One question a week (WeeklyQuestion): make this
+                        // week's pick due right now, so the sheet opens as
+                        // soon as this closes. The next one goes back to
+                        // the normal schedule.
+                        Button("Ask this week's question now") {
+                            let now = estateEngine.now
+                            var s = WeeklyQuestion.load(ownerHash: ownerHash)
+                            let candidates = (estateEngine.estate?.envelopes ?? []).map {
+                                WeeklyQuestion.Candidate(envelopeID: $0.id, createdAt: $0.createdAt)
+                            }
+                            s.pending = nil
+                            s.pending = WeeklyQuestion.pick(candidates, settings: s, now: now)
+                            s.scheduledFor = nil
+                            WeeklyQuestion.save(s, ownerHash: ownerHash)
+                            weeklyForced = s.pending != nil
+                        }
+                        .buttonStyle(.bordered).tint(.orange)
+                        .disabled(estateEngine.estate?.envelopes.isEmpty ?? true)
+                        if weeklyForced {
+                            Text("Tap Done and the question opens.")
+                                .font(.caption).foregroundStyle(.orange)
+                        }
 
                         Divider().overlay(.white.opacity(0.2))
 

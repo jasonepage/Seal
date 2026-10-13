@@ -878,8 +878,9 @@ struct EstateHomeView: View {
                     .parentTypeScale()
             }
             #if DEBUG
-            .sheet(isPresented: $showTimeTravel) {
-                TimeTravelView(estateEngine: estateEngine, onClose: { showTimeTravel = false })
+            .sheet(isPresented: $showTimeTravel, onDismiss: { offerWeeklyIfDue(force: true) }) {
+                TimeTravelView(estateEngine: estateEngine, ownerHash: myRoot.credentialIDHash,
+                               onClose: { showTimeTravel = false })
             }
             #endif
             .fullScreenCover(item: $explain) { request in
