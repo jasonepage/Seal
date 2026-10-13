@@ -8,7 +8,7 @@ is no test host for a passkey. They run on every DEBUG launch. A
 failure blacks the screen on purpose and names the suite. The debug
 Time Travel screen runs them again on demand.
 
-**89 tests in 20 suites.**
+**97 tests in 21 suites.**
 
 ## AttachedFileTests
 
@@ -158,3 +158,14 @@ Time Travel screen runs them again on demand.
 
 - `webauthn.hostileCBOR`
 - `webauthn.registration`
+
+## WeeklyQuestionTests
+
+- `weekly.set`
+- `weekly.weekOne`
+- `weekly.rotation`
+- `weekly.sixMonths`
+- `weekly.oneRecipient`
+- `weekly.skipCounts`
+- `weekly.when`
+- `weekly.settingsDecode`
