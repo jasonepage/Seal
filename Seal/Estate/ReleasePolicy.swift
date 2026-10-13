@@ -69,7 +69,11 @@ struct ReleasePolicy: Codable, Hashable {
             case .warningTooShort: "Warnings must run for at least one day."
             case .graceNegative: "The grace period cannot be negative."
             case .thresholdOutOfRange(let m, let n):
-                "The rule needs between 1 and \(n) custodians to agree. \(m) is not possible."
+                n == 0
+                    ? "There are no key holders yet. Add at least one person on the Keys tab, then seal."
+                    : n == 1
+                        ? "The rule needs 1 key holder to agree. \(m) is not possible with one key holder."
+                        : "The rule needs between 1 and \(n) key holders to agree. \(m) is not possible."
             }
         }
     }

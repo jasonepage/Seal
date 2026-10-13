@@ -31,6 +31,10 @@ struct WeeklyQuestionView: View {
 
     let recipientName: String
     let question: InterviewQuestion
+    /// False while setup is unfinished (no key holders, no rule, never
+    /// sealed). Then there is one button, "Done", and a line saying where
+    /// the paragraph went. The seal step is the setup card's job.
+    let canSeal: Bool
     let onDone: (Outcome) -> Void
 
     private enum Stage { case asking, followUp, drafting, review }
@@ -220,25 +224,39 @@ struct WeeklyQuestionView: View {
             // The tap lives here, not on another screen. A paragraph that
             // waits for a separate trip to the home screen never publishes,
             // because the release machine only ever opens sealed envelopes.
-            VStack(spacing: 12) {
-                Button(InterviewQuestions.Weekly.sealNow) {
-                    onDone(.answered(paragraph: paragraph, sealNow: true))
+            if canSeal {
+                VStack(spacing: 12) {
+                    Button(InterviewQuestions.Weekly.sealNow) {
+                        onDone(.answered(paragraph: paragraph, sealNow: true))
+                    }
+                    .buttonStyle(SealPrimaryButtonStyle())
+                    .parentTapTarget(60)
+                    .disabled(paragraph.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                    Button(InterviewQuestions.Weekly.notNow) {
+                        onDone(.answered(paragraph: paragraph, sealNow: false))
+                    }
+                    .buttonStyle(SealSecondaryButtonStyle())
+                    .parentTapTarget(60)
+                }
+
+                Text("Not now keeps it on this phone only, unsealed, until you tap Seal on the home screen.")
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.45))
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Button("Done") {
+                    onDone(.answered(paragraph: paragraph, sealNow: false))
                 }
                 .buttonStyle(SealPrimaryButtonStyle())
                 .parentTapTarget(60)
                 .disabled(paragraph.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
-                Button(InterviewQuestions.Weekly.notNow) {
-                    onDone(.answered(paragraph: paragraph, sealNow: false))
-                }
-                .buttonStyle(SealSecondaryButtonStyle())
-                .parentTapTarget(60)
+                Text("Saved in \(recipientName)'s envelope on this phone. It can be sealed once you have key holders and a rule; the card on the home screen shows what is left.")
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.45))
+                    .fixedSize(horizontal: false, vertical: true)
             }
-
-            Text("Not now keeps it on this phone only, unsealed, until you tap Seal on the home screen.")
-                .font(.footnote)
-                .foregroundStyle(.white.opacity(0.45))
-                .fixedSize(horizontal: false, vertical: true)
         }
         .transition(reduceMotion ? .identity : .opacity)
     }

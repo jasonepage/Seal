@@ -850,6 +850,7 @@ struct EstateHomeView: View {
             }) { showing in
                 WeeklyQuestionView(recipientName: showing.recipientName,
                                    question: showing.question,
+                                   canSeal: weeklyCanSeal,
                                    onDone: { outcome in finishWeekly(showing, outcome) })
                     .environment(\.parentMode, parentMode)
                     .parentTypeScale()
@@ -1352,6 +1353,16 @@ struct EstateHomeView: View {
         weeklyShowing = WeeklyShowing(pick: pick, question: question, recipientName: name)
     }
 
+    /// Sealing from the weekly screen only makes sense once setup is
+    /// finished: key holders, a valid rule, and one seal already done. Before
+    /// that the setup card owns the seal step, and a failed seal here would
+    /// read as the paragraph being lost, which it never is.
+    private var weeklyCanSeal: Bool {
+        guard let estate = estateEngine.estate, !DemoFixtures.isActive else { return false }
+        return estate.epochPublished && !estate.custodians.isEmpty && estate.isReadyToSeal
+            && estateEngine.ownerSnapshot?.releasedAt == nil
+    }
+
     /// Append the paragraph through the one edit path, which un-seals the
     /// envelope like any other edit, then close. Sealing runs after the
     /// sheet is gone, through the one shared seal path and its paywall.
@@ -1364,7 +1375,7 @@ struct EstateHomeView: View {
         let letter = envelope.letter.trimmingCharacters(in: .whitespacesAndNewlines)
         envelope.letter = letter.isEmpty ? "Dear \(showing.recipientName),\n\n\(text)" : letter + "\n\n" + text
         estateEngine.updateEnvelope(envelope)
-        weeklySealAfter = sealNow
+        weeklySealAfter = sealNow && weeklyCanSeal
     }
 
     private func envelopeFromDraft(_ draft: InterviewDraft, for subject: InterviewSubject) -> Envelope {
