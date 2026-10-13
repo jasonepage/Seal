@@ -364,15 +364,18 @@ it." Written once, in the questions file, next to the other.
 
 ### The weekly letter set
 
-The six section 11 letter questions plus at least six more, all passing
-the file's own bar: answerable out loud, in a sentence, by somebody who
-has never written a letter like this. First drafts, to be read aloud
-before they go in the file:
+The six section 11 letter questions plus the eight below, fourteen in
+all, each passing the file's own bar: answerable out loud, in a
+sentence, by somebody who has never written a letter like this. Read
+aloud and accepted 2026-10-13. With two or more recipients the six-month
+promise holds; an owner with one recipient sees a repeat at week fifteen.
+That edge is accepted for 1.1, and since the list is data, growing it in
+a later release costs nothing.
 
 - What is a day with them you would live again?
-- What did they teach you without meaning to?
-- What do you worry about for them, and what do you want them to know
-  about that?
+- What did they teach you without meaning to? (Hint: Not a lesson.
+  Something you picked up just by being around them.)
+- What do you worry about for them?
 - What is something of yours you want them to have, and why that?
 - What did you get wrong with them that you would do differently?
 - What do you want them to do on a hard day?
