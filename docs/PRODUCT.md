@@ -303,12 +303,22 @@ like the password reminder in `SecretReview.line`. Something like: "One
 question this week. It takes a minute." Tapping it opens Seal on one
 question, big, with the recipient's name, the dictation button, and skip.
 
-- The question comes from the section 11 list, rotated across the people
-  in the vault so each recipient gets a new paragraph every few weeks, and
-  across the letter questions so nobody is asked the same thing twice in a
-  year. Secret questions (logins, codes, where things are) are asked at
-  most once per person and never by notification, because a notification
-  is the wrong moment to type a password.
+- Week one is always "What do you want them to know first?" for the
+  first person in the vault. The first notification teaches the owner what
+  these are, and that question is the easiest to answer out loud.
+- After that the question comes from the weekly letter set below, rotated
+  across the people in the vault so each recipient gets a new paragraph
+  every few weeks. The section 11 list has six letter questions, which
+  with three recipients repeats a pair every eighteen weeks, so the weekly
+  set is larger (at least twelve) and the promise is softer than "never
+  twice": no person is asked the same question twice in six months, and
+  "What should they do first?" is allowed back once a year on purpose,
+  because that answer goes stale.
+- Secret questions (logins, codes, where things are, and the money
+  question below) are asked at most once per person and never by
+  notification, because a notification is the wrong moment to type a
+  password. They stay in the one-sitting interview, plus a yearly "still
+  right?" nudge that already exists in `SecretReview`.
 - The answer is drafted the same way the interview drafts: `OnDeviceDrafter`
   when the phone has a model, plain text when it does not. It is appended
   to that person's envelope as a new paragraph. The owner sees it in the
@@ -324,20 +334,64 @@ question, big, with the recipient's name, the dictation button, and skip.
 ### Sealing
 
 `updateEnvelope` un-seals on any edit, and `sealAndPublish` needs only the
-device key and a network publish, never a hardware key tap. So after an
-answer the envelope is a changed draft, the home screen says so, and the
-owner taps Seal once. The app does not seal on its own. That keeps the
-section 11 promise that the helper never signs, seals or sends anything,
-and it means the owner reads the paragraph at least once. If weeks of
-answers pile up unsealed, the home screen says "three envelopes have
-changed since you sealed" and nothing worse happens: an unsealed change is
-on this phone only, and the sealed copies the custodians hold are the last
-ones the owner approved.
+device key and a network publish, never a hardware key tap. The app does
+not seal on its own. That keeps the section 11 promise that the helper
+never signs, seals or sends anything, and it means the owner reads the
+paragraph at least once.
 
-### The promise, unchanged
+But the tap lives in the answer flow, not on another screen. The owner
+answers, sees the drafted paragraph, and the big Seal button is right
+there under it. If sealing meant a separate trip to the home screen, a
+year of paragraphs would die in unsealed drafts, because the release
+machine only ever publishes sealed envelopes. One answer, one look, one
+tap. "Not now" is allowed and the home screen then says "one envelope has
+changed since you sealed"; an unsealed change is on this phone only, and
+the sealed copies the custodians hold are the last ones the owner
+approved.
+
+### The promise, unchanged, and one line of copy that must change
 
 Nothing the owner says or writes leaves the phone. The notification
 carries no content. The model is Apple's on-device framework or nothing.
+
+The one-sitting interview says "Your answers are not saved anywhere. If
+you close this, they are gone and you start again"
+(`InterviewQuestions.temporary`). That is false for the weekly question,
+whose answer goes into the draft. The weekly screen needs its own line
+that keeps the privacy half and drops the ephemeral half. Something like:
+"This stays on your phone. It goes into the envelope only when you seal
+it." Written once, in the questions file, next to the other.
+
+### The weekly letter set
+
+The six section 11 letter questions plus at least six more, all passing
+the file's own bar: answerable out loud, in a sentence, by somebody who
+has never written a letter like this. First drafts, to be read aloud
+before they go in the file:
+
+- What is a day with them you would live again?
+- What did they teach you without meaning to?
+- What do you worry about for them, and what do you want them to know
+  about that?
+- What is something of yours you want them to have, and why that?
+- What did you get wrong with them that you would do differently?
+- What do you want them to do on a hard day?
+- What are you proud of them for that you never said plainly?
+- What do you want them to tell their kids about you?
+
+### The money question
+
+The marketing line is "life insurance for your crypto," and nothing in the
+section 11 list asks about money directly. "What do they need to be able
+to log into?" will not surface a seed phrase, because most people do not
+think of a seed phrase as a login. One more secret question, asked in the
+one-sitting interview and never by notification:
+
+> Is there money or an account they would never find on their own?
+> Hint: A wallet, a seed phrase, a safe deposit box, an account nobody
+> else knows about. Saved exactly as you type it.
+
+Target: `.secret(kind: .statement, label: "Money they would not find")`.
 
 ### What it must not do
 
@@ -367,8 +421,11 @@ Seal "to check in."
 4. Append to the envelope through `updateEnvelope`; the home screen's
    "changed since you sealed" line.
 5. Two follow-ups.
-6. Tests: rotation never repeats a letter question within a year for the
-   same person, secret questions never come by notification, a skipped
-   week leaves no trace, answering calls `heartbeat()` once.
+6. Tests: week one is always "know first"; rotation never repeats a
+   letter question for the same person within six months; secret
+   questions never come by notification; a skipped week leaves no trace;
+   opening the question calls `heartbeat()` once whether answered or
+   skipped; the Seal button on the answer screen seals exactly the
+   changed envelope.
 
 Ship 1.1 with the new icon from `docs/icon.png`.
