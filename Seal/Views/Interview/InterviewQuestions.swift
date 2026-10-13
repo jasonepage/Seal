@@ -174,6 +174,101 @@ enum InterviewQuestions {
         all.first { $0.allowsFollowUp }?.id
     }
 
+    // MARK: - One question a week (PRODUCT.md section 13)
+
+    /// The eight questions that exist only for the weekly cadence. Letter
+    /// questions only: a notification is the wrong moment to type a
+    /// password, so no secret question is ever asked this way. Read aloud
+    /// and accepted 2026-10-13.
+    static let weeklyOnly: [InterviewQuestion] = [
+        InterviewQuestion(
+            id: "live-again",
+            text: "What is a day with them you would live again?",
+            hint: "One day. Where you were, what you did.",
+            placeholder: "Start with where you were.",
+            target: .letter),
+
+        InterviewQuestion(
+            id: "taught",
+            text: "What did they teach you without meaning to?",
+            hint: "Not a lesson. Something you picked up just by being around them.",
+            placeholder: "Say it the way you would say it out loud.",
+            target: .letter),
+
+        InterviewQuestion(
+            id: "worry",
+            text: "What do you worry about for them?",
+            hint: "One worry is plenty.",
+            placeholder: "I worry that...",
+            target: .letter),
+
+        InterviewQuestion(
+            id: "have-this",
+            text: "What is something of yours you want them to have, and why that?",
+            hint: "The why is the part they will keep.",
+            placeholder: "The thing, then why it should be theirs.",
+            target: .letter),
+
+        InterviewQuestion(
+            id: "got-wrong",
+            text: "What did you get wrong with them that you would do differently?",
+            hint: "A pattern, not one bad day. If there is nothing, skip it.",
+            placeholder: "Say it plainly.",
+            target: .letter),
+
+        InterviewQuestion(
+            id: "hard-day",
+            text: "What do you want them to do on a hard day?",
+            hint: "Something small they can actually do.",
+            placeholder: "When it is bad, I want you to...",
+            target: .letter),
+
+        InterviewQuestion(
+            id: "proud",
+            text: "What are you proud of them for that you never said plainly?",
+            hint: "Name the thing.",
+            placeholder: "I am proud of you for...",
+            target: .letter),
+
+        InterviewQuestion(
+            id: "tell-kids",
+            text: "What do you want them to tell their kids about you?",
+            hint: "One story is enough.",
+            placeholder: "Tell them that I...",
+            target: .letter),
+    ]
+
+    /// The weekly letter set: the six letter questions from the
+    /// interview plus the eight above. Fourteen. With two or more people
+    /// in the vault no person hears the same question twice in six months;
+    /// with one person it repeats at week fifteen, which is accepted.
+    static let weekly: [InterviewQuestion] = all.filter { $0.target.isLetter } + weeklyOnly
+
+    /// Week one is always this, for the first person in the vault. The
+    /// first notification teaches the owner what these are.
+    static let weekOneID = "know-first"
+
+    /// The one letter question that is allowed back sooner than the
+    /// others, because its answer goes stale.
+    static let refreshableID = "do-first"
+
+    static func weeklyQuestion(id: String) -> InterviewQuestion? {
+        weekly.first { $0.id == id }
+    }
+
+    /// Copy for the weekly screen. The interview's `Intro.temporary` is
+    /// false here: a weekly answer goes into the draft envelope. Keep the
+    /// privacy half, drop the ephemeral half.
+    enum Weekly {
+        static let title = "One question this week."
+        static let stays = "This stays on your phone. It goes into the envelope only when you seal it."
+        static let notification = "One question this week. It takes a minute."
+        static let reminder = "Still one question waiting, if you have a minute."
+        static let sealNow = "Seal it now"
+        static let notNow = "Not now"
+        static let another = "Another one?"
+    }
+
     /// The screen shown before the first question. Kept here with the
     /// questions so the whole script reads in one file.
     enum Intro {

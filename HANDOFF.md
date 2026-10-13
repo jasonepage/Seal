@@ -1,5 +1,38 @@
 # Where Seal stands
 
+## ONE QUESTION A WEEK, STEPS 1 AND 2 (2026-10-13, UNCOMPILED)
+
+PRODUCT.md section 13 is the design. This is the schedule and the
+rotation, no screen yet. Not committed to main until it builds.
+
+- `Seal/Views/Interview/InterviewQuestions.swift`: `weeklyOnly` (the
+  eight new letter questions), `weekly` (six from the interview plus
+  those eight, fourteen), `weekOneID`, `refreshableID`, and the `Weekly`
+  copy enum (notification line, reminder line, the "stays on your phone"
+  line that replaces `Intro.temporary` for the weekly screen).
+- `Seal/Estate/WeeklyQuestion.swift` (new): `Settings` (keychain
+  `seal.weekly.<ownerHash>`, wiped by `ContentView.wipeLocalAndEngines`),
+  the pure rotation (`nextEnvelope`, `nextQuestion`, `pick`,
+  `markOpened`), the pure clock (`nextSlot`, `nextDue`, `isDue`), and
+  `schedule(engine:ownerHash:now:)` which runs after every heartbeat from
+  `HomeView.refreshEverything` and posts one notification plus one
+  reminder two days later. `opened(ownerHash:now:)` is what the screen
+  will call when the question is shown; the screen then calls
+  `engine.heartbeat()` itself.
+- Tests: `WeeklyQuestionTests`, eight suites, registered.
+
+Most likely to fail to compile: `calendar.nextDate(after:matching:
+matchingPolicy:direction:)` argument labels; the tuple loop over the two
+notifications in `schedule` (if Swift complains about the tuple type,
+split it into two plain calls). `KeychainStore.save` returns Bool and is
+discarded with `_ =`.
+
+Not done yet (steps 3 to 5): the single-question screen, the append
+through `updateEnvelope` with the in-flow Seal button, the "changed since
+you sealed" line, two follow-ups. The notification tap also needs a
+route into that screen once it exists.
+
+
 **Updated:** 2026-09-16 (night: the review fixes) · **Owner:** Nathan (Jason Page) · natepage67@gmail.com
 **Repo:** `~/Documents/GitHub/Seal` · iOS 26.5+, SwiftUI, no backend
 

@@ -5,6 +5,12 @@ Dates are the day the work landed in the repository. Anything marked
 
 ## Unreleased
 
+### Added (not built yet)
+
+- One question a week. The schedule, the rotation and the two local
+  notifications for PRODUCT.md section 13, plus eight new letter questions.
+  No screen yet. (`Seal/Estate/WeeklyQuestion.swift`)
+
 ### Security
 
 - Delete markers are signed. A "tomb" record now carries the account's own

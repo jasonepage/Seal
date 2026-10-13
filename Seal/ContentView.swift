@@ -163,6 +163,7 @@ struct ContentView: View {
             FirstStepsDone.wipe(ownerHash: hash)     // a recipient's check marks on "what to do first"
             CheckInShared.wipe()                     // the widget's two numbers
             SecretReview.wipe(ownerHash: hash)       // the "still right?" schedule
+            WeeklyQuestion.wipe(ownerHash: hash)     // the one question a week
             CustodyReminders.wipe(ownerHash: hash)   // the "still have your key?" schedule
         }
         friendStore = nil

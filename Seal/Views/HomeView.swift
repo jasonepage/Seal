@@ -135,6 +135,9 @@ struct HomeView: View {
                                     hasSecrets: engines.all.contains { !$0.allSecrets.isEmpty },
                                     estateCreatedAt: estateEngine.estate?.createdAt ?? estateEngine.now,
                                     now: estateEngine.now)
+        // One question a week, at the next slot (WeeklyQuestion). Decides
+        // the pick now so the notification and the screen agree.
+        await WeeklyQuestion.schedule(engine: estateEngine, ownerHash: myRoot.credentialIDHash, now: estateEngine.now)
         await estateEngine.refreshGuarded()
         // "Do you still have your key?" at each estate's due date
         // (CustodyReminders). A receipt, never a vote.
