@@ -54,6 +54,8 @@ hr { border:none; border-top:1px solid var(--rule); margin:52px 0; }
 
 .hero { padding:56px 0 8px; }
 .mark { display:block; margin:0 auto 26px; }
+.hero-figure { width:256px; height:auto; }
+.figure { display:block; margin:40px auto 12px; max-width:min(352px, 100%); height:auto; }
 .cta { display:inline-block; background:var(--brass); color:var(--paper);
   font-weight:650; padding:14px 26px; border-radius:8px; text-decoration:none;
   font-size:17px; margin:4px 10px 4px 0; }
