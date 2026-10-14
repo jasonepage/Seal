@@ -52,6 +52,10 @@ struct EstateHomeView: View {
     /// Picking a person met in person to hold a key, then which rule when
     /// there is more than one.
     @State private var showAddKeyHolder = false
+    /// The one-go flow (AddKeyHolderFlow, PRODUCT.md section 14). The
+    /// setup card and the Keys tab open this when there is one rule; the
+    /// picker above stays for the several-rules case.
+    @State private var showGuidedKeyHolder = false
     @State private var pendingKeyHolder: FriendStore.StoredFriend?
     @State private var showRecipientPicker = false
     /// What the recipient picker is being used for this time: the blank
@@ -807,6 +811,13 @@ struct EstateHomeView: View {
             // Choosing the person for an envelope that was written to a name.
             // A key holder from the Keys tab: pick the person, then the rule
             // when there is more than one.
+            .sheet(isPresented: $showGuidedKeyHolder) {
+                AddKeyHolderFlow(myRoot: myRoot, ceremony: ceremony, sync: sync,
+                                 friendStore: friendStore, estateEngine: estateEngine,
+                                 onClose: { showGuidedKeyHolder = false })
+                    .environment(\.parentMode, parentMode)
+                    .parentTypeScale()
+            }
             .sheet(isPresented: $showAddKeyHolder) {
                 RecipientPickerSheet(friendStore: friendStore, estateEngine: estateEngine,
                                      bindingExisting: true, title: "Who holds a key?") { pick in
@@ -984,7 +995,7 @@ struct EstateHomeView: View {
         case .envelope:
             return "A letter, a few photos, and the secrets. You do not need anybody else to start. Type a name and write tonight."
         case .keyHolders:
-            return "People you meet in person and trust to act together after you are gone. Open People, add them, then make them key holders."
+            return "People you meet in person and trust to act together after you are gone. Tap here with them next to you; it takes two minutes."
         case .rule:
             if let estate, !estate.custodians.isEmpty {
                 let p = estate.policy
@@ -1004,14 +1015,14 @@ struct EstateHomeView: View {
             pickerMode = .blank
             showRecipientPicker = true
         case .keyHolders:
-            tab = .people
+            showGuidedKeyHolder = true
         case .rule:
             policyFor = EngineRef(engine: estateEngine)
         case .seal:
             // Nothing to seal until there are key holders and a valid rule,
             // and the row above says so. Send them there rather than firing
             // a seal that throws.
-            if estate?.isReadyToSeal == true { runSeal() } else { tab = .people }
+            if estate?.isReadyToSeal == true { runSeal() } else { showGuidedKeyHolder = true }
         }
     }
 
@@ -1496,7 +1507,7 @@ struct EstateHomeView: View {
                     keyHolderRow(row, several: several, tappable: false)
                 }
             }
-            Button { showAddKeyHolder = true } label: {
+            Button { if engines.rules.count > 1 { showAddKeyHolder = true } else { showGuidedKeyHolder = true } } label: {
                 Label("Add a key holder", systemImage: "person.badge.key")
                     .frame(maxWidth: .infinity)
             }

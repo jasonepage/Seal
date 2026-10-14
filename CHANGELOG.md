@@ -7,6 +7,13 @@ Dates are the day the work landed in the repository. Anything marked
 
 ### Added (not built yet)
 
+- Add a key holder in one go (PRODUCT.md section 14). From the setup card
+  or the Keys tab: who, scan, their key on this phone, the phrase, "make
+  them a key holder," the handover, done. Same ceremony, no tab hopping.
+  (`Seal/Views/AddKeyHolderFlow.swift`)
+- Three cards before sign up instead of fifteen: why Seal, who you are,
+  what you do tonight. The full set stays under "How it works."
+
 - One question a week (PRODUCT.md section 13). Once a week the phone
   shows one notification that names nobody; tapping it opens one question
   about one person, with dictation and up to two on-device follow-ups.

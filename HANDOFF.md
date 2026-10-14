@@ -1,5 +1,36 @@
 # Where Seal stands
 
+## ADD A KEY HOLDER IN ONE GO, AND THE SHORT WALK (2026-10-14, UNCOMPILED)
+
+PRODUCT.md section 14. Two pieces.
+
+- `Seal/Views/AddKeyHolderFlow.swift` (new): one sheet, stages who ->
+  scanning -> lookingUp -> verify -> verifying -> phrase -> confirm ->
+  handover -> handingOver -> done. The calls are copied from
+  `FriendsView.lookup/forge` and `PersonView.handOverKey`; nothing new
+  underneath. Someone already met skips the ceremony and goes straight to
+  "Make X a key holder?". `EstateHomeView`: `showGuidedKeyHolder`; the
+  setup card's key holder step and the Keys tab button open it when there
+  is one rule (the picker stays for several rules). Setup card copy for
+  that step changed.
+- `SealOnboardingView(brief:)`: `OnboardingScript.briefShared()` (the
+  "Why Seal." bullet card and "Which one are you?") plus
+  `OnboardingScript.brief(for:)` which keeps `s.now` / `c.now` /
+  `k.nothing`,`k.several`,`k.keep` / `r.sealed`,`r.job`. `WelcomeCarousel`
+  passes `brief: true`; ProfileView's "How it works" now opens the full
+  `SealOnboardingView` directly. `OnboardingScreen.numbered` draws brass
+  dots instead of numbers. The "tonight" steps were rewritten to point
+  at the setup card.
+
+Most likely to fail to compile: `stage` enum cases with labels in the
+`switch` inside `body` (`case .done(let f, let recorded)`); `IdentityRing`
+is used with `tier:` from `RootIdentity.tier`; `candidates` filters on
+`friendship.tombstonedAt`.
+
+Not done: the onboarding figures (OnboardingFigures.swift) are still the
+grey line drawings and Jason wants them redone; that is its own pass.
+
+
 ## ONE QUESTION A WEEK, STEPS 1 AND 2 (2026-10-13, UNCOMPILED)
 
 PRODUCT.md section 13 is the design. This is the schedule and the

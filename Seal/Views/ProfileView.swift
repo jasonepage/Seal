@@ -218,7 +218,7 @@ struct ProfileView: View {
                 await loadDevices()
             }
             .fullScreenCover(isPresented: $showHowTo) {
-                WelcomeCarousel { showHowTo = false }
+                SealOnboardingView(onDone: { showHowTo = false })   // the full set
             }
             .sheet(isPresented: $showPaywall) {
                 SealPaywallView(purchase: purchase,

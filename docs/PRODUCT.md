@@ -432,3 +432,52 @@ Seal "to check in."
    changed envelope.
 
 Ship 1.1 with the new icon from `docs/icon.png`.
+
+## 14. Adding a key holder in one go (planned for 1.1)
+
+**Not built. Decided 2026-10-14.**
+
+### The failure this exists for
+
+The setup card's second step says: open People, add them, then make them
+a key holder. That is two tabs and three screens, with another person
+standing there the whole time, and the card describes the work instead of
+doing it. It is the step people ask about, and it is the step that gets
+left half done: a person added under People who never becomes a key
+holder, or a key holder whose handover was never recorded.
+
+### What it is
+
+One flow, from the setup card and from the Keys tab, called "Add a key
+holder." It runs the ceremony that already exists, in order, with nothing
+else on the screen:
+
+1. Who. People already met who are not key holders yet, as rows. Or
+   "Someone new": the scanner, then the existing verify step (they tap
+   their key on this phone), then the matching phrase.
+2. "Make Karen a key holder?" One tap. `addCustodian`.
+3. The handover, right there: "Karen confirms on this phone." The same
+   two-sided receipt `PersonView` records today. It can be skipped and
+   recorded later from her person screen, and the card says so.
+4. Done. "Karen holds a key." The printed page is offered once, with a
+   line saying it is also on her person screen.
+
+Back on the card, the step is checked. Nothing underneath changes:
+`forgeFriendship`, `addCustodian`, `ReceiptService.issue`, the same
+records, the same signatures. The flow is a different order of the same
+screens with the tab hopping removed.
+
+### The walkthrough before sign up
+
+Fifteen cards before a person has typed their name is a wall. Before sign
+up the walkthrough is three cards: what Seal is, which one are you, and
+what you do tonight. Every other card still exists and opens from "How it
+works" on the home screen, where it was already reachable as "Watch it
+happen." Nothing is deleted.
+
+### What it must not do
+
+- It does not invent a shorter ceremony. The scan, the tap on this phone
+  and the spoken phrase are the whole reason a key can be trusted.
+- It does not pick the rule. Step three of the card still does that.
+- It does not run in demo mode, where there is no ceremony to run.

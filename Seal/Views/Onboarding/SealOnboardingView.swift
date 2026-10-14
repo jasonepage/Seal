@@ -157,6 +157,9 @@ struct OnboardingScreen: Identifiable {
     let body: String
     let figure: Figure
     var steps: [String] = []
+    /// Numbered when the steps are an order to follow; dots when they are
+    /// reasons to read.
+    var numbered: Bool = true
 }
 
 /// The script, in one place, so it can be read aloud and checked.
@@ -184,6 +187,42 @@ enum OnboardingScript {
             return "Seal is one purchase, once, for life: \(price)."
         }
         return "Seal is one purchase, once, for life. The price is shown before you pay."
+    }
+
+    // MARK: The short walk, before sign up (PRODUCT.md section 14)
+
+    /// Three cards. Somebody who just installed the app does not need to be
+    /// told why; they need to know why this one, who they are, and what to
+    /// do tonight. Everything else stays reachable from "How it works."
+    static func briefShared() -> [OnboardingScreen] {
+        [
+            OnboardingScreen(
+                id: "why",
+                title: "Why Seal.",
+                body: "",
+                figure: .mark,
+                steps: [
+                    "No server. Everything is encrypted on your phone, and nothing leaves it.",
+                    "Your envelopes open only after a long silence and days of warnings, never early.",
+                    "The keys are held by people you trust, met in person. Not by us.",
+                    "The code is public, so anyone can check it.",
+                    "One purchase, once. No subscription.",
+                ],
+                numbered: false),
+            shared()[1],
+        ]
+    }
+
+    static func brief(for role: OnboardingRole, numbers n: OnboardingNumbers, price: String? = nil) -> [OnboardingScreen] {
+        let all = screens(for: role, numbers: n, price: price)
+        let keep: Set<String>
+        switch role {
+        case .sealer: keep = ["s.now"]
+        case .couple: keep = ["c.now"]
+        case .keyHolder: keep = ["k.nothing", "k.several", "k.keep"]
+        case .recipient: keep = ["r.sealed", "r.job"]
+        }
+        return all.filter { keep.contains($0.id) }
     }
 
     // MARK: Shared
@@ -304,11 +343,6 @@ enum OnboardingScript {
                     "On each phone: write your envelopes, then tap Seal. That is when each of you pays, once.",
                 ]))
         } else {
-            let hand: String
-            switch n.custodianCount {
-            case 1: hand = "Hand a key to the person you trust most, and set your rule."
-            default: hand = "Hand a key to \(word(n.custodianCount)) people you trust, and set your rule."
-            }
             out.append(OnboardingScreen(
                 id: "\(p).now",
                 title: "What you do tonight.",
@@ -316,9 +350,9 @@ enum OnboardingScript {
                 figure: .steps,
                 steps: [
                     "Set up Seal with \(Biometry.name) or a security key. Add a backup key when it asks.",
-                    "Meet each person face to face and add them under People.",
-                    "Write an envelope for each of them.",
-                    hand,
+                    "Write an envelope for each person.",
+                    "Add your key holders: tap that step on the home screen with each of them next to you. Hand each one a key.",
+                    "Set your rule.",
                     "Tap Seal. That is when you pay, once.",
                 ]))
         }
@@ -479,6 +513,9 @@ enum OnboardingScript {
 struct SealOnboardingView: View {
     var numbers: OnboardingNumbers = .defaults
     var initialRole: OnboardingRole? = nil
+    /// The three-card walk before sign up. False is the full set, which
+    /// "How it works" and "Watch it happen" open from the home screen.
+    var brief: Bool = false
     var onDone: () -> Void
 
     @State private var role: OnboardingRole?
@@ -493,16 +530,22 @@ struct SealOnboardingView: View {
 
     init(numbers: OnboardingNumbers = .defaults,
          initialRole: OnboardingRole? = nil,
+         brief: Bool = false,
          onDone: @escaping () -> Void) {
         self.numbers = numbers
         self.initialRole = initialRole
+        self.brief = brief
         self.onDone = onDone
         _role = State(initialValue: initialRole)
         _index = State(initialValue: initialRole == nil ? 0 : OnboardingScript.sharedCount)
     }
 
     private var screens: [OnboardingScreen] {
-        OnboardingScript.shared()
+        if brief {
+            return OnboardingScript.briefShared()
+                + (role.map { OnboardingScript.brief(for: $0, numbers: numbers, price: purchase?.displayPrice) } ?? [])
+        }
+        return OnboardingScript.shared()
             + (role.map { OnboardingScript.screens(for: $0, numbers: numbers, price: purchase?.displayPrice) } ?? [])
     }
 
@@ -552,14 +595,16 @@ struct SealOnboardingView: View {
                             .multilineTextAlignment(.center)
                             .fixedSize(horizontal: false, vertical: true)
 
-                        Text(screen.body)
-                            .font(wide ? .body : .callout)
-                            .foregroundStyle(.white.opacity(0.75))
-                            .multilineTextAlignment(.center)
-                            .fixedSize(horizontal: false, vertical: true)
+                        if !screen.body.isEmpty {
+                            Text(screen.body)
+                                .font(wide ? .body : .callout)
+                                .foregroundStyle(.white.opacity(0.75))
+                                .multilineTextAlignment(.center)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
 
                         if !screen.steps.isEmpty {
-                            stepsList(screen.steps)
+                            stepsList(screen.steps, numbered: screen.numbered)
                         }
 
                         if isAsk {
@@ -659,15 +704,22 @@ struct SealOnboardingView: View {
         }
     }
 
-    private func stepsList(_ steps: [String]) -> some View {
+    private func stepsList(_ steps: [String], numbered: Bool = true) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             ForEach(Array(steps.enumerated()), id: \.offset) { i, step in
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    Text("\(i + 1)")
-                        .font(.system(.caption, weight: .bold))
-                        .foregroundStyle(SealTheme.ink)
-                        .frame(width: 22, height: 22)
-                        .background(Color.white.opacity(0.85), in: Circle())
+                    if numbered {
+                        Text("\(i + 1)")
+                            .font(.system(.caption, weight: .bold))
+                            .foregroundStyle(SealTheme.ink)
+                            .frame(width: 22, height: 22)
+                            .background(Color.white.opacity(0.85), in: Circle())
+                    } else {
+                        Circle()
+                            .fill(SealTheme.brass)
+                            .frame(width: 8, height: 8)
+                            .frame(width: 22, height: 22)
+                    }
                     Text(step)
                         .font(.callout)
                         .foregroundStyle(.white.opacity(0.85))
@@ -765,7 +817,8 @@ struct WelcomeCarousel: View {
     var onDone: () -> Void
 
     var body: some View {
-        SealOnboardingView(onDone: onDone)
+        // Three cards before sign up. The full set is "How it works."
+        SealOnboardingView(brief: true, onDone: onDone)
     }
 }
 
