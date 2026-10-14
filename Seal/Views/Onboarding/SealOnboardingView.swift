@@ -675,16 +675,29 @@ struct SealOnboardingView: View {
     }
 
     @ViewBuilder
+    /// The walkthrough is a sales surface, so the still pictures are
+    /// painted (Assets: Onboarding*). The pewter-until-trust rule still
+    /// holds on every security surface; see SealMark. The figures that
+    /// change with the owner's numbers (timeline, keys, curve) stay drawn
+    /// in code because a picture cannot show "any 2 of 3."
+    private func painted(_ name: String, height: CGFloat = 190) -> some View {
+        Image(name)
+            .resizable()
+            .scaledToFit()
+            .frame(maxWidth: 360)
+            .frame(height: height)
+            .padding(.vertical, 4)
+    }
+
     private func figureView(_ figure: OnboardingScreen.Figure) -> some View {
         switch figure {
         case .mark:
-            SealMark(size: 120, trust: true, pressOnAppear: true)
-                .padding(.vertical, 12)
+            painted("OnboardingHero", height: 200)
         case .ask:
             SealMark(size: 64, trust: false, pressOnAppear: false)
                 .padding(.vertical, 4)
         case .envelope:
-            SealedEnvelopeFigure()
+            painted("OnboardingEnvelope")
         case .timeline(let outcome):
             ReleaseTimelineFigure(numbers: numbers, outcome: outcome)
         case .keys:
@@ -692,15 +705,15 @@ struct SealOnboardingView: View {
         case .curve:
             ShamirCurveFigure(numbers: numbers)
         case .keep:
-            KeyKeepFigure()
+            painted("OnboardingDrawer")
         case .steps, .quiet:
             // Pewter. Paying is not a trust moment, and neither is a list.
             SealMark(size: 72, trust: false, pressOnAppear: true)
                 .padding(.vertical, 4)
         case .phones:
-            TwoPhonesFigure()
+            painted("OnboardingPhones", height: 210)
         case .spare:
-            SpareKeyFigure()
+            painted("OnboardingSpare", height: 170)
         }
     }
 

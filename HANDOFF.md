@@ -27,8 +27,15 @@ Most likely to fail to compile: `stage` enum cases with labels in the
 is used with `tier:` from `RootIdentity.tier`; `candidates` filters on
 `friendship.tombstonedAt`.
 
-Not done: the onboarding figures (OnboardingFigures.swift) are still the
-grey line drawings and Jason wants them redone; that is its own pass.
+Art pass, same day: five painted figures in the asset catalog
+(`OnboardingHero`, `OnboardingEnvelope`, `OnboardingDrawer`,
+`OnboardingPhones`, `OnboardingSpare`, 2x and 3x, drawn as SVG in the
+icon's gold wax style and rendered). `figureView` shows them for `.mark`,
+`.envelope`, `.keep`, `.phones`, `.spare`. The number-driven figures
+(timeline, keys turning, curve) stay in code. `SealedEnvelopeFigure`,
+`KeyKeepFigure`, `TwoPhonesFigure`, `SpareKeyFigure` are now unused by
+the walkthrough; left in place for now. Source SVGs are not in the repo;
+ask Claude for them if a figure needs changing.
 
 
 ## ONE QUESTION A WEEK, STEPS 1 AND 2 (2026-10-13, UNCOMPILED)
