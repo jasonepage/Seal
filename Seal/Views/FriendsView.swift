@@ -222,8 +222,10 @@ struct FriendsView: View {
                 if friendStore.friends.isEmpty {
                     // No mascot here: this is where a person's root key gets
                     // pinned, which makes it a security surface (GOTCHAS).
-                    PlainEmptyState(line: "Nobody added yet.",
-                                    sub: "People are added in person, two phones side by side.")
+                    // The short version of the whole process, because this
+                    // is the screen a first-timer stares at with a relative
+                    // standing next to them.
+                    howItGoes
                 } else {
                     // Swipe to delete went with the List, and that is a fix as
                     // much as a loss: it called friendStore.remove on its own,
@@ -514,6 +516,43 @@ struct FriendsView: View {
     }
 
     // MARK: - Moderation (person-level block / report from Circle)
+
+    /// The whole process in five short lines. Read aloud before changing.
+    private var howItGoes: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Nobody added yet. Here is how it goes.")
+                .font(.headline).foregroundStyle(.white)
+                .fixedSize(horizontal: false, vertical: true)
+            ForEach(Array(Self.howSteps.enumerated()), id: \.offset) { i, step in
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text("\(i + 1)")
+                        .font(.system(.caption, weight: .bold))
+                        .foregroundStyle(SealTheme.ink)
+                        .frame(width: 22, height: 22)
+                        .background(Color.white.opacity(0.85), in: Circle())
+                    Text(step)
+                        .font(.callout).foregroundStyle(.white.opacity(0.8))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Text("Two phones, side by side, two minutes. No invitations, no accepting later.")
+                .font(.footnote).foregroundStyle(.white.opacity(0.45))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
+        .padding(.horizontal, 24)
+        .padding(.top, 8)
+    }
+
+    private static let howSteps = [
+        "Both of you install Seal and set it up.",
+        "Scan their seal (the square code above, on their phone).",
+        "Hand them your phone. They tap their key or use Face ID on it.",
+        "Read the matching phrase out loud to each other.",
+        "On the Envelopes tab, make them a key holder, or write them an envelope.",
+    ]
 
     private func friendRow(_ friend: FriendStore.StoredFriend) -> some View {
         let hash = friend.identity.credentialIDHash
