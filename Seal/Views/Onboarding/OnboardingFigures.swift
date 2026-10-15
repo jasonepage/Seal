@@ -474,8 +474,17 @@ struct KeysTurningFigure: View {
 
             // Room above for the flap, which swings up past the top edge
             // when it opens.
-            EnvelopeOpenFigure(open: open, trust: open)
-                .frame(maxWidth: 150)
+            // Painted, two states. The closed one carries the seal; the
+            // open one shows the letter. Cross fades when the last key turns.
+            ZStack {
+                Image("OnboardingEnvelopeClosed").resizable().scaledToFit()
+                    .opacity(open ? 0 : 1)
+                Image("OnboardingEnvelopeOpen").resizable().scaledToFit()
+                    .opacity(open ? 1 : 0)
+                    .scaleEffect(open ? 1 : 0.96)
+            }
+            .frame(maxWidth: 190)
+            .animation(.easeInOut(duration: 0.5), value: open)
                 .padding(.top, 40)
 
             FigureCaption(text: caption, tint: open ? SealTheme.brass : .white.opacity(0.75))
