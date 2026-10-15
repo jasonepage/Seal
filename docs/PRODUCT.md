@@ -481,3 +481,83 @@ happen." Nothing is deleted.
   and the spoken phrase are the whole reason a key can be trusted.
 - It does not pick the rule. Step three of the card still does that.
 - It does not run in demo mode, where there is no ceremony to run.
+
+## 15. Seal in a browser (planned for 1.2)
+
+**Not built. Decided 2026-10-14. Scoped here so 1.2 starts from a page
+and not from a conversation.**
+
+### The failure this exists for
+
+The daughter has an Android. The brother does not want to install
+anything. A key holder gets a new phone and cannot be bothered. Today
+every one of them needs an iPhone with Seal on it, or the owner's
+envelopes are stuck. The owner is the only person who should ever need
+the app.
+
+### What it is
+
+A page on sealmessenger.com where a key holder or a recipient signs in
+with the same security key or passkey (the relying party is already this
+domain), and does their part from any browser:
+
+- A recipient, after a release: opens their envelopes and reads them.
+- A key holder: sees that someone trusts them, confirms they still have
+  the key, starts or objects to a claim, taps their key, combines.
+
+The owner still writes and seals on the iPhone. Nothing here lets a
+browser write envelopes.
+
+### Why it is possible
+
+- Every record is in the CloudKit **public** database. A browser reads
+  them through CloudKit JS with the container's web token. No Apple ID.
+- A browser is one more device. The iPhone already handles a new phone
+  by making a fresh device key and having the root key endorse it with
+  one tap. The page does the same.
+- The arithmetic is standard: P-256 (the key tap), X25519, AES-GCM, HKDF
+  and SHA-256 are built into every browser. ML-KEM-768 is the one piece
+  that needs a library. The PRF trick for sponsored keys works in Chrome
+  and Safari.
+
+### The one thing that changes a promise
+
+CloudKit JS does not let an anonymous browser write to the public
+database. So a claim, an objection, a tap or a custody confirmation from
+the web goes through a small relay on the Cloudflare Worker that already
+serves the site, using a server-to-server key. The relay cannot forge
+anything: every record is signed by the person's own key in the browser
+before it is sent, and every phone checks the signature and not the
+sender. But it is a server of ours in the path for writes.
+
+The site today says "there is no Seal server." For 1.2 that becomes
+"nothing we run can read, open or change your envelopes," which is still
+true and is the promise that matters. Decide this before writing code,
+not after.
+
+### Build order
+
+**1.2a, the recipient page (most of the value, a fraction of the work).**
+Sign in with the key, find the key table by trying to open each with the
+device key, decrypt and show the letter, the photos, the voice note and
+the secrets with the byte-exact copy button. Read only. No relay needed,
+because reading is anonymous. Ships on its own.
+
+**1.2b, the key holder page.** The device endorsement, custody
+confirmation, claim, objection, tap, combine, through the relay. This is
+the Swift estate log, the release machine and the Shamir code written
+again in JavaScript, and it has to match byte for byte or the phones
+will refuse what the browser writes.
+
+**Test vectors first.** Before any page, export the fixtures the Swift
+self-tests already use (record encodings, digests, shares, a full
+release log) to JSON, and make the JavaScript pass the same checks. That
+is what "matches byte for byte" means, and it is the only way a second
+implementation of this protocol is safe to ship.
+
+### What it must not do
+
+- No writing envelopes from the web. Owners use the iPhone.
+- No account, no email, no password. The key is the sign-in.
+- No relay that can read: the relay sees signed ciphertext and nothing
+  else, and the page says so.
