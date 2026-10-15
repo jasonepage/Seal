@@ -3,9 +3,9 @@
 Dates are the day the work landed in the repository. Anything marked
 "not built yet" has been written but never compiled or run on a phone.
 
-## Unreleased
+## 1.1, submitted to the App Store, 2026-10-14
 
-### Added (not built yet)
+### Added
 
 - Add a key holder in one go (PRODUCT.md section 14). From the setup card
   or the Keys tab: who, scan, their key on this phone, the phrase, "make
@@ -39,8 +39,6 @@ Dates are the day the work landed in the repository. Anything marked
   security key providers, so a passkey owner got the security key sheet,
   cancelled, and the error was swallowed. One provider now, chosen by the
   owner's tier, and errors are shown.
-
-### Added
 
 - Deleting an account asks what happens to the sealed envelopes: keep them
   for the family, or cancel them. The answer is one signed entry in the
