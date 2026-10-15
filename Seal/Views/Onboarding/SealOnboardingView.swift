@@ -689,6 +689,7 @@ struct SealOnboardingView: View {
             .padding(.vertical, 4)
     }
 
+    @ViewBuilder
     private func figureView(_ figure: OnboardingScreen.Figure) -> some View {
         switch figure {
         case .mark:
