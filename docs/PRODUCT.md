@@ -561,3 +561,118 @@ implementation of this protocol is safe to ship.
 - No account, no email, no password. The key is the sign-in.
 - No relay that can read: the relay sees signed ciphertext and nothing
   else, and the page says so.
+
+### Decided 2026-10-16
+
+- **The write path is the relay.** Key holders on the web write through
+  the small relay on the Cloudflare Worker. The site's line becomes
+  "Nothing we run can read, open or change your envelopes," and it is
+  never printed alone. It always comes with two plain sentences: the web
+  page is code we serve, so a takeover of the site could change it (the
+  iPhone app and the capsule never depend on the site); and the relay can
+  fail to deliver a record but cannot forge one, so the page checks
+  Apple's copy before it says anything was saved.
+- **1.2a starts with sponsored keys, web only.** No App Store release for
+  it. Everyone else comes with the owner side change below, in the 1.2 app.
+- **The copy changes ship with 1.2a, not before.** Drafted, stage by
+  stage, in docs/WEB_COPY_1.2.md.
+- **Test vectors before any page.** Set 1 is written (below).
+
+### What reading the code on 2026-10-16 changed in this plan
+
+1. **A browser opens only what was wrapped to it.** A table's
+   `releaseWraps` and a key holder's share are wrapped to the devices that
+   were endorsed when the owner last sealed (EstateKeys.swift). "A browser
+   is one more device" is true, but a device endorsed after the owner is
+   gone opens nothing. Sponsored virtual devices are already wrapped to,
+   which is why 1.2a starts there. For everyone else the owner's phone has
+   to notice a newly endorsed device of a recipient or key holder and wrap
+   to it while the owner is alive: new release wraps for that recipient's
+   table, and a new epoch for a key holder's share (cheap, see ROTATION in
+   EstateKeys.swift). That is an iPhone change and goes in the 1.2 app.
+   Not found in the code today; treat it as missing until someone shows
+   otherwise.
+2. **The browser device is a PRF virtual device, like a sponsored key.**
+   The page makes the device halves, locks them under the security key's
+   PRF secret, publishes the locked blob and has the root key endorse it.
+   Nothing goes in browser storage: the halves are unlocked into memory
+   while the tab is open and are gone when it closes. This is the only
+   version that agrees with the objections page, which says key material
+   in browser storage can be read by a bad script and is lost when someone
+   clears their data, and it makes the device work in any browser the
+   person signs in on. It needs a key that does PRF. A hardware key
+   (YubiKey 5) does in Chrome, Edge, Firefox and Safari. An iCloud Keychain
+   passkey only exists on Apple devices, so on Android it means a hardware
+   key. (Proposed here, not yet confirmed by Jason.)
+3. **The page itself is the larger trust change, and it starts at 1.2a.**
+   The site serves the code that holds the opened letter. Limits on that:
+   a strict Content Security Policy in site/_headers (scripts from this
+   site only, connections only to CloudKit and the relay), no third party
+   scripts, the two libraries vendored into site/ and pinned with
+   subresource integrity hashes, and the hashes of every file the page
+   serves published in the repo so anyone can compare. That narrows the
+   trust; it does not remove it, and the copy says so.
+4. **The relay can drop.** It cannot read or forge, but it can lose a
+   record, and losing an objection matters. The page reads the record back
+   from the public database before it says "saved", and the iPhone path
+   stays open. Unknown: records written with a server to server key belong
+   to that key's identity, and under CloudKit's default roles a creator
+   can change or delete its own records. Check the security roles in the
+   CloudKit Console before 1.2b. If the relay key can delete what it
+   wrote, the page should say that too.
+5. **The release judgment has to come along, even for reading.** The page
+   must not open an estate just because a published key matches the
+   owner's commitment (rule 1 in ReleaseFeed.swift). The phone honors a
+   release only when rules 2 and 3 also hold (AUDIT C1), or one key holder
+   running their own code could release early and the browser would be
+   the easy way around the check. So 1.2a ports ReleaseFeed,
+   ReleaseMachine and the event signature checks too. Open question: the
+   phone dates events by when it first saw them (FirstSeen), and a browser
+   with no storage has no such memory. The RFC 3161 timestamps on the
+   countdown events are the likely answer. Decide before porting.
+6. **Epochs in JSON.** RecipientTableWrap carries `epoch` as a JSON
+   number. JavaScript is exact only up to 2^53. Real epochs are small, but
+   the page parses them as strings.
+7. **"No third party code" stays true for the app only.** The page needs
+   one library for ML-KEM-768 (@noble/post-quantum), and one for P-256
+   (@noble/curves) unless signing can be done with WebCrypto alone. The
+   README row splits into app and web.
+
+### Vectors, set 1 (written 2026-10-16, not yet run on a Mac)
+
+`tools/vectors/main.swift`, run by `sh tools/export_vectors.sh`, compiles
+the app's own KEMBundle, Shamir, EstateKeys and SponsoredKey source and
+writes docs/vectors/web-set1.json: the AAD strings, ML-KEM-768 from a seed,
+bundle parsing, hybrid wraps in both suites, a sponsored key's locked
+blob, and a small estate (three key holders, two of three rebuild the
+key, one table that is the sponsored recipient's and one that is not, and
+one content blob). It needs macOS 26 or later for ML-KEM-768.
+
+`tools/vectors/check.mjs` opens all of it with WebCrypto plus the two
+libraries, using functions written to move into the page unchanged:
+
+    cd tools/vectors && npm install
+    node check.mjs ../../docs/vectors/web-set1.json
+
+The checker was tested against a stand-in file made by separate Python
+code (31 checks pass, and a flipped byte in a blob and a wrong ML-KEM
+secret both fail). It has not yet met the Swift output. If the first Mac
+run fails, the likely places are the ML-KEM seed format (the checker
+expects CryptoKit's seed to be the 64 byte FIPS 203 seed) and
+SponsoredKey.swift needing `import Security` to compile on its own.
+
+### Vectors, set 2 (not written)
+
+Event body encoding and the bytes each event signs (EstateLog), the
+endorsement commitment and WebAuthn assertion checks (IdentityManager,
+WebAuthnParsing), the release judgment (ReleaseFeed, ReleaseMachine), and
+the real envelope payload with its photos, voice note and secrets
+(Envelope.Payload, MediaItem, SealedCard). Each needs its file to compile
+without the app around it first.
+
+### Must be tried on real hardware
+
+The PRF secret. One hardware key, one salt: unlock the same sponsored
+blob on an iPhone and in Chrome on Android and on a computer. WebAuthn
+hashes the salt the same way everywhere, so the secret should match, but
+nobody has watched it happen and no vector can prove it.

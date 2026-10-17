@@ -1,0 +1,11 @@
+{
+  "name": "seal-web-vectors",
+  "private": true,
+  "description": "Checks the browser's crypto against vectors written by the app's own Swift (tools/export_vectors.sh).",
+  "type": "module",
+  "license": "MPL-2.0",
+  "dependencies": {
+    "@noble/curves": "2.4.0",
+    "@noble/post-quantum": "0.7.1"
+  }
+}

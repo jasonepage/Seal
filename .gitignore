@@ -13,3 +13,6 @@ tools/mint_out*/
 
 # Working notes, not part of the product
 Claude outputs/
+
+# The web vectors checker installs its two libraries here
+tools/vectors/node_modules/
