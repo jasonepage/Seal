@@ -3,7 +3,7 @@
 Dates are the day the work landed in the repository. Anything marked
 "not built yet" has been written but never compiled or run on a phone.
 
-## Next app release (not built yet)
+## 1.1.1 (not built yet)
 
 ### Fixed
 
@@ -15,6 +15,11 @@ Dates are the day the work landed in the repository. Anything marked
   the words under the other person's seal. Adding a key holder also gets
   a "They don't match" button that stops before anyone is made a key
   holder. (`FriendsView.swift`, `AddKeyHolderFlow.swift`)
+- A redeemed offer code now unlocks sealing without restarting Seal. The
+  listener for purchases made outside the payment sheet was declared but
+  never started, and the purchase was only checked at launch. Now the
+  listener runs from launch and Seal checks again each time it comes back
+  to the screen. (`SealPurchase.swift`, `SealApp.swift`)
 
 ## 1.1, submitted to the App Store, 2026-10-14
 

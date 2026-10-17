@@ -75,8 +75,28 @@ final class SealPurchase {
     /// nil until the product has loaded.
     var displayPrice: String? { product?.displayPrice }
 
+    /// Starts the one listener for purchases that arrive outside the
+    /// payment sheet: an offer code redeemed in the App Store (the
+    /// SEALFRIENDS claim page), an Ask to Buy approval, a purchase made on
+    /// another device. Apple delivers those only through Transaction.updates.
+    /// Until 1.1.1 `updates` was declared and never started, so a code
+    /// redeemed while Seal was open unlocked nothing until the next launch.
+    /// Safe to call more than once.
+    func startListening() {
+        guard updates == nil else { return }
+        updates = Task { [weak self] in
+            for await result in Transaction.updates {
+                if case .verified(let transaction) = result {
+                    await transaction.finish()
+                }
+                await self?.refresh()
+            }
+        }
+    }
+
     /// Ask Apple what this Apple ID owns, then load the product. Called on
-    /// launch and after every purchase or restore.
+    /// launch, every time Seal comes back to the screen, when a transaction
+    /// arrives, and after every purchase or restore.
     func refresh() async {
         defer { isChecking = false }
         var owned = false

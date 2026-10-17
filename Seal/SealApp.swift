@@ -94,10 +94,16 @@ struct SealApp: App {
         WindowGroup {
             ContentView()
                 .environment(purchase)
-                .task { await purchase.refresh() }
+                .task {
+                    purchase.startListening()
+                    await purchase.refresh()
+                }
         }
         .onChange(of: scenePhase) { _, phase in
             PrivacyShield.shared.update(for: phase)
+            // Back from the App Store after redeeming a code, or from
+            // Settings after a restore elsewhere: ask Apple again.
+            if phase == .active { Task { await purchase.refresh() } }
         }
     }
 }
