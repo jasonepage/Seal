@@ -16,6 +16,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     /// Posted when the owner taps the weekly question notification
     /// (WeeklyQuestion). EstateHomeView listens and opens the question.
     static let weeklyQuestionTapped = Notification.Name("seal.weeklyQuestionTapped")
+    /// Posted when the owner taps the "has a new device" line
+    /// (OwnerNotices.postNewKeyHolderDevices). EstateHomeView opens the
+    /// Keys tab, where the card with the Seal again button is.
+    static let newKeyHolderDeviceTapped = Notification.Name("seal.newKeyHolderDeviceTapped")
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
@@ -44,14 +48,18 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         return [.banner, .sound, .list]
     }
 
-    /// A tap on one of our local notifications. Only the weekly question
-    /// opens somewhere in particular; everything else lands on the home
-    /// screen, which already says what is going on.
+    /// A tap on one of our local notifications. The weekly question opens
+    /// the question and a key holder's new device opens the Keys tab;
+    /// everything else lands on the home screen, which already says what
+    /// is going on.
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
-        if response.notification.request.identifier.hasPrefix("seal.owner.weekly.") {
+        let identifier = response.notification.request.identifier
+        if identifier.hasPrefix("seal.owner.weekly.") {
             NotificationCenter.default.post(name: Self.weeklyQuestionTapped, object: nil)
+        } else if identifier.hasPrefix("seal.owner.newdevice.") {
+            NotificationCenter.default.post(name: Self.newKeyHolderDeviceTapped, object: nil)
         }
         completionHandler()
     }

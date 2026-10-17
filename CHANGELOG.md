@@ -5,6 +5,23 @@ Dates are the day the work landed in the repository. Anything marked
 
 ## 1.2 (not built yet)
 
+### Added
+
+- Envelopes now reach a person's new device while the owner is alive
+  (PRODUCT.md section 15, item 1). A recipient's key table was only ever
+  wrapped to the devices they had at the last seal, so a new iPhone, a
+  sponsored key or a browser opened nothing. Now every heartbeat compares
+  each recipient's verified devices against the ones their table was
+  wrapped to and, when they differ, wraps the table again to all of them
+  in the background: same epoch, same Estate Key, the table itself and
+  the owner's copy untouched, nothing unsealed published, no key tap. A
+  key holder's new device still needs a new epoch, which is a seal, so
+  that one waits for the owner: the Keys tab card now says "new device"
+  and a notification names the person and opens the Keys tab.
+  (`EstateEngine.swift`, `EstateModels.swift`, `OwnerNotices.swift`,
+  `HomeView.swift`, `SealApp.swift`, `EstateHomeView.swift`, self-test
+  `estatekeys.newDevice`)
+
 ### Fixed
 
 - The three words after a scan. Each phone shows the OTHER person's words,

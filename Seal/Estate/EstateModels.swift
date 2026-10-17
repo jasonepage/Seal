@@ -252,6 +252,17 @@ struct Estate: Codable, Hashable {
     /// and has no way to unwrap a share made for the old one. A stored
     /// property with a default, so estates saved before it existed decode.
     var publishedCustodianDevices: [String: [String]] = [:]
+    /// The same thing for RECIPIENTS: per recipient hash, a digest of each
+    /// endorsed device KEM bundle their key table's release wraps were made
+    /// for. Written by every seal, and by `coverNewRecipientDevices` when it
+    /// adds a device the recipient endorsed later. Unlike a key holder's
+    /// share, a recipient's release wraps can be redone without a new epoch
+    /// (the owner holds the Table Key and the Estate Key), so a difference
+    /// here is repaired in the background and never asks the owner for
+    /// anything. Empty for an estate sealed before it existed, which reads
+    /// as "unknown" and is repaired once. A stored property with a default,
+    /// decoded by hand below.
+    var publishedRecipientDevices: [String: [String]] = [:]
     /// Table ids published in the last vault statement, for the record.
     var publishedTableIDs: [String] = []
     /// The rule as last published, so a change to silence, warning or grace
@@ -298,6 +309,19 @@ struct Estate: Codable, Hashable {
     /// compare equal whatever order the endorsements came back in.
     static func deviceDigests(_ kemBundles: [Data]) -> [String] {
         kemBundles.map { Data(SHA256.hash(data: $0)).map { String(format: "%02x", $0) }.joined() }.sorted()
+    }
+
+    /// Which recipients' published key tables are wrapped to a different
+    /// set of devices than the directory vouches for now. `current` holds
+    /// only recipients who have a published table AND at least one verified
+    /// device: somebody whose record could not be fetched, or who lists no
+    /// usable device, is left out by the caller and so is never "due",
+    /// because rewrapping to nobody would lock them out. A recipient with
+    /// nothing in `published` is due, which is how an estate sealed before
+    /// the record existed gets its first one. Pure, so it can be tested.
+    static func recipientsNeedingWraps(published: [String: [String]],
+                                       current: [String: [String]]) -> [String] {
+        current.keys.filter { published[$0] != current[$0] }.sorted()
     }
 
     var isReadyToSeal: Bool {
@@ -389,7 +413,7 @@ extension Estate {
     private enum Keys: String, CodingKey {
         case id, ownerHash, epoch, policy, custodians, recipients, envelopes, createdAt, tableKeys, epochPublished
         case publishedCustodianHashes, publishedThreshold, publishedCustodianDevices, publishedTableIDs, publishedPolicy
-        case tablesStale
+        case tablesStale, publishedRecipientDevices
     }
 
     init(from decoder: Decoder) throws {
@@ -410,6 +434,7 @@ extension Estate {
         publishedTableIDs = try c.decodeIfPresent([String].self, forKey: .publishedTableIDs) ?? []
         publishedPolicy = try c.decodeIfPresent(ReleasePolicy.self, forKey: .publishedPolicy)
         tablesStale = try c.decodeIfPresent(Bool.self, forKey: .tablesStale) ?? false
+        publishedRecipientDevices = try c.decodeIfPresent([String: [String]].self, forKey: .publishedRecipientDevices) ?? [:]
     }
 }
 

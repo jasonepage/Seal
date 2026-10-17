@@ -90,6 +90,7 @@ enum OwnerNotices {
             UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: record.identifiers)
         }
         KeychainStore.delete(key(ownerHash))
+        KeychainStore.delete(newDeviceKey(ownerHash))
     }
 
     private static func identifier(estateID: String, level: Level) -> String {
@@ -173,6 +174,95 @@ enum OwnerNotices {
             } catch {
                 log.error("owner notices: could not schedule \(item.id, privacy: .public): \(error.localizedDescription, privacy: .public)")
             }
+        }
+    }
+
+    // MARK: - A key holder has a new device
+
+    //  The other thing the owner has to do while alive, and the one thing
+    //  the app cannot do for them in the background. A key holder who
+    //  endorses a new device holds a share that device cannot open
+    //  (EstateEngine.custodiansWithNewPhones). The repair is a new epoch,
+    //  which is a seal, and a seal also publishes every draft and rule
+    //  change waiting on this phone, so it waits for the owner's tap. The
+    //  Keys tab already shows the card with the button; this is the line
+    //  for an owner who does not open that tab, or whose phone noticed on
+    //  a push while it sat in a pocket.
+    //
+    //  Posted at once, not scheduled, and once per change: the keychain
+    //  keeps which people it last spoke about, per estate and epoch, so a
+    //  second refresh says nothing and a seal (which clears the list) takes
+    //  the line off the lock screen. Recipients never get a line: their
+    //  wraps are repaired quietly (EstateEngine.coverNewRecipientDevices).
+
+    private static func newDeviceKey(_ ownerHash: String) -> String { "seal.ownernotices.newdevice.\(ownerHash)" }
+
+    /// The prefix SealApp's notification delegate routes to the Keys tab.
+    static let newDeviceIdentifierPrefix = "seal.owner.newdevice."
+
+    private static func newDeviceIdentifier(estateID: String) -> String {
+        newDeviceIdentifierPrefix + estateID
+    }
+
+    /// "Riley", "Riley and Sam", "Riley, Sam, and Ana".
+    static func joinedNames(_ names: [String]) -> String {
+        switch names.count {
+        case 0: return ""
+        case 1: return names[0]
+        case 2: return "\(names[0]) and \(names[1])"
+        default: return names.dropLast().joined(separator: ", ") + ", and " + (names.last ?? "")
+        }
+    }
+
+    static func newDeviceLine(names: [String]) -> String {
+        let who = joinedNames(names)
+        return names.count == 1
+            ? "\(who) has a new device. Their piece of your key does not work on it yet. Open Seal and tap Seal again to give them a fresh one."
+            : "\(who) have new devices. Their pieces of your key do not work on them yet. Open Seal and tap Seal again to give them fresh ones."
+    }
+
+    /// Called after every heartbeat, which has just refreshed
+    /// `custodiansWithNewPhones`.
+    static func postNewKeyHolderDevices(engine: EstateEngine, ownerHash: String) async {
+        guard !DemoFixtures.isActive else { return }
+        guard let estate = engine.estate, estate.epochPublished else { return }
+        let center = UNUserNotificationCenter.current()
+        let id = newDeviceIdentifier(estateID: estate.id)
+        let people = engine.custodiansWithNewPhones
+        guard !people.isEmpty else {
+            // Sealed since, or the device went away: nothing to ask for.
+            if KeychainStore.load(newDeviceKey(ownerHash)) != nil {
+                KeychainStore.delete(newDeviceKey(ownerHash))
+                center.removeDeliveredNotifications(withIdentifiers: [id])
+            }
+            return
+        }
+        let signature = "\(estate.id)|\(estate.epoch)|" + people.map(\.rootHash).sorted().joined(separator: ",")
+        if let saved = KeychainStore.load(newDeviceKey(ownerHash)),
+           String(decoding: saved, as: UTF8.self) == signature {
+            return   // already said
+        }
+        // Written FIRST, as with the reminders above: the banner below
+        // brings the app forward and refreshes again, and that refresh must
+        // find this already said.
+        KeychainStore.save(Data(signature.utf8), for: newDeviceKey(ownerHash))
+
+        let settings = await center.notificationSettings()
+        guard settings.authorizationStatus == .authorized
+                || settings.authorizationStatus == .provisional else {
+            log.info("owner notices: new device line held back, notifications are not allowed")
+            return
+        }
+        let content = UNMutableNotificationContent()
+        content.title = "Seal"
+        content.body = newDeviceLine(names: people.map(\.displayName))
+        content.sound = .default
+        let request = UNNotificationRequest(identifier: id, content: content, trigger: nil)
+        do {
+            try await center.add(request)
+            log.info("owner notices: posted new device line for \(people.count, privacy: .public) key holder(s)")
+        } catch {
+            log.error("owner notices: could not post new device line: \(error.localizedDescription, privacy: .public)")
         }
     }
 }

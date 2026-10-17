@@ -48,6 +48,12 @@ final class EstateEngine {
 
     private var directoryCache: [String: (RootIdentity, [DeviceEndorsement])] = [:]
 
+    /// The background refresh of recipients' release wraps, while one is
+    /// running (`coverNewRecipientDevices`). Kept so a second refresh joins
+    /// the first instead of racing it, and so `sealAndPublish` can wait for
+    /// it before writing tables of its own.
+    @ObservationIgnored private var recipientWrapTask: Task<Void, Never>? = nil
+
     static let log = Logger(subsystem: "io.github.jasonepage.Seal", category: "estate")
 
     /// Posted after any refresh so screens re-read state.
@@ -533,6 +539,13 @@ final class EstateEngine {
     /// vault statement, invites. Safe to run again after a failure: every
     /// step is idempotent and the estate records what has been done.
     func sealAndPublish() async throws {
+        // A background refresh of recipient wraps writes table blobs too
+        // (coverNewRecipientDevices). If one is in flight, let it land
+        // first: one written after this seal's own tables, at the old epoch,
+        // would replace a new-epoch table with one the released key cannot
+        // open. Waited for here, before the estate is read, so the copy
+        // below includes whatever it recorded.
+        if let running = recipientWrapTask { await running.value }
         guard var e = estate else { throw EngineError.noEstate }
         // REVIEW.md finding 2: once the Estate Key is out, a recipient who
         // opened their table holds its key, and anything sealed into the
@@ -679,7 +692,11 @@ final class EstateEngine {
                                                         recipientBundles: recipientBundles)
             try await sync.saveEstateBlob(try EstateEvent.encodeBody(wrap), name: EstateNames.tableBlob(e.id, record.tableID))
             tableIDs.append(record.tableID)
+            // The devices this table now opens on, so a later refresh can
+            // tell when the recipient endorses another (coverNewRecipientDevices).
+            e.publishedRecipientDevices[recipientHash] = Estate.deviceDigests(recipientBundles)
         }
+        e.publishedRecipientDevices = e.publishedRecipientDevices.filter { recipientHashes.contains($0.key) }
         estate = e; saveEstate()
 
         // 4. The vault statement.
@@ -788,6 +805,122 @@ final class EstateEngine {
         } catch {
             lastError = error.localizedDescription
             Self.log.error("heartbeat: \(error.localizedDescription, privacy: .public)")
+        }
+        // After the line that matters most, never before it.
+        await coverNewRecipientDevices()
+    }
+
+    // MARK: - Owner: wrapping to a recipient's new device
+
+    /// A RECIPIENT WHO ENDORSES ANOTHER DEVICE AFTER THE LAST SEAL (a new
+    /// iPhone, a sponsored key's virtual device, in 1.2 a browser) holds
+    /// nothing that device can open: their table's release wraps were made
+    /// for the devices the directory listed at that seal (EstateKeys.swift).
+    /// If the owner is gone by then, nobody can ever fix it. So while the
+    /// owner is alive and opening the app, this phone notices and fixes it.
+    ///
+    /// The fix is the small one. The table ciphertext and the owner wraps
+    /// stay exactly as published; only `releaseWraps` is made again, at the
+    /// SAME epoch, under the SAME Estate Key, to the recipient's current
+    /// verified devices (`EstateKeyHierarchy.rewrap` with the epoch it
+    /// already has). That publishes nothing the owner has not already
+    /// sealed: unsealed drafts and an unannounced rule change stay waiting
+    /// for the Seal button. It needs no key tap, because the owner's own
+    /// device key opens the Estate Key and the Table Key, so it runs quietly
+    /// and writes one line to the log.
+    ///
+    /// Key holders are NOT done here. A share cannot be rewrapped by the
+    /// owner, who never keeps one; the repair is a new epoch, which the seal
+    /// already does when `custodiansWithNewPhones` is not empty. That seal
+    /// also publishes every waiting draft, so it is never run behind the
+    /// owner's back: the Keys tab says so and OwnerNotices posts a line.
+    ///
+    /// Cheap when nothing changed: one fresh directory read per recipient,
+    /// compared against `publishedRecipientDevices`, and nothing fetched or
+    /// written unless the two differ. Only devices that pass the same
+    /// endorsement check the seal uses are wrapped to (`verifiedDevices`
+    /// through the pinned `lookup`). Never for an estate this identity does
+    /// not own, never in the demo, never once a key has been published or
+    /// a release has happened (the same two guards as `sealAndPublish`),
+    /// and never while a seal is running.
+    func coverNewRecipientDevices() async {
+        if let running = recipientWrapTask {
+            await running.value
+            return
+        }
+        let task = Task { await self.wrapToNewRecipientDevices() }
+        recipientWrapTask = task
+        await task.value
+        recipientWrapTask = nil
+    }
+
+    private func wrapToNewRecipientDevices() async {
+        guard !DemoFixtures.isActive, !isWorking,
+              let e = estate, e.ownerHash == ownerHash, e.epochPublished, !e.publishedTableIDs.isEmpty,
+              ownerSnapshot?.releasedAt == nil, ownerSnapshot?.keyPublishedAt == nil,
+              let mine = identity.kemPrivateBundle else { return }
+
+        // Who has a published table, and which devices the directory vouches
+        // for now. The owner keeps the recipient for each table in
+        // `tableKeys`; the published table names nobody.
+        let publishedTables = Set(e.publishedTableIDs)
+        var currentBundles: [String: [Data]] = [:]
+        for (recipientHash, record) in e.tableKeys where publishedTables.contains(record.tableID) {
+            guard let found = try? await lookup(recipientHash, forceRefresh: true) else { continue }
+            let bundles = IdentityManager.verifiedDevices(root: found.0, endorsements: found.1).map(\.kemBundlePublicKeys)
+            if !bundles.isEmpty { currentBundles[recipientHash] = bundles }
+        }
+        let due = Estate.recipientsNeedingWraps(published: e.publishedRecipientDevices,
+                                                current: currentBundles.mapValues { Estate.deviceDigests($0) })
+        guard !due.isEmpty else { return }
+
+        do {
+            // The Estate Key of the published epoch, opened with this phone's
+            // own key. Missing material is the seal's problem to repair (it
+            // rotates); here it just means "not now".
+            guard let materialData = try await sync.fetchEstateBlob(name: EstateNames.epochBlob(e.id, e.epoch)),
+                  let material = try? JSONDecoder().decode(EpochKeyMaterial.self, from: materialData) else {
+                Self.log.error("recipient wraps: epoch \(e.epoch, privacy: .public) material not found; left for the next seal")
+                return
+            }
+            let estateKey = try EstateKeyHierarchy.openEstateKeyAsOwner(material, mine: mine)
+            var covered = 0
+            for recipientHash in due {
+                guard let record = e.tableKeys[recipientHash], let bundles = currentBundles[recipientHash] else { continue }
+                // The published table must be this estate's, at this epoch,
+                // and open with this phone's own key to the Table Key the
+                // owner holds. Anything else (a seal stopped half way and
+                // left a table on the old epoch, a table from the other
+                // CloudKit environment) is left alone for the next seal,
+                // which rewrites every table anyway.
+                guard let data = try await sync.fetchEstateBlob(name: EstateNames.tableBlob(e.id, record.tableID)),
+                      let wrap = try? JSONDecoder().decode(RecipientTableWrap.self, from: data),
+                      wrap.tableID == record.tableID, wrap.epoch == e.epoch,
+                      let ownerKey = try? EstateKeyHierarchy.openTableKeyAsOwner(wrap, estateID: e.id, mine: mine),
+                      ownerKey == record.tableKey else {
+                    Self.log.error("recipient wraps: a published table did not match this phone's copy; left for the next seal")
+                    continue
+                }
+                let updated = try EstateKeyHierarchy.rewrap(wrap, tableKey: record.tableKey, estateID: e.id,
+                                                            newEpoch: wrap.epoch, newEstateKey: estateKey,
+                                                            recipientBundles: bundles)
+                // Checked again after every wait: a new set, a new epoch or a
+                // seal in progress means this copy is out of date.
+                guard !isWorking, let live = estate, live.id == e.id, live.epoch == e.epoch, live.epochPublished,
+                      live.tableKeys[recipientHash]?.tableID == record.tableID else { return }
+                try await sync.saveEstateBlob(try EstateEvent.encodeBody(updated),
+                                              name: EstateNames.tableBlob(e.id, record.tableID))
+                guard var latest = estate, latest.id == e.id else { return }
+                latest.publishedRecipientDevices[recipientHash] = Estate.deviceDigests(bundles)
+                estate = latest
+                saveEstate()
+                covered += 1
+            }
+            if covered > 0 {
+                Self.log.info("recipient wraps: \(covered, privacy: .public) table(s) now open on every device their recipient has endorsed")
+            }
+        } catch {
+            Self.log.error("recipient wraps: \(error.localizedDescription, privacy: .public)")
         }
     }
 

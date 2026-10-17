@@ -590,8 +590,13 @@ implementation of this protocol is safe to ship.
    to it while the owner is alive: new release wraps for that recipient's
    table, and a new epoch for a key holder's share (cheap, see ROTATION in
    EstateKeys.swift). That is an iPhone change and goes in the 1.2 app.
-   Not found in the code today; treat it as missing until someone shows
-   otherwise.
+   **Built 2026-10-17, not yet compiled.** Recipients: every heartbeat
+   rewraps a table whose recipient's verified devices differ from
+   `Estate.publishedRecipientDevices`, at the same epoch, in the
+   background (`EstateEngine.coverNewRecipientDevices`). Key holders: the
+   detection already existed (`custodiansWithNewPhones`, and the seal
+   rotates for it); a seal also publishes drafts, so it stays the owner's
+   tap, now with a notification (`OwnerNotices.postNewKeyHolderDevices`).
 2. **The browser device is a PRF virtual device, like a sponsored key.**
    The page makes the device halves, locks them under the security key's
    PRF secret, publishes the locked blob and has the root key endorse it.

@@ -20,6 +20,7 @@ enum EstateKeyTests {
         .init(name: "estatekeys.epoch") { try epoch($0) },
         .init(name: "estatekeys.tables") { try tables($0) },
         .init(name: "estatekeys.rotation") { try rotation($0) },
+        .init(name: "estatekeys.newDevice") { try newDevice($0) },
     ] }
 
     /// A device with both KEM halves, like a phone that signed in after the
@@ -189,5 +190,72 @@ enum EstateKeyTests {
         }
         t.equal(try EstateKeyHierarchy.openTableKeyAsRecipient(wrap2, estateID: estateID, estateKey: key2, mine: wife),
                 tableKey, "the new Estate Key opens it")
+    }
+
+    /// A recipient endorses a second device after the owner sealed
+    /// (EstateEngine.coverNewRecipientDevices). The owner's phone redoes the
+    /// release wraps at the SAME epoch under the SAME Estate Key, to both
+    /// devices. The new device opens, the old one still does, and nothing
+    /// else in the published table moves.
+    static func newDevice(_ t: SelfTest.Context) throws {
+        let estateID = UUID().uuidString
+        let owner = hybridDevice()
+        let oldPhone = hybridDevice()
+        let newPhone = hybridDevice()
+        let stranger = hybridDevice()
+        let estateKey = EstateCrypto.randomKey()
+        let tableKey = EstateCrypto.randomKey()
+        let table = KeyTable(recipientHash: "riley", entries: [
+            KeyTableEntry(envelopeID: "e1", contentKey: EstateCrypto.randomKey(), title: "For Riley", revealOrder: 1, blobIDs: ["b1"])
+        ])
+        let sealed = try EstateKeyHierarchy.wrapTable(table, tableID: UUID().uuidString, tableKey: tableKey,
+                                                      estateID: estateID, epoch: 3, estateKey: estateKey,
+                                                      ownerBundles: [owner.publicBundle.encoded],
+                                                      recipientBundles: [oldPhone.publicBundle.encoded])
+        t.throwsError("before the rewrap, the new device opens nothing") {
+            _ = try EstateKeyHierarchy.openTableKeyAsRecipient(sealed, estateID: estateID, estateKey: estateKey, mine: newPhone)
+        }
+
+        // What the owner's phone does: the Table Key through its own wrap,
+        // then the release wraps again, same epoch, same Estate Key.
+        let ownerTableKey = try EstateKeyHierarchy.openTableKeyAsOwner(sealed, estateID: estateID, mine: owner)
+        t.equal(ownerTableKey, tableKey, "the owner opens the Table Key it rewraps")
+        let covered = try EstateKeyHierarchy.rewrap(sealed, tableKey: ownerTableKey, estateID: estateID,
+                                                    newEpoch: sealed.epoch, newEstateKey: estateKey,
+                                                    recipientBundles: [oldPhone.publicBundle.encoded,
+                                                                       newPhone.publicBundle.encoded])
+        t.equal(covered.ciphertext, sealed.ciphertext, "the table ciphertext is unchanged")
+        t.equal(covered.ownerWraps, sealed.ownerWraps, "the owner wraps are unchanged")
+        t.equal(covered.tableID, sealed.tableID, "the table id is unchanged")
+        t.equal(covered.epoch, sealed.epoch, "the epoch is unchanged")
+        t.equal(covered.releaseWraps.count, 2, "one release wrap per device")
+
+        let viaNew = try EstateKeyHierarchy.openTableKeyAsRecipient(covered, estateID: estateID, estateKey: estateKey, mine: newPhone)
+        t.equal(viaNew, tableKey, "the new device opens the table after release")
+        t.equal(try EstateKeyHierarchy.openTable(covered, estateID: estateID, tableKey: viaNew), table,
+                "and reads the same table")
+        t.equal(try EstateKeyHierarchy.openTableKeyAsRecipient(covered, estateID: estateID, estateKey: estateKey, mine: oldPhone),
+                tableKey, "the old device still opens it")
+        t.throwsError("nobody else does") {
+            _ = try EstateKeyHierarchy.openTableKeyAsRecipient(covered, estateID: estateID, estateKey: estateKey, mine: stranger)
+        }
+        t.throwsError("and the new device still needs the released Estate Key") {
+            _ = try EstateKeyHierarchy.openTableKeyAsRecipient(covered, estateID: estateID,
+                                                              estateKey: EstateCrypto.randomKey(), mine: newPhone)
+        }
+
+        // Which recipients the engine would rewrap.
+        let a = Estate.deviceDigests([oldPhone.publicBundle.encoded])
+        let ab = Estate.deviceDigests([newPhone.publicBundle.encoded, oldPhone.publicBundle.encoded])
+        t.equal(ab, Estate.deviceDigests([oldPhone.publicBundle.encoded, newPhone.publicBundle.encoded]),
+                "device digests do not depend on the order the directory returned them")
+        t.equal(Estate.recipientsNeedingWraps(published: ["riley": a], current: ["riley": a]), [],
+                "nothing to do when the devices match")
+        t.equal(Estate.recipientsNeedingWraps(published: ["riley": a], current: ["riley": ab]), ["riley"],
+                "a newly endorsed device makes the recipient due")
+        t.equal(Estate.recipientsNeedingWraps(published: [:], current: ["riley": a]), ["riley"],
+                "an estate sealed before the record existed is repaired once")
+        t.equal(Estate.recipientsNeedingWraps(published: ["riley": a], current: [:]), [],
+                "a recipient the directory could not vouch for is never rewrapped to nobody")
     }
 }

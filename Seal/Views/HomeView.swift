@@ -129,6 +129,10 @@ struct HomeView: View {
         // One set per rule, filed under that rule's store key.
         for engine in engines.all {
             await OwnerNotices.schedule(engine: engine, ownerHash: engine.storeHash)
+            // A key holder with a new device needs a seal, which waits for
+            // the owner's tap; this is the line that asks for it. A
+            // recipient's new device was already handled by the heartbeat.
+            await OwnerNotices.postNewKeyHolderDevices(engine: engine, ownerHash: engine.storeHash)
         }
         // The "still right?" reminder, at the next due date (SecretReview).
         await SecretReview.schedule(ownerHash: myRoot.credentialIDHash,

@@ -869,6 +869,9 @@ struct EstateHomeView: View {
             .onReceive(NotificationCenter.default.publisher(for: AppDelegate.weeklyQuestionTapped)) { _ in
                 offerWeeklyIfDue(force: true)
             }
+            .onReceive(NotificationCenter.default.publisher(for: AppDelegate.newKeyHolderDeviceTapped)) { _ in
+                tab = .keys
+            }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { offerWeeklyIfDue(force: false) }
             }
@@ -1287,13 +1290,16 @@ struct EstateHomeView: View {
         default: who = names.dropLast().joined(separator: ", ") + ", and " + (names.last ?? "")
         }
         return VStack(alignment: .leading, spacing: 10) {
-            Label(names.count == 1 ? "\(who) has a new phone." : "\(who) have new phones.",
+            // "Device", not "phone": since 1.2 the new one can be a second
+            // phone, a sponsored key or a browser, and the old one may still
+            // work. What is true in every case is the sentence below.
+            Label(names.count == 1 ? "\(who) has a new device." : "\(who) have new devices.",
                   systemImage: "iphone.gen3.badge.exclamationmark")
                 .font(.system(.title3, design: .rounded, weight: .semibold))
                 .foregroundStyle(.orange)
             Text(names.count == 1
-                 ? "Their piece of the key is on a phone they no longer have, so right now it cannot be used. Sealing again gives them a fresh piece on the phone they have now. Your envelopes themselves are not touched."
-                 : "Their pieces of the key are on phones they no longer have, so right now those pieces cannot be used. Sealing again gives each of them a fresh piece on the phone they have now. Your envelopes themselves are not touched.")
+                 ? "Their piece of the key was made for the devices they had when you last sealed, so it does not work on the new one. Sealing again gives them a fresh piece that works on every device they use now. Your envelopes themselves are not touched."
+                 : "Their pieces of the key were made for the devices they had when you last sealed, so they do not work on the new ones. Sealing again gives each of them a fresh piece that works on every device they use now. Your envelopes themselves are not touched.")
             Button {
                 runSeal()
             } label: {
