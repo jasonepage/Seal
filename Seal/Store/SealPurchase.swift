@@ -79,7 +79,7 @@ final class SealPurchase {
     /// payment sheet: an offer code redeemed in the App Store (the
     /// SEALFRIENDS claim page), an Ask to Buy approval, a purchase made on
     /// another device. Apple delivers those only through Transaction.updates.
-    /// Until 1.1.1 `updates` was declared and never started, so a code
+    /// Until 1.2 `updates` was declared and never started, so a code
     /// redeemed while Seal was open unlocked nothing until the next launch.
     /// Safe to call more than once.
     func startListening() {

@@ -3,7 +3,7 @@
 Dates are the day the work landed in the repository. Anything marked
 "not built yet" has been written but never compiled or run on a phone.
 
-## 1.1.1 (not built yet)
+## 1.2 (not built yet)
 
 ### Fixed
 
