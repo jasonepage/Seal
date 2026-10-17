@@ -26,7 +26,7 @@ import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SKIP_DIRS = {".git", "DerivedData", "build", "archive", "Wordlists", "Claude outputs"}
+SKIP_DIRS = {".git", "DerivedData", "build", "archive", "Wordlists", "Claude outputs", "node_modules"}
 TEXT_EXTENSIONS = {".swift", ".html", ".css", ".md", ".py", ".txt", ".json", ".toml", ".yml", ".yaml"}
 
 EM_DASH = "—"

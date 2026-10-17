@@ -3,6 +3,19 @@
 Dates are the day the work landed in the repository. Anything marked
 "not built yet" has been written but never compiled or run on a phone.
 
+## Next app release (not built yet)
+
+### Fixed
+
+- The three words after a scan. Each phone shows the OTHER person's words,
+  but the screen said "say it out loud to each other, matching phrases,"
+  so testers compared the two screens and the words never matched. Now
+  your own words sit under your seal ("Your words: ..."), the screen after
+  a scan names whose words it shows, and it says to check them against
+  the words under the other person's seal. Adding a key holder also gets
+  a "They don't match" button that stops before anyone is made a key
+  holder. (`FriendsView.swift`, `AddKeyHolderFlow.swift`)
+
 ## 1.1, submitted to the App Store, 2026-10-14
 
 ### Added

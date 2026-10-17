@@ -247,14 +247,26 @@ struct AddKeyHolderFlow: View {
             Image(systemName: "checkmark.seal.fill")
                 .font(.system(size: 56)).foregroundStyle(SealTheme.brass)
             title("You're connected")
+            Text("\(friend.displayName)'s words")
+                .font(.caption).foregroundStyle(.white.opacity(0.5))
             Text(FingerprintPhrase.phrase(for: friend.publicKey))
                 .font(.title3).foregroundStyle(SealTheme.brass)
                 .fixedSize(horizontal: false, vertical: true)
-            body("Say it out loud to each other. Matching phrases, matching keys.")
+            // Each phone shows the OTHER person's words, so the two screens
+            // never match each other. The check is against the words under
+            // the other person's own seal (FriendsView). The old line, "say
+            // it out loud to each other, matching phrases", sent testers to
+            // compare the two screens (TestFlight, 2026-10-16).
+            body("Read these out loud. \(friend.displayName) checks them against \"Your words\" under their own seal. They should be the same.")
         } actions: {
-            Button("It matches. Next") { move(.confirm(friend)) }
+            Button("They match. Next") { move(.confirm(friend)) }
                 .buttonStyle(SealPrimaryButtonStyle())
                 .parentTapTarget(60)
+            Button("They don't match") {
+                move(.failed("\(friend.displayName) was not made a key holder. Scan their seal again. If the words still do not match, email support@sealmessenger.com and do not use this connection."))
+            }
+            .buttonStyle(SealSecondaryButtonStyle())
+            .parentTapTarget(60)
         }
     }
 

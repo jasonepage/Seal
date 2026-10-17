@@ -162,6 +162,18 @@ struct FriendsView: View {
                         Text("Your seal. Have them scan this.")
                             .font(.caption)
                             .foregroundStyle(.white.opacity(0.5))
+                        // Your own words, so you have something to check
+                        // against. After the scan, THEIR phone shows these
+                        // same words for you, and they read them out loud.
+                        // Before this, nobody's own words were on screen
+                        // during a scan, so people compared each other's
+                        // words, which never match (TestFlight, 2026-10-16).
+                        Text("Your words: \(FingerprintPhrase.phrase(for: myRoot.publicKey))")
+                            .font(.callout)
+                            .foregroundStyle(SealTheme.brass)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, 16)
                     }
                     .padding(.vertical, 18)
                     .frame(maxWidth: .infinity)
@@ -418,10 +430,15 @@ struct FriendsView: View {
             Text("You're connected")
                 .font(.system(.title2, design: .rounded, weight: .bold))
                 .foregroundStyle(.white)
+            Text("\(friend.displayName)'s words")
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.5))
             Text(FingerprintPhrase.phrase(for: friend.publicKey))
                 .font(.title3)
                 .foregroundStyle(SealTheme.brass)
-            Text("Say it out loud to each other, matching phrases, matching keys.")
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Read these out loud. \(friend.displayName) checks them against \"Your words\" under their own seal. They should be the same. If they are not, stop and scan again.")
                 .font(.caption2)
                 .foregroundStyle(.white.opacity(0.4))
                 .multilineTextAlignment(.center)
