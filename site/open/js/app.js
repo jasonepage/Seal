@@ -177,6 +177,10 @@ async function refresh() {
     working(`Checking the record for ${invite.ownerName || "a writer"}…`);
     const j = await judgeEstate(ck, invite, now);
     j.roles = invite.roles;
+    // A key holder who is also a recipient has one invite record, and the
+    // phone writes the recipient one last, so the invite alone can lose the
+    // key holder role. The writer's signed key list is the real answer.
+    if (j.epoch?.custodianHashes.includes(me.root.credentialIDHash)) j.roles.add("custodian");
     judged.push(j);
   }
   await list(judged, now);

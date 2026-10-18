@@ -101,6 +101,11 @@ and one real security key has opened a released test estate in a browser.
 
 ### Fixed
 
+- Someone who is both a key holder and a recipient could not act as a key
+  holder. Both invites go to the same record name, and the seal writes the
+  recipient one last, so the key holder role was overwritten. The phone
+  now takes the key holder role from the writer's signed key list instead.
+  (`EstateEngine.swift`; the web page has the same fix in `app.js`.)
 - Opening an envelope and tapping Done without changing anything no
   longer un-seals it. Done always saved the envelope, and every save
   marked it unsealed, so just reading one brought the Seal button back.

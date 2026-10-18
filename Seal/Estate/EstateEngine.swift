@@ -1058,6 +1058,13 @@ final class EstateEngine {
                 }
                 g.epoch = body
                 g.epochEventDigest = epochEvent.digest
+                // Someone who is both a key holder and a recipient gets one
+                // invite record (EstateNames.invite has no role in its name),
+                // and the seal writes the recipient invite after the key
+                // holder one, so the key holder role was lost and their phone
+                // could never claim or tap (found 2026-10-17 on the web page).
+                // The owner's signed statement names the key holders; trust it.
+                if body.custodianHashes.contains(ownerHash) { g.roles.insert(.custodian) }
             }
             if let vaultEvent = ownerOnly.filter({ $0.kind == .vaultUpdated })
                 .max(by: { ($0.occurredAtEpoch, $0.id) < ($1.occurredAtEpoch, $1.id) }),
