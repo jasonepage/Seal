@@ -7,96 +7,33 @@
 <link rel="icon" type="image/png" href="favicon.png?v=3">
 <link rel="apple-touch-icon" href="apple-touch-icon.png?v=3">
 <link rel="stylesheet" href="seal.css">
-<title>Seal: sealed envelopes for the people you leave behind</title>
-<meta name="description" content="One sealed envelope per person: a letter and the passwords they need, encrypted on your phone, opened only after months of silence. Open source, not audited.">
+<title>Seal</title>
+<meta name="description" content="Someone left you a letter with Seal? Open it here with the security key they gave you, on any phone or computer. Writing your own? Seal is an iPhone app.">
 </head>
-<body>
-<div class="wrap">
-  <header class="site">
-    <a class="logo" href="/">Seal<span>.</span></a>
-    <nav>
-      <a href="how-it-works.html">How it works</a>
-      <a href="verify.html">Verify</a>
-      <a href="limits.html">Limits</a>
-      <a href="https://github.com/jasonepage/Seal">Source</a>
-      <a href="support.html">Support</a>
-    </nav>
-  </header>
-  <img class="mark hero-figure" src="figure-hero.png?v=3" width="256" height="210" alt="A letter with a gold wax seal stamped with a closed envelope">
+<body class="home">
+<!-- The whole home page is two choices. Everything that explains how Seal
+     works lives on the other pages and in the source, on purpose. -->
+<main class="door">
+  <img class="door-seal" src="seal-mark.png?v=3" width="160" height="164" alt="Seal">
+  <h1>Someone left you a letter.</h1>
+  <p class="door-line">If they gave you a security key, open it here. Any phone or computer.</p>
+  <a class="door-open" href="open/">Open your envelopes</a>
+  <p class="door-also">Holding a key for someone? Same place.</p>
+</main>
 
-  <div class="hero">
-    <h1>Sealed envelopes for the people you leave behind.</h1>
-    <p class="lede">Seal is an iPhone app for writing one sealed envelope per person: a letter, and the passwords and instructions that person needs. Everything is encrypted on your phone, and an envelope opens only after you have gone quiet for months and weeks of daily warnings have passed. There is no Seal server, the source is public, and nobody outside this project has audited it.</p>
-    <a class="cta" href="https://apps.apple.com/app/id6779471126">Get Seal on the App Store</a>
-    <a class="cta ghost" href="how-it-works.html">Read the technical version</a>
-    <p class="small" style="margin-top:14px">iPhone and iPad. Free to download; one purchase, once, when you seal your first envelope. Key holders and recipients never pay. Open source under MPL 2.0. <a href="limits.html">The limits are here.</a></p>
-  </div>
+<section class="write">
+  <p><b>Want to leave letters of your own?</b> Seal is an iPhone app for the letters and passwords your family will need.
+  They open only if you go quiet for a long time and the people you trust agree.</p>
+  <a class="write-get" href="https://apps.apple.com/app/id6779471126">Get Seal on the App Store</a>
+</section>
 
-  <p>After you die, your will goes through a court, and what is in it becomes a public record that anyone can look up. So passwords, seed phrases, safe combinations and private letters cannot go in one. Those are the things Seal holds instead.</p>
-
-  <h2>Do not take our word for it</h2>
-  <p>Three things are public, so you can check rather than trust.</p>
-  <table>
-    <tr>
-      <th style="width:9em">The source</th>
-      <td>Every line, at <a href="https://github.com/jasonepage/Seal">github.com/jasonepage/Seal</a>. No third party code, no analytics library, nothing that phones home. <a href="how-it-works.html#read-the-code">The six files to read first, in order.</a></td>
-    </tr>
-    <tr>
-      <th>The record</th>
-      <td>Anybody holding part of an estate can export the whole signed history as one file, and <a href="verify.html">a Python script with no Seal in it</a> checks every signature and every timestamp token. If this project ends, that still works.</td>
-    </tr>
-    <tr>
-      <th>The limits</th>
-      <td><a href="limits.html">What Seal does not do</a>, including the parts that are not built and the absence of an audit.</td>
-    </tr>
-  </table>
-
-  <img class="figure" src="figure-envelope.png?v=3" width="322" height="212" alt="A sealed cream envelope with a gold wax seal on the flap">
-  <h2>What you do, once</h2>
-  <ul class="steps">
-    <li><span class="n">1</span><b>Write the envelopes.</b> One for each person. A letter, a few photos, a voice message, and the secrets. You do not need anybody else to start: type a name and write tonight.</li>
-    <li><span class="n">2</span><b>Choose who can open them.</b> A few people you trust, added face to face. They hold pieces of one key, and one piece on its own is no clue at all, not even a hint.</li>
-    <li><span class="n">3</span><b>Set the rule, then seal.</b> How long the silence, how many days of warnings, how long after that, and how many of them it takes. Ninety days, twenty one, fourteen, any two of three, by default.</li>
-    <li><span class="n">4</span><b>Open the app now and then.</b> That is the entire ongoing job. Opening it is the check-in that keeps everything closed.</li>
-  </ul>
-
-  <h2>What happens after</h2>
-  <ul class="steps">
-    <li><span class="n">1</span><b>You go quiet.</b> Nothing begins until you have been silent past the limit you chose. Nobody else sees your check-ins.</li>
-    <li><span class="n">2</span><b>Somebody starts a claim.</b> One of the people you chose says they believe you are gone. Everybody else is told the same day.</li>
-    <li><span class="n">3</span><b>You are warned, every day, for weeks.</b> Then a further quiet period. One tap from you ends all of it at any point, and that tap needs no key.</li>
-    <li><span class="n">4</span><b>Only then do the envelopes open.</b> The people you chose act together, and each envelope opens on the phone of the person it was written for. Nobody reads anybody else’s, including the people holding the keys.</li>
-  </ul>
-
-  <img class="figure" src="figure-drawer.png?v=3" width="352" height="187" alt="A gold key and a printed page lying in an open drawer">
-  <h2>Writing it is the hard part</h2>
-  <p>The way this goes wrong is not the mathematics. It is an empty vault that opens perfectly. So Seal asks questions, one at a time, and turns your answers into a draft you then edit. You can talk instead of typing, and none of that work leaves the phone.</p>
-
-  <div class="note">
-    <p><b>Somebody asked you to hold a key?</b> Nothing is waiting for you to accept, because this is done in person. <a href="https://apps.apple.com/app/id6779471126">Install Seal</a> now and do the rest when you next see them. <a href="support.html">What holding a key involves.</a></p>
-  </div>
-
-  <h2>The objections</h2>
-  <p>Just use a password manager. This has been done before. It is not audited. What if you quit? All fair. <a href="objections.html">Each one gets an answer.</a></p>
-
-  <div class="card">
-    <h3>The short technical answer</h3>
-    <p class="dim">X25519 plus ML-KEM-768 for wrapping, HKDF-SHA256, AES-256-GCM for content, P-256 ECDSA through WebAuthn for identity, Shamir over GF(256) for the key split, RFC 3161 for timestamps. Apple CryptoKit throughout, no third party dependencies. <a href="how-it-works.html">The long answer is here.</a></p>
-  </div>
-
-  <p class="small">Checked against the source on 18 September 2026. This pass: the audit status moved into the opening paragraph, a step list that repeated the one below it was cut, and the probate sentence was rewritten in plain words.</p>
-
-  <footer class="site">
-    <p>Seal is built by Jason Page. The source is at
-    <a href="https://github.com/jasonepage/Seal">github.com/jasonepage/Seal</a>.
-    Questions, including the awkward ones, to
-    <a href="mailto:support@sealmessenger.com">support@sealmessenger.com</a>.</p>
-    <p>&copy; 2026 &middot; <a href="privacy.html">Privacy</a> &middot;
-    <a href="support.html">Support</a> &middot;
-    <a href="limits.html">What Seal does not do</a> &middot;
-    <a href="objections.html">Objections</a> &middot;
-    <a href="limits.html#audit">Fund the audit</a></p>
-  </footer>
-</div>
+<footer class="door-foot">
+  <a href="how-it-works.html">How it works</a>
+  <a href="limits.html">Limits</a>
+  <a href="objections.html">Questions</a>
+  <a href="https://github.com/jasonepage/Seal">Source</a>
+  <a href="support.html">Support</a>
+  <a href="privacy.html">Privacy</a>
+</footer>
 </body>
 </html>

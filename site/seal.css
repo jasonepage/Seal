@@ -116,3 +116,44 @@ code, table a { overflow-wrap:break-word; }
 footer.site { border-top:1px solid var(--rule); margin-top:72px; padding:26px 0 56px;
   color:var(--faint); font-size:15px; }
 footer.site a { color:var(--dim); }
+
+/* ---------------------------------------------------------------- home
+   The home page is a door, not a brochure: the wax seal, one sentence, one
+   button. Someone arriving here has usually been handed a key and may be
+   grieving, so nothing competes with "Open your envelopes". Writers get
+   one quiet paragraph below it; everything else is on the other pages. */
+body.home { display:flex; flex-direction:column; min-height:100vh; min-height:100dvh; }
+.door { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  text-align:center; padding:56px 24px 40px; }
+.door-seal { width:clamp(112px,22vw,160px); height:auto; margin-bottom:28px;
+  filter:drop-shadow(0 10px 18px rgba(80,55,15,.22)); }
+.door h1 { font-size:clamp(36px,7vw,60px); line-height:1.08; letter-spacing:-.015em;
+  margin:0 0 14px; max-width:14ch; }
+.door-line { font-size:20px; color:var(--dim); max-width:30ch; margin:0 0 32px; }
+.door-open { display:inline-block; background:var(--brass); color:var(--paper);
+  font-size:20px; font-weight:650; text-decoration:none; padding:18px 38px;
+  border-radius:999px; box-shadow:0 1px 0 rgba(255,255,255,.25) inset, 0 6px 18px rgba(140,106,43,.28); }
+.door-open:hover { background:var(--brass-bright); color:#1A1714; }
+.door-open:focus-visible, .write-get:focus-visible, .door-foot a:focus-visible {
+  outline:3px solid var(--brass-bright); outline-offset:4px; }
+.door-also { font-size:15px; color:var(--faint); margin:18px 0 0; }
+
+.write { max-width:560px; margin:0 auto; padding:28px 24px 8px; border-top:1px solid var(--rule);
+  text-align:center; color:var(--dim); font-size:17px; }
+.write b { color:var(--ink); font-weight:600; }
+.write-get { display:inline-block; margin-top:4px; font-weight:600; color:var(--brass); }
+
+.door-foot { display:flex; flex-wrap:wrap; justify-content:center; gap:8px 22px;
+  padding:28px 24px 40px; font-size:14px; }
+.door-foot a { color:var(--faint); text-decoration:none; }
+.door-foot a:hover { color:var(--ink); }
+
+/* One moment: the seal is pressed into place once, as wax is. */
+@media (prefers-reduced-motion: no-preference) {
+  .door-seal { animation:press .7s cubic-bezier(.2,.9,.25,1.15) both; }
+  @keyframes press { from { opacity:0; transform:scale(1.12) rotate(-6deg); } to { opacity:1; transform:none; } }
+}
+@media (prefers-color-scheme: dark) {
+  .door-open:hover { color:#14120F; }
+  .door-seal { filter:drop-shadow(0 10px 22px rgba(0,0,0,.5)); }
+}

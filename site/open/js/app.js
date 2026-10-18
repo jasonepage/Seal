@@ -74,13 +74,9 @@ function start() {
   }
   show(
     config.development ? h("div", { class: "note", role: "note" }, h("p", {}, h("b", {}, "Test database. "), "This reads the data debug builds write, not real envelopes.")) : null,
-    h("p", { class: "lede" }, "If someone gave you a security key for Seal, it opens the envelopes they wrote to you, once they are released."),
-    h("ol", { class: "steps" },
-      h("li", {}, h("span", { class: "n" }, "1"), h("b", {}, "Have your key ready. "), "Plug it in, or hold it to your phone when asked. If it has a PIN, you will need it."),
-      h("li", {}, h("span", { class: "n" }, "2"), h("b", {}, "Tap it twice. "), "The first tap says which key it is. The second unlocks your envelopes on this page."),
-      h("li", {}, h("span", { class: "n" }, "3"), h("b", {}, "Read, then close the tab. "), "Nothing is saved in this browser. Closing the tab forgets everything."),
-    ),
-    h("button", { class: "cta", type: "button", on: { click: () => run().catch(failed) } }, "Use my security key"),
+    h("p", { class: "lede" }, "Have the security key you were given ready. If it has a PIN, you will need that too."),
+    h("button", { class: "cta big", type: "button", on: { click: () => run().catch(failed) } }, "Use my security key"),
+    h("p", { class: "small" }, "You will tap it twice. Nothing is saved in this browser."),
   );
 }
 

@@ -9,3 +9,11 @@ button.cta:disabled { opacity:.5; cursor:default; }
 .media { margin:18px 0; }
 .media img, .media video { max-width:100%; height:auto; border-radius:10px; border:1px solid var(--rule); }
 .media audio { width:100%; }
+button.cta.big { font-size:20px; padding:18px 36px; border-radius:999px; margin:6px 0 14px; }
+header.open-head { border-bottom:none; }
+details.safe { margin:48px 0 0; border-top:1px solid var(--rule); padding-top:18px; color:var(--dim); font-size:16px; }
+details.safe summary { cursor:pointer; color:var(--ink); font-weight:600; list-style-position:inside; }
+details.safe summary:focus-visible { outline:3px solid var(--brass-bright); outline-offset:4px; }
+details.safe p { margin-top:12px; }
+.door-foot { display:flex; flex-wrap:wrap; justify-content:flex-start; gap:8px 22px; padding:40px 0 48px; font-size:14px; }
+.door-foot a { color:var(--faint); text-decoration:none; }
