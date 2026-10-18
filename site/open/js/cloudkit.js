@@ -31,7 +31,11 @@ export class CloudKit {
   async #post(path, body) {
     const res = await fetch(`${this.base}/${path}?ckAPIToken=${encodeURIComponent(this.token)}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...(this.origin ? { Origin: this.origin } : {}) },
+      // text/plain, not application/json: a JSON content type makes the
+      // browser ask permission first (a CORS preflight), which CloudKit Web
+      // Services does not answer, so every request failed with a network
+      // error. The body is still JSON; Apple reads it either way.
+      headers: { "Content-Type": "text/plain;charset=UTF-8", ...(this.origin ? { Origin: this.origin } : {}) },
       body: JSON.stringify(body),
       credentials: "omit",
       cache: "no-store",

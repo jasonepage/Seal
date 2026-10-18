@@ -1,7 +1,7 @@
 9a140b595f38bd554e0edb6da0e191bc874945df3b311242093cdb07c05f0f1a  ./index.html
 f59c62528dd423723e0dc4fc1e77f03955f508d5908c715f7cf9b5d01cf71611  ./js/app.js
 4b1a5ab1c7415c75c95db9950230efdd28dfd9a8da191ac83c81c72ad5eeb51e  ./js/bytes.js
-b0306db9a41e9eecfcf046b24d1cb04430fd9d03ba5ea54d608d154d001629f6  ./js/cloudkit.js
+999c04574c90c0d749ac9a61a97601e916d3982887ae58396bed20dbf4b8f879  ./js/cloudkit.js
 b8c76bfc8b1cd481bc50fcc44ccd8da0a8b1f07d12fdaa156219fa126fee8f3f  ./js/config.js
 f9016efaa0f744418257706ed20e1c17fb252c6aeb757db3bfc05c0cc8a3f946  ./js/crypto.js
 eb271beca4dfced0359ec959c8f9d808bed8cec0910cfd3e9dc327e7ccaa7cfd  ./js/ecdsa.js
