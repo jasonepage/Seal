@@ -17,7 +17,41 @@ enum SecretReviewTests {
         .init(name: "secretreview.keysAndStamps") { try keysAndStamps($0) },
         .init(name: "secretreview.ageLines") { try ageLines($0) },
         .init(name: "secretreview.schedule") { try schedule($0) },
+        .init(name: "secretreview.unchangedEnvelope") { try unchangedEnvelope($0) },
     ] }
+
+    /// Open, read, Done: nothing sealed changed, so no re-seal. Any real
+    /// edit still counts.
+    static func unchangedEnvelope(_ t: SelfTest.Context) throws {
+        var saved = Envelope.new(recipientHash: "R", title: "For Karen", now: t0, revealOrder: 0)
+        saved.letter = "Dear Karen"
+        saved.secrets = [try SealedCard.validated(cardType: .password, title: "Bank", value: "hunter2")]
+        saved.sealed = true
+        saved.payloadBlobID = "blob"
+
+        var opened = saved
+        opened.sealed = false
+        opened.updatedAt = t0.addingTimeInterval(day)
+        opened.payloadBlobID = nil
+        opened.secretConfirmations[saved.secrets[0].confirmationKey] = t0.addingTimeInterval(day)
+        t.check(saved.sealsSameAs(opened), "bookkeeping and secret dates alone are not an edit")
+
+        var edited = saved
+        edited.letter = "Dear Karen,"
+        t.check(!saved.sealsSameAs(edited), "one character in the letter is an edit")
+        edited = saved
+        edited.title = "For K"
+        t.check(!saved.sealsSameAs(edited), "a new title is an edit")
+        edited = saved
+        edited.secrets = []
+        t.check(!saved.sealsSameAs(edited), "a removed secret is an edit")
+        edited = saved
+        edited.openNoEarlierThan = t0
+        t.check(!saved.sealsSameAs(edited), "an open date is an edit")
+        edited = saved
+        edited.revealOrder = 1
+        t.check(!saved.sealsSameAs(edited), "a new place in the order is an edit")
+    }
 
     static let t0 = Date(timeIntervalSince1970: 1_800_000_000)
     static let day: TimeInterval = 86_400

@@ -24,6 +24,14 @@ Dates are the day the work landed in the repository. Anything marked
 
 ### Fixed
 
+- Opening an envelope and tapping Done without changing anything no
+  longer un-seals it. Done always saved the envelope, and every save
+  marked it unsealed, so just reading one brought the Seal button back.
+  Now the save compares what would be sealed (title, letter, secrets,
+  media, steps, open date, order, who it is for) against the stored copy
+  and leaves it sealed when nothing differs. Any real edit still un-seals
+  it. (`EstateEngine.swift`, `EstateModels.swift`, self-test
+  `secretreview.unchangedEnvelope`)
 - The three words after a scan. Each phone shows the OTHER person's words,
   but the screen said "say it out loud to each other, matching phrases,"
   so testers compared the two screens and the words never matched. Now

@@ -452,6 +452,22 @@ final class EstateEngine {
     /// Any edit un-seals the envelope so the next seal republishes it.
     func updateEnvelope(_ envelope: Envelope) {
         guard var e = estate, let i = e.envelopes.firstIndex(where: { $0.id == envelope.id }) else { return }
+        // Opened and closed with nothing changed: the stored copy stays as
+        // it is, sealed or not. Only the secret dates are taken, which are
+        // the owner's own and never cost a re-seal (confirmSecret). Before
+        // this, every Done un-sealed the envelope, so just reading one put
+        // the Seal button back on the home screen (TestFlight, 2026-10-17).
+        // The stored copy wins on purpose: attachMedia writes to it directly
+        // while the editor is open, so it can be newer than the editor's.
+        if e.envelopes[i].sealsSameAs(envelope) {
+            var kept = e.envelopes[i]
+            kept.secretConfirmations = envelope.secretConfirmations
+            kept.stampNewSecrets(now: clock.now)
+            guard kept != e.envelopes[i] else { return }
+            e.envelopes[i] = kept
+            estate = e; saveEstate()
+            return
+        }
         var updated = envelope
         updated.updatedAt = clock.now
         updated.sealed = false

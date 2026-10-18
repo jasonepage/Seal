@@ -206,6 +206,25 @@ struct Envelope: Codable, Identifiable, Hashable {
         [payloadBlobID].compactMap { $0 } + allMedia.map(\.blobID)
     }
 
+    /// True when `other` would seal to exactly what this one seals to.
+    /// Ignores the owner's own bookkeeping, which never travels in the
+    /// payload: when it was last saved, whether it is sealed, which payload
+    /// blob holds it, and when each secret was last confirmed. Opening an
+    /// envelope, reading it and tapping Done changes none of what is sealed,
+    /// so it must not cost a re-seal (EstateEngine.updateEnvelope).
+    func sealsSameAs(_ other: Envelope) -> Bool {
+        sealedContent == other.sealedContent
+    }
+
+    private var sealedContent: Envelope {
+        var copy = self
+        copy.updatedAt = .distantPast
+        copy.sealed = false
+        copy.payloadBlobID = nil
+        copy.secretConfirmations = [:]
+        return copy
+    }
+
     static func new(recipientHash: String, title: String, now: Date, revealOrder: Int) -> Envelope {
         Envelope(id: UUID().uuidString, recipientHash: recipientHash, title: title, letter: "",
                  photos: [], voiceNote: nil, secrets: [], revealOrder: revealOrder,

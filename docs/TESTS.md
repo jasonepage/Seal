@@ -8,7 +8,7 @@ is no test host for a passkey. They run on every DEBUG launch. A
 failure blacks the screen on purpose and names the suite. The debug
 Time Travel screen runs them again on demand.
 
-**98 tests in 21 suites.**
+**99 tests in 21 suites.**
 
 ## AttachedFileTests
 
@@ -123,6 +123,7 @@ Time Travel screen runs them again on demand.
 - `secretreview.keysAndStamps`
 - `secretreview.ageLines`
 - `secretreview.schedule`
+- `secretreview.unchangedEnvelope`
 
 ## SecurityFixTests  (not registered, so it does not run)
 
