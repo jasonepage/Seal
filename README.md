@@ -11,7 +11,7 @@
   <a href="LICENSE"><img alt="MPL 2.0" src="https://img.shields.io/badge/license-MPL_2.0-8C6A2B"></a>
   <img alt="iOS 18" src="https://img.shields.io/badge/iOS-18%2B-1A1714">
   <img alt="SwiftUI" src="https://img.shields.io/badge/SwiftUI-CryptoKit-F05138">
-  <img alt="No server" src="https://img.shields.io/badge/backend-none-8C6A2B">
+  <img alt="Nothing we run can read your envelopes" src="https://img.shields.io/badge/server-holds_nothing-8C6A2B">
   <img alt="Audit" src="https://img.shields.io/badge/independent_audit-not_yet-B3261E">
 </p>
 
@@ -38,11 +38,13 @@ gone. Then you open the app now and then, and that is the whole ongoing job.
 
 Seal opens nothing early, and Apple and we cannot open anything at all. (At
 a rule of one, the trust you place in each key holder is total; see
-[the limits page](https://sealmessenger.com/limits.html).) There is no Seal server: the
+[the limits page](https://sealmessenger.com/limits.html).) Nothing we run can read, open or change your envelopes: the
 encrypted envelopes sit in Apple's iCloud under Seal's own container (not your
 personal iCloud storage), the keys never leave the phones,
 and the record of who did what can be checked with a script that has no Seal
-in it.
+in it. The one exception to trusting nothing of ours is the recipient web page
+(`site/open`): it is code this site serves, so the iPhone app stays the
+stronger way to open envelopes.
 
 <p align="center">
   <picture>
@@ -64,8 +66,8 @@ in it.
 | Stage | On the [App Store](https://apps.apple.com/app/id6779471126) since October 2026. Version 1.1 submitted 2026-10-14. |
 | Audit | **None.** One design review before release, by the same assistant that wrote much of the code, found two things worth fixing; both are fixed. See [`docs/REVIEW.md`](docs/REVIEW.md). |
 | Team | One developer. No company, no funding, no investors. |
-| Platform | iPhone and iPad, iOS 18 and later. No Android. One owner device. ML-KEM and the on-phone writing help need iOS 26. |
-| Dependencies | None. No third party code, no analytics, no crash reporter, no backend of ours. |
+| Platform | Owners: iPhone and iPad, iOS 18 and later. Recipients with a security key registered for them: any current browser at sealmessenger.com. No Android app. One owner device. ML-KEM and the on-phone writing help need iOS 26. |
+| Dependencies | The app: none. No third party code, no analytics, no crash reporter. The web page: one small audited library for ML-KEM-768, which browsers do not have built in, vendored and pinned. |
 | Price | One purchase, once. No subscription. Holding a key or receiving an envelope is free. |
 
 `docs/GOTCHAS.md` is the running list of things that went wrong and what they
@@ -229,7 +231,7 @@ All from Apple's CryptoKit and AuthenticationServices. Nothing rolled by hand.
 | Content | AES-256-GCM with a domain separated AAD naming estate, epoch and purpose |
 | Key split | Shamir over GF(256), checked against independent Python vectors |
 | Time | RFC 3161 tokens on check-ins, cancellations, claims, taps, releases, departures and each published epoch; each phone also clamps a claim to the day it first saw it, so nobody can backdate one past the warnings |
-| Storage | CloudKit public database: ciphertext and public keys. World readable, and any signed-in Apple account can write to it, so every reader checks signatures and drops the rest. No Seal server. |
+| Storage | CloudKit public database: ciphertext and public keys. World readable, and any signed-in Apple account can write to it, so every reader checks signatures and drops the rest. Nothing we run stores anything. |
 
 ## Where things are
 

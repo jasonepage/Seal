@@ -23,12 +23,12 @@
     </nav>
   </header>
   <h1>Privacy Policy</h1>
-  <p class="small">Last updated: 18 September 2026</p>
+  <p class="small">Last updated: 17 October 2026</p>
 
   <p>Seal holds the things people cannot afford to have read early. This policy says what leaks as plainly as it says what does not.</p>
 
   <h2>What we can never see</h2>
-  <p>Your letters, photos, voice messages, videos and secrets are encrypted on your phone before they leave it. The keys that open them stay on your devices and are never sent to us. Seal has no server of its own and no way to decrypt anything. There is no password and no email or text reset. If you lose your key, only a backup key you registered earlier can bring your identity back. Nobody else can, including us and Apple.</p>
+  <p>Your letters, photos, voice messages, videos and secrets are encrypted on your phone before they leave it. The keys that open them stay on your devices and are never sent to us. Nothing we run can read, open or change your envelopes, and we have no way to decrypt anything. The one thing we serve that touches an opened envelope is the recipient web page, which runs in your browser; see below. There is no password and no email or text reset. If you lose your key, only a backup key you registered earlier can bring your identity back. Nobody else can, including us and Apple.</p>
   <p>That is a statement about what is technically possible, not a promise about our intentions. We could not hand over an envelope if asked, because we hold nothing that would open one.</p>
   <p>One exception to “keys stay on your devices”: if you register a security key for somebody who is not on Seal yet, that person’s private keys are stored in Seal’s public container, locked under a secret that only their physical security key can compute. Without that key the stored copy cannot be opened. This is the one place any private key material leaves a phone, and it is <a href="limits.html">the newest and least tested part of Seal</a>.</p>
 
@@ -41,6 +41,9 @@
     <li>Invitations, encrypted and addressed by a one way fingerprint of the person invited.</li>
     <li>Device and key revocations you sign, so other phones stop trusting a device you removed.</li>
   </ul>
+
+  <h2>If you use the web page</h2>
+  <p>sealmessenger.com is hosted by Cloudflare. Like any website, Cloudflare sees your IP address and which pages you load. The page talks to Apple’s CloudKit straight from your browser; nothing you open passes through us. The page stores nothing in your browser. It is code this site serves, so whoever controlled the site could change it; the iPhone app never depends on it.</p>
 
   <h2>What the record shows, stated plainly</h2>
   <p>Perfect hiding is not one of the promises. The database is public, so somebody reading it could work out:</p>

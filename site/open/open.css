@@ -1,0 +1,11 @@
+/* The recipient page. Built on seal.css; only what it adds. */
+button.cta { border:none; cursor:pointer; font-family:inherit; }
+button.cta.ghost { border:1px solid var(--rule); }
+button.cta:disabled { opacity:.5; cursor:default; }
+.envelope { border-top:1px solid var(--rule); margin-top:40px; padding-top:8px; }
+.letter { white-space:pre-wrap; font-family:var(--serif); font-size:19px; line-height:1.7;
+  background:var(--paper2); border:1px solid var(--rule); border-radius:10px; padding:22px 24px; margin:22px 0; }
+.secret { font-family:var(--mono); font-size:16px; white-space:pre-wrap; overflow-wrap:anywhere; }
+.media { margin:18px 0; }
+.media img, .media video { max-width:100%; height:auto; border-radius:10px; border:1px solid var(--rule); }
+.media audio { width:100%; }

@@ -51,7 +51,7 @@
     <tr><th>Content</th><td>AES-256-GCM, with a domain separated AAD naming the estate, the epoch and the purpose, so a ciphertext made for one slot cannot be replayed into another.</td></tr>
     <tr><th>The key split</th><td>Shamir’s Secret Sharing over GF(256), M of N. Checked against independently generated Python test vectors.</td></tr>
     <tr><th>Time</th><td>RFC 3161 timestamp tokens on the events that drive the countdown: check-ins, cancellations, claims, key taps, releases, a departure, and each time an epoch is published. Only the event’s digest leaves the phone. Other record entries, such as meeting somebody in person, stay unstamped until you turn that on.</td></tr>
-    <tr><th>Storage</th><td>Apple CloudKit public database, holding ciphertext and public keys. There is no Seal server.</td></tr>
+    <tr><th>Storage</th><td>Apple CloudKit public database, holding ciphertext and public keys. Nothing we run can read, open or change your envelopes. The recipient page on this site is code we serve, and it runs in your browser.</td></tr>
   </table>
 
   <h2>The key hierarchy</h2>

@@ -683,6 +683,35 @@ run fails, the likely places are the ML-KEM seed format (the checker
 expects CryptoKit's seed to be the 64 byte FIPS 203 seed) and
 SponsoredKey.swift needing `import Security` to compile on its own.
 
+### 1.2a as built (2026-10-17, not live)
+
+`site/open/`, tests in `tools/webtests/` (`sh tools/webtests/run.sh`).
+What the page does, in the phone's order: two taps of the security key
+(the first with every verified-tier credential id in the directory, the
+second asking that key for its PRF secret over the sponsored device's
+salt), unlock the sponsored halves, check they match the endorsed bundle,
+open the estate invites, then for each estate fetch the record, admit
+only what endorsed devices signed (owner first, key holders pinned to the
+owner's epoch statement), judge the release, and open tables only after a
+release judged earned whose key matches the owner's commitment.
+
+Things a reviewer should know:
+
+- **The owner's key is trusted on first sight, every visit.** The phone
+  pins it; a browser keeps nothing. That is the same trust a sponsored
+  recipient's phone has on its first sign-in. The page shows the writer's
+  three words so a reader who knows them can compare. A forged estate
+  needs a forged owner identity, signed events and a forged invite, and
+  the words would differ.
+- **Copying a secret** goes through the browser clipboard, which a page
+  cannot limit to the device or clear later. The page says so.
+- **Unknowns to settle before it goes live:** that CloudKit Web Services
+  returns `modified.timestamp` on an anonymous public read (the page falls
+  back to "now", the strictest floor, when it does not); that asset
+  downloads from `*.icloud-content.com` allow a browser to fetch them; and
+  that one security key gives the same PRF secret to Chrome, Safari and
+  iOS (the "must be tried on real hardware" item below).
+
 ### Vectors, set 2 (not written)
 
 Event body encoding and the bytes each event signs (EstateLog), the

@@ -1,2 +1,13 @@
 /.well-known/apple-app-site-association
   Content-Type: application/json
+
+# The recipient page (site/open, PRODUCT.md section 15). It loads only its
+# own files, talks only to Apple's CloudKit, and cannot be framed. Asset
+# downloads come from Apple's content servers under icloud-content.com.
+/open/*
+  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; media-src blob:; connect-src https://api.apple-cloudkit.com https://*.icloud-content.com; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  Cross-Origin-Opener-Policy: same-origin
+  Permissions-Policy: publickey-credentials-get=(self), clipboard-write=(self), camera=(), microphone=(), geolocation=()
+  Cache-Control: no-cache

@@ -3,6 +3,43 @@
 Dates are the day the work landed in the repository. Anything marked
 "not built yet" has been written but never compiled or run on a phone.
 
+## Web 1.2a, the recipient page (built 2026-10-17, not live)
+
+Not deployed. It goes live with `npx wrangler deploy` only after the
+CloudKit token is in `site/open/js/config.js`, the vectors pass on a Mac,
+and one real security key has opened a released test estate in a browser.
+
+### Added
+
+- `site/open/`: open the envelopes written to you in any current browser,
+  Android included, with a security key someone registered for you
+  (PRODUCT.md section 15, 1.2a). Read only. Two taps: the first says which
+  key it is, the second hands over the key's secret (WebAuthn PRF) that
+  unlocks your private keys in memory. Nothing is stored in the browser.
+- The page judges a release exactly as the phone does, not just the key
+  against the commitment: signed events from endorsed devices only, key
+  holders checked against the keys the owner's epoch statement names,
+  RFC 3161 tokens verified under the pinned FreeTSA certificate, and
+  ReleaseFeed rules 1 to 3 with ReleaseMachine. Dating follows the
+  2026-10-17 decision: claims, taps, releases, objections and withdrawals
+  are never earlier than Apple's record modification time.
+- Shows the writer's three words (FingerprintPhrase) so a reader can
+  compare them with "Your words" under the writer's seal in the app.
+- Strict Content Security Policy for `/open/*` in `site/_headers`. One
+  vendored library (ML-KEM-768, @noble/post-quantum 0.7.1), pinned, with
+  `site/open/SHA256SUMS` for every served file (`tools/web_hashes.sh`).
+- Tests, `sh tools/webtests/run.sh`: the timestamp check (143 checks), the
+  identity checks (119), the phone's own release tests ported (189), and an
+  end to end estate with an honest release and seven ways to cheat it (33).
+- `tools/vectors/check.mjs` now tests the page's own crypto code.
+  `tools/vectors/live-check.mjs` runs the page's checks over the real
+  directory and, given estate ids, over real signed events.
+
+### Changed
+
+- Site copy, stage A of docs/WEB_COPY_1.2.md: how-it-works, objections,
+  privacy, README.
+
 ## 1.2 (build 2, with Passwords; build 1 was on TestFlight 2026-10-17)
 
 ### Added

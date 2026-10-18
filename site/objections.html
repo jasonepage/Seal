@@ -35,10 +35,10 @@
   <p>What is different: emergency access hands one person your whole vault, while Seal gives each person their own sealed envelope that nobody else can read, including the people holding the keys. Emergency access runs on the company’s servers and needs that company to still exist and still be honest on the day it matters, which may be twenty years away. And a vault does not hold a letter, a voice message or a video. For many people the letter turns out to be the part they came for.</p>
 
   <h2>“A dead man’s switch is not new.”</h2>
-  <p>Correct. The idea is decades old and there are dozens of them. What is new here is the combination: no server of ours to subpoena, hack or switch off, and what Apple holds is ciphertext; one envelope per person, opened only on that person’s phone; the key split among people you met in person; weeks of daily warnings before anything opens, ended by one tap; and a signed record anybody can check without trusting us. If you know of another tool that does all of that, use it, and tell us which one.</p>
+  <p>Correct. The idea is decades old and there are dozens of them. What is new here is the combination: no server of ours holding anything to subpoena, hack or switch off, and what Apple holds is ciphertext; one envelope per person, opened only on that person’s phone; the key split among people you met in person; weeks of daily warnings before anything opens, ended by one tap; and a signed record anybody can check without trusting us. If you know of another tool that does all of that, use it, and tell us which one.</p>
 
   <h2>“One developer. What happens when you quit, or die?”</h2>
-  <p>Less than you would think. There is no Seal server to switch off. Your envelopes are in Apple’s iCloud, encrypted with keys that never left your phones, and the app keeps working on the phones that have it. Any key holder can export the whole signed record as one file and check it with a <a href="verify.html">short Python script</a> that does not need Seal, this website, or us. The licence lets anybody carry the code on.</p>
+  <p>Less than you would think. No server of ours holds your envelopes, so there is nothing to switch off. If this website went away, the recipient page would go with it; the iPhone app would not notice. Your envelopes are in Apple’s iCloud, encrypted with keys that never left your phones, and the app keeps working on the phones that have it. Any key holder can export the whole signed record as one file and check it with a <a href="verify.html">short Python script</a> that does not need Seal, this website, or us. The licence lets anybody carry the code on.</p>
   <p>What would stop: new downloads, if Apple removed the app, and fixes for new iOS versions. That is a real limit, and it is the same limit every small app has.</p>
 
   <h2>“Apple can read it. It is in iCloud.”</h2>
@@ -47,6 +47,7 @@
 
   <h2>“Open source means nothing. The build Apple ships could be anything.”</h2>
   <p>You cannot prove the binary Apple ships is built from the source you read, and we are not going to pretend otherwise. What limits the damage is the shape of the thing: there is no server of ours for a bad update to send secrets to, and a bad update reaches only what your own phone already holds. That is a limit, not a solution, and <a href="limits.html">reproducible builds are on the list of things not done</a>.</p>
+  <p>The web page is weaker on this point, and we would rather say so than have you find out. A page is fetched fresh on every visit and skips Apple’s review, so whoever controlled this website could change it, even for one visitor. The page loads no code from anywhere else, its source is in the public repository, and <a href="https://github.com/jasonepage/Seal/blob/main/site/open/SHA256SUMS">the hashes of the files it serves</a> are published there to compare. If that is not enough, open your envelopes in the iPhone app, which never depends on this site.</p>
 
   <h2>“Meeting in person is a hassle.”</h2>
   <p>It is, once per person, for about two minutes. It buys the one thing no remote channel gives you: certainty that the key your phone remembers is really theirs. Every alternative trusts a phone number, an email address or a support agent, and each of those is a thing a stranger can take without being near you.</p>
@@ -59,15 +60,15 @@
   <p>It does, from the outside, which is why nothing starts for months and then you are warned every day for weeks before anything opens. One tap on your phone stops all of it, and that tap needs no key. If you can pick up your phone, you are not dead as far as Seal is concerned.</p>
 
   <h2>“iPhone only. Useless.”</h2>
-  <p>iPhone and iPad, and for now that is all. The reason is the Secure Enclave, which is the part of an iPhone or iPad that makes a key and never hands it back out, not to Seal and not to Apple. That is what makes a person’s piece of a key impossible to copy off their device, and it is why the bar to open an estate is M unlocked devices in M different people’s hands rather than M passwords. A browser has nowhere to put a key like that, which is also the answer to why there is no web version: key material in browser storage can be read by a bad script or an extension and is deleted when somebody clears their browsing data. Android is the single most requested thing, and one developer can only build one at a time. If the people you need are on Android, say so; it decides how fast.</p>
+  <p>The person writing needs an iPhone or iPad, and that will stay true. The reason is the Secure Enclave, the part of an iPhone or iPad that makes a key and never hands it back out, not to Seal and not to Apple. The people you write to are different. If you register a security key for someone, they can open their envelopes at <a href="open/">sealmessenger.com/open</a> from any current browser, Android included. The page never puts a key in browser storage: their private key stays locked under a secret only that physical key can compute, is unlocked in memory while the page is open, and is gone when the tab closes. A bad browser extension in that same tab could still see it while it is open, which is why the iPhone app remains the stronger choice. An Android app is still the most requested thing.</p>
 
   <h2>“Why does it cost money?”</h2>
-  <p>Because free things vanish. One purchase, once, pays for the time of the person building it. There is no subscription because there is no server to keep paying for, and a subscription on a product whose job is to still work in twenty years is worth being suspicious of. Holding a key for someone, or receiving an envelope, is free. Only the person writing pays.</p>
+  <p>Because free things vanish. One purchase, once, pays for the time of the person building it. There is no subscription because nothing we run stores your envelopes, so there is nothing to keep paying for, and a subscription on a product whose job is to still work in twenty years is worth being suspicious of. Holding a key for someone, or receiving an envelope, is free. Only the person writing pays.</p>
 
   <h2>“Why should I trust you?”</h2>
   <p>You should not have to. Read the code, run the verifier, and if you find something wrong, <a href="mailto:support@sealmessenger.com">tell us</a>.</p>
 
-  <p class="small">Checked against the source on 18 September 2026. This pass: the claim that no server can be subpoenaed was corrected, since Apple’s can be, and the iPhone answer now says why there is no web version.</p>
+  <p class="small">Checked against the source on 17 October 2026. This pass: the web recipient page, and what it changes about trusting this site.</p>
 
   <footer class="site">
     <p>Seal is built by Jason Page. The source is at

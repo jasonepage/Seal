@@ -17,124 +17,16 @@
 //      node check.mjs ../../docs/vectors/web-set1.json
 
 import { readFileSync } from "node:fs";
-import { ml_kem768 } from "@noble/post-quantum/ml-kem.js";
 import { p256 } from "@noble/curves/nist.js";
+// The page's own code, so passing here is passing there.
+import { fromHex, toHex, fromB64, fromUtf8, sha256, same } from "../../site/open/js/bytes.js";
+import {
+  estateAAD, parseBundle, encodeBundle, loadPrivateBundle, hybridOpenAny,
+  unlockSponsored, openTableRaw, parseTableWrap, openContent, hkdf, aesOpen,
+} from "../../site/open/js/crypto.js";
+import { ml_kem768 } from "../../site/open/vendor/noble-mlkem.js";
 
-const subtle = globalThis.crypto.subtle;
-
-// ---------------------------------------------------------------- bytes
-
-const enc = new TextEncoder();
-export const utf8 = (s) => enc.encode(s);
-export const fromHex = (h) => Uint8Array.from(h.match(/../g) ?? [], (b) => parseInt(b, 16));
-export const toHex = (u) => Array.from(u, (b) => b.toString(16).padStart(2, "0")).join("");
-export const fromB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
-export const concat = (...parts) => {
-  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
-  let at = 0;
-  for (const p of parts) { out.set(p, at); at += p.length; }
-  return out;
-};
-const same = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
-
-// ---------------------------------------------------------------- seal
-
-export const sha256 = async (d) => new Uint8Array(await subtle.digest("SHA-256", d));
-
-export async function hkdf(ikm, salt, info, length = 32) {
-  const k = await subtle.importKey("raw", ikm, "HKDF", false, ["deriveBits"]);
-  return new Uint8Array(await subtle.deriveBits({ name: "HKDF", hash: "SHA-256", salt, info }, k, length * 8));
-}
-
-/** CryptoKit's combined form: 12 byte nonce, ciphertext, 16 byte tag. */
-export async function aesOpen(key, combined, aad) {
-  const k = await subtle.importKey("raw", key, "AES-GCM", false, ["decrypt"]);
-  const iv = combined.slice(0, 12);
-  return new Uint8Array(await subtle.decrypt({ name: "AES-GCM", iv, additionalData: aad, tagLength: 128 }, k, combined.slice(12)));
-}
-
-/** EstateCrypto.aad. Epoch is passed as a decimal string so a UInt64 survives. */
-export const estateAAD = (estateID, epoch, purpose) => utf8(`seal.estate.v1|${estateID}|${String(epoch)}|${purpose}`);
-
-// X25519. WebCrypto will not import a raw private key, so it is wrapped in
-// the fixed PKCS#8 header for X25519 (RFC 8410), which every browser takes.
-const X25519_PKCS8 = fromHex("302e020100300506032b656e04220420");
-
-export async function x25519Private(raw) {
-  return subtle.importKey("pkcs8", concat(X25519_PKCS8, raw), { name: "X25519" }, true, ["deriveBits"]);
-}
-export async function x25519PublicOf(privateKey) {
-  const jwk = await subtle.exportKey("jwk", privateKey);
-  return fromB64(jwk.x.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (jwk.x.length % 4)) % 4));
-}
-export async function x25519(privateKey, peerRaw) {
-  const pub = await subtle.importKey("raw", peerRaw, { name: "X25519" }, false, []);
-  return new Uint8Array(await subtle.deriveBits({ name: "X25519", public: pub }, privateKey, 256));
-}
-
-/** KEMBundle.parse */
-const SKB1 = utf8("SKB1");
-export function parseBundle(b) {
-  if (b.length === 32) return { x25519: b, mlkem768: null };
-  if (b.length === 4 + 32 + 1184 && same(b.slice(0, 4), SKB1)) return { x25519: b.slice(4, 36), mlkem768: b.slice(36) };
-  return null;
-}
-export const encodeBundle = (x, ml) => (ml ? concat(SKB1, x, ml) : x);
-
-/** A device's private KEM half, as the page holds it after unlocking. */
-export async function loadPrivateBundle(x25519Raw, mlkemSeed) {
-  const xPriv = await x25519Private(x25519Raw);
-  const xPub = await x25519PublicOf(xPriv);
-  const ml = mlkemSeed ? ml_kem768.keygen(mlkemSeed) : null;
-  return { xPriv, xPub, mlSecret: ml?.secretKey ?? null, mlPublic: ml?.publicKey ?? null };
-}
-
-/** HybridWrap.open */
-const HYBRID_INFO = utf8("seal.kem.hybrid.v1");
-export async function hybridOpen(env, mine, aad) {
-  const eph = fromB64(env.ephemeralPublicKey);
-  const ss1 = await x25519(mine.xPriv, eph);
-  let ss2 = new Uint8Array(0), ct = new Uint8Array(0), recipientML = new Uint8Array(0);
-  if (env.suite === "x25519+mlkem768") {
-    if (!mine.mlSecret || !env.mlkemCiphertext) throw new Error("hybrid envelope, no lattice key");
-    ct = fromB64(env.mlkemCiphertext);
-    ss2 = ml_kem768.decapsulate(ct, mine.mlSecret);
-    recipientML = mine.mlPublic;
-  } else if (env.suite !== "x25519") {
-    throw new Error(`unknown suite ${env.suite}`);
-  }
-  // The salt names the bundle the sender wrapped to: a classical envelope
-  // was wrapped to a bundle with no lattice key, even if this device has one.
-  const salt = concat(eph, mine.xPub, await sha256(recipientML), await sha256(ct));
-  const key = await hkdf(concat(ss1, ss2), salt, HYBRID_INFO);
-  return aesOpen(key, fromB64(env.ciphertext), aad);
-}
-export async function hybridOpenAny(envs, mine, aad) {
-  for (const env of envs) {
-    try { return await hybridOpen(env, mine, aad); } catch { /* not this copy */ }
-  }
-  throw new Error("no copy opened");
-}
-
-/** SponsoredKey.unlock, then the public parts its endorsement commits to. */
-const SPONSORED_INFO = utf8("seal.sponsored.lock.v1");
-const SPONSORED_AAD = utf8("seal.sponsored.v1");
-export async function unlockSponsored(lockedPrivate, prfOutput, prfSalt) {
-  const lockKey = await hkdf(prfOutput, prfSalt, SPONSORED_INFO);
-  const plain = await aesOpen(lockKey, lockedPrivate, SPONSORED_AAD);
-  const h = JSON.parse(new TextDecoder().decode(plain));
-  const halves = {
-    signingKey: fromB64(h.signingKey),
-    x25519: fromB64(h.x25519),
-    mlkem768Seed: h.mlkem768Seed ? fromB64(h.mlkem768Seed) : null,
-  };
-  const kem = await loadPrivateBundle(halves.x25519, halves.mlkem768Seed);
-  return {
-    halves, kem, lockKey,
-    devicePublicKeyX963: p256.getPublicKey(halves.signingKey, false),
-    kemBundle: encodeBundle(kem.xPub, kem.mlPublic),
-  };
-}
+const utf8 = (s) => new TextEncoder().encode(s);
 
 /** Shamir.combine over GF(2^8), polynomial 0x11B. */
 function gfMul(a, b) {
@@ -161,17 +53,6 @@ export function shamirCombine(encodedShares, threshold) {
   for (let j = 0; j < out.length; j++) used.forEach((s, i) => { out[j] ^= gfMul(s.y[j], basis[i]); });
   return out;
 }
-
-/** EstateKeyHierarchy.openTableKeyAsRecipient, then openTable. */
-export async function openTableAsRecipient(wrap, estateID, estateKey, mine) {
-  const inner = await hybridOpenAny(wrap.releaseWraps, mine, estateAAD(estateID, wrap.epoch, `tablekey.release.${wrap.tableID}`));
-  const tableKey = await aesOpen(estateKey, inner, estateAAD(estateID, wrap.epoch, `tablekey.inner.${wrap.tableID}`));
-  const plain = await aesOpen(tableKey, fromB64(wrap.ciphertext), estateAAD(estateID, 0, `table.${wrap.tableID}`));
-  return { tableKey, plain, table: JSON.parse(new TextDecoder().decode(plain)) };
-}
-
-export const openContent = (blob, contentKey, estateID, blobID) =>
-  aesOpen(contentKey, blob, estateAAD(estateID, 0, `blob.${blobID}`));
 
 // ---------------------------------------------------------------- the checks
 
@@ -217,9 +98,12 @@ async function run(v) {
   // 5. sponsored key
   const s = v.sponsored;
   const u = await unlockSponsored(fromHex(s.lockedPrivate), fromHex(s.prfOutput), fromHex(s.prfSalt));
-  check(toHex(u.lockKey) === s.lockKey, "sponsored: lock key");
-  check(toHex(u.halves.signingKey) === s.halves.signingKey && toHex(u.halves.x25519) === s.halves.x25519, "sponsored: halves");
-  check(toHex(u.devicePublicKeyX963) === s.devicePublicKeyX963, "sponsored: P-256 public key");
+  // The lock key and the halves, computed here the long way to compare with Swift.
+  const lockKey = await hkdf(fromHex(s.prfOutput), fromHex(s.prfSalt), utf8("seal.sponsored.lock.v1"));
+  check(toHex(lockKey) === s.lockKey, "sponsored: lock key");
+  const halves = JSON.parse(fromUtf8(await aesOpen(lockKey, fromHex(s.lockedPrivate), utf8("seal.sponsored.v1"))));
+  check(toHex(fromB64(halves.signingKey)) === s.halves.signingKey && toHex(fromB64(halves.x25519)) === s.halves.x25519, "sponsored: halves");
+  check(toHex(p256.getPublicKey(fromB64(halves.signingKey), false)) === s.devicePublicKeyX963, "sponsored: P-256 public key");
   check(toHex(u.kemBundle) === s.kemBundle, "sponsored: KEM bundle");
   const wrongPrf = fromHex(s.prfOutput); wrongPrf[0] ^= 1;
   await mustThrow(() => unlockSponsored(fromHex(s.lockedPrivate), wrongPrf, fromHex(s.prfSalt)), "sponsored: a wrong secret must not open");
@@ -242,8 +126,10 @@ async function run(v) {
 
   let mineCount = 0;
   for (const t of e.tables) {
-    const wrap = parseStored(t.wrapBase64);
-    const r = await openTableAsRecipient(wrap, e.estateID, fromHex(e.estateKey), u.kem).catch(() => null);
+    // Parsed from the text, as the page does, so the epoch stays exact.
+    const wrap = parseTableWrap(fromUtf8(fromB64(t.wrapBase64)));
+    const r = await openTableRaw(wrap, e.estateID, fromHex(e.estateKey), u.kem)
+      .then((x) => ({ ...x, table: JSON.parse(fromUtf8(x.plain)) })).catch(() => null);
     if (!t.isMine) { check(r === null, "someone else's table does not open"); continue; }
     mineCount++;
     check(r && toHex(r.tableKey) === t.tableKey, "my table key");
