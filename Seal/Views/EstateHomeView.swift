@@ -83,6 +83,8 @@ struct EstateHomeView: View {
     @State private var showTimeTravel = false
     @State private var showFamilyPreview = false
     @State private var showSecretReview = false
+    /// The key button on the Envelopes screen (PasswordsView).
+    @State private var showPasswords = false
     @State private var showCoupleSetup = false
     @State private var showPaywall = false
     @Environment(SealPurchase.self) private var purchase
@@ -314,6 +316,14 @@ struct EstateHomeView: View {
                         Task { await purchase.togglePretendUnpaid() }
                     })
                     #endif
+                }
+                if engines.all.contains(where: { !$0.allSecrets.isEmpty }) {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button { showPasswords = true } label: {
+                            Image(systemName: "key.fill").foregroundStyle(SealTheme.brass)
+                        }
+                        .accessibilityLabel("Passwords")
+                    }
                 }
                 ToolbarItem(placement: .topBarTrailing) { inboxMenu }
                 #if DEBUG
@@ -724,6 +734,16 @@ struct EstateHomeView: View {
                                 onWriteEnvelope: { envelope in showCoupleSetup = false; editing = EnvelopeRef(envelope: envelope, engine: estateEngine) },
                                 onSeal: { showCoupleSetup = false; runSeal() },
                                 onClose: { showCoupleSetup = false })
+                    .environment(\.parentMode, parentMode)
+                    .parentTypeScale()
+            }
+            .sheet(isPresented: $showPasswords) {
+                PasswordsView(engines: engines,
+                              onEdit: { envelope, engine in
+                                  showPasswords = false
+                                  editing = EnvelopeRef(envelope: envelope, engine: engine)
+                              },
+                              onClose: { showPasswords = false })
                     .environment(\.parentMode, parentMode)
                     .parentTypeScale()
             }

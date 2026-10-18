@@ -3,6 +3,29 @@
 Dates are the day the work landed in the repository. Anything marked
 "not built yet" has been written but never compiled or run on a phone.
 
+## 1.3 (not built yet)
+
+### Added
+
+- Passwords, for every day. A key button on the Envelopes screen (shown
+  once there is a secret) opens every secret from every envelope and
+  every rule in one list. One Face ID check opens it, always, whatever
+  the card lock setting; it locks again when the app goes to the
+  background. Search by name, note, kind or who it is for, never by the
+  secret itself. Copy works without showing the value and goes through
+  the same rules as the recipient's copy: this phone only, cleared in 90
+  seconds, read back and shown. The same secret in two envelopes is one
+  row naming both people. Nothing in the list writes: the pencil opens
+  the envelope in the editor, where a change un-seals it as before.
+  Secrets still live only in envelopes; there are no just-for-me secrets.
+  (`PasswordsView.swift`, `EstateHomeView.swift`)
+
+### Changed
+
+- The copy rules moved into one place, `SecretClipboard.swift`, which the
+  recipient's reveal screen and the Passwords list both call, so the two
+  cannot drift apart. (`RevealView.swift`)
+
 ## 1.2 (built, on TestFlight 2026-10-17, not yet submitted)
 
 ### Added

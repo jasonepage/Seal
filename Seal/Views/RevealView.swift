@@ -416,21 +416,9 @@ struct RevealPager: View {
                 Text(note).font(.callout).foregroundStyle(.white.opacity(0.6)).fixedSize(horizontal: false, vertical: true)
             }
             Button {
-                // This phone only (no Universal Clipboard to a Mac or iPad),
-                // and the system clears it by itself after a short time. A
-                // seed phrase left in the clipboard is readable by the next
-                // app that asks (audit, medium).
-                UIPasteboard.general.setItems(
-                    [[UTType.utf8PlainText.identifier: card.value]],
-                    options: [.localOnly: true,
-                              .expirationDate: Date().addingTimeInterval(SealedCard.clipboardLifetime)])
-                if let back = UIPasteboard.general.string {
-                    copied = back == card.value
-                        ? SealedCard.copyConfirmation(for: back) + " The clipboard clears itself in \(Int(SealedCard.clipboardLifetime)) seconds."
-                        : "Something changed the clipboard between the copy and the check. Do not paste it."
-                } else {
-                    copied = "Copied, but the clipboard would not confirm what it holds. Check before you paste."
-                }
+                // This phone only, cleared by itself, read back and shown
+                // (SecretClipboard.swift).
+                copied = SecretClipboard.copy(card)
             } label: { Label(card.cardType.copyLabel, systemImage: "doc.on.doc").frame(maxWidth: .infinity) }
             .buttonStyle(.bordered).tint(SealTheme.brass)
             .parentTapTarget()
