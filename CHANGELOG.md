@@ -3,7 +3,7 @@
 Dates are the day the work landed in the repository. Anything marked
 "not built yet" has been written but never compiled or run on a phone.
 
-## 1.3 (not built yet)
+## 1.2 (build 2, with Passwords; build 1 was on TestFlight 2026-10-17)
 
 ### Added
 
@@ -20,16 +20,6 @@ Dates are the day the work landed in the repository. Anything marked
   Secrets still live only in envelopes; there are no just-for-me secrets.
   (`PasswordsView.swift`, `EstateHomeView.swift`)
 
-### Changed
-
-- The copy rules moved into one place, `SecretClipboard.swift`, which the
-  recipient's reveal screen and the Passwords list both call, so the two
-  cannot drift apart. (`RevealView.swift`)
-
-## 1.2 (built, on TestFlight 2026-10-17, not yet submitted)
-
-### Added
-
 - Envelopes now reach a person's new device while the owner is alive
   (PRODUCT.md section 15, item 1). A recipient's key table was only ever
   wrapped to the devices they had at the last seal, so a new iPhone, a
@@ -44,6 +34,12 @@ Dates are the day the work landed in the repository. Anything marked
   (`EstateEngine.swift`, `EstateModels.swift`, `OwnerNotices.swift`,
   `HomeView.swift`, `SealApp.swift`, `EstateHomeView.swift`, self-test
   `estatekeys.newDevice`)
+
+### Changed
+
+- The copy rules moved into one place, `SecretClipboard.swift`, which the
+  recipient's reveal screen and the Passwords list both call, so the two
+  cannot drift apart. (`RevealView.swift`)
 
 ### Fixed
 
