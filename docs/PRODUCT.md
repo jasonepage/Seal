@@ -577,6 +577,23 @@ implementation of this protocol is safe to ship.
 - **The copy changes ship with 1.2a, not before.** Drafted, stage by
   stage, in docs/WEB_COPY_1.2.md.
 - **Test vectors before any page.** Set 1 is written (below).
+- **How the browser dates events (decided 2026-10-17).** The phone keeps
+  FirstSeen, the moment it first held each event, so a key holder cannot
+  backdate a claim, a tap, a release, an objection or a withdrawal. A
+  browser keeps nothing, and timestamp tokens alone do not cover it:
+  objections and withdrawals are never stamped (`EstateEngine.publish`),
+  and stamping runs in the background and can fail. So for those five
+  kinds the browser uses the verified token time, or the actor's own
+  time when there is none, and never earlier than the CloudKit record's
+  modification time. Apple's server sets that time, nobody's phone does.
+  Modification, not creation: a record made empty early and filled in
+  later with a backdated event would carry an early creation time. Only
+  the record's author can change it, and attaching a token is the only
+  normal change, so the worst it does is date an event a little later,
+  which can delay a release and never open one early. Every other kind
+  keeps the token-or-claimed rule, as on the phone. To check while
+  building: that CloudKit Web Services returns `modified.timestamp` on an
+  anonymous read of the public database.
 
 ### What reading the code on 2026-10-16 changed in this plan
 
