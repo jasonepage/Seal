@@ -56,6 +56,7 @@ const dateLine = (s) => new Date(s * 1000).toLocaleDateString(undefined, { year:
 // ---------------------------------------------------------------- start
 
 function start() {
+  if (config.development) document.title = "TEST DATABASE: " + document.title;
   if (!config.apiToken) {
     problem("This page is not switched on yet. Your envelopes are safe, and the Seal app on an iPhone opens them today.", false);
     return;
@@ -65,6 +66,7 @@ function start() {
     return;
   }
   show(
+    config.development ? h("div", { class: "note", role: "note" }, h("p", {}, h("b", {}, "Test database. "), "This reads the data debug builds write, not real envelopes.")) : null,
     h("p", { class: "lede" }, "If someone gave you a security key for Seal, it opens the envelopes they wrote to you, once they are released."),
     h("ol", { class: "steps" },
       h("li", {}, h("span", { class: "n" }, "1"), h("b", {}, "Have your key ready. "), "Plug it in, or hold it to your phone when asked. If it has a PIN, you will need it."),

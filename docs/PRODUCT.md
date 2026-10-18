@@ -660,7 +660,7 @@ implementation of this protocol is safe to ship.
    (@noble/curves) unless signing can be done with WebCrypto alone. The
    README row splits into app and web.
 
-### Vectors, set 1 (written 2026-10-16, not yet run on a Mac)
+### Vectors, set 1 (written 2026-10-16, passing on a Mac 2026-10-17: 34 checks)
 
 `tools/vectors/main.swift`, run by `sh tools/export_vectors.sh`, compiles
 the app's own KEMBundle, Shamir, EstateKeys and SponsoredKey source and
@@ -676,7 +676,9 @@ libraries, using functions written to move into the page unchanged:
     cd tools/vectors && npm install
     node check.mjs ../../docs/vectors/web-set1.json
 
-The checker was tested against a stand-in file made by separate Python
+First run against the real Swift output on 2026-10-17: 34 checks, 0
+failures, using the page's own crypto code (`site/open/js/crypto.js`).
+Before that, the checker was tested against a stand-in file made by separate Python
 code (31 checks pass, and a flipped byte in a blob and a wrong ML-KEM
 secret both fail). It has not yet met the Swift output. If the first Mac
 run fails, the likely places are the ML-KEM seed format (the checker
