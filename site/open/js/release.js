@@ -418,3 +418,23 @@ export async function openingAllowed(events, ownerHash) {
   // A departure whose body does not decode counts as a cancel, as on the phone.
   return !mine.some((e) => (e.body?.keepEnvelopes ?? false) === false);
 }
+
+// ---------------------------------------------------------------- what a key holder may do
+
+/** ReleaseMachine.custodianCanClaim */
+export function custodianCanClaim(s, now) {
+  if (state(s, now) === "overdue") return true;
+  // After a veto, a new claim may open once the silence period stands again.
+  if (voidReason(s) === "vetoed") return now - silenceAnchor(s) > silence(s.policy);
+  return false;
+}
+
+/** ReleaseMachine.custodianCanAuthorize */
+export function custodianCanAuthorize(s, now, custodianHash) {
+  const st = state(s, now);
+  if (st !== "claimOpen" && st !== "authorized") return false;
+  return !validAuthorizations(s, now).some((a) => a.custodianHash === custodianHash);
+}
+
+/** ReleaseMachine.claimantCanRelease */
+export const claimantCanRelease = (s, now) => state(s, now) === "authorized";

@@ -66,7 +66,7 @@ stronger way to open envelopes.
 | Stage | On the [App Store](https://apps.apple.com/app/id6779471126) since October 2026. Version 1.1 submitted 2026-10-14. |
 | Audit | **None.** One design review before release, by the same assistant that wrote much of the code, found two things worth fixing; both are fixed. See [`docs/REVIEW.md`](docs/REVIEW.md). |
 | Team | One developer. No company, no funding, no investors. |
-| Platform | Owners: iPhone and iPad, iOS 18 and later. Recipients with a security key registered for them: any current browser at sealmessenger.com. No Android app. One owner device. ML-KEM and the on-phone writing help need iOS 26. |
+| Platform | Owners: iPhone and iPad, iOS 18 and later. Recipients and key holders with a security key registered for them: any current browser at sealmessenger.com. No Android app. One owner device. ML-KEM and the on-phone writing help need iOS 26. |
 | Dependencies | The app: none. No third party code, no analytics, no crash reporter. The web page: one small audited library for ML-KEM-768, which browsers do not have built in, vendored and pinned. |
 | Price | One purchase, once. No subscription. Holding a key or receiving an envelope is free. |
 
@@ -231,7 +231,7 @@ All from Apple's CryptoKit and AuthenticationServices. Nothing rolled by hand.
 | Content | AES-256-GCM with a domain separated AAD naming estate, epoch and purpose |
 | Key split | Shamir over GF(256), checked against independent Python vectors |
 | Time | RFC 3161 tokens on check-ins, cancellations, claims, taps, releases, departures and each published epoch; each phone also clamps a claim to the day it first saw it, so nobody can backdate one past the warnings |
-| Storage | CloudKit public database: ciphertext and public keys. World readable, and any signed-in Apple account can write to it, so every reader checks signatures and drops the rest. Nothing we run stores anything. |
+| Storage | CloudKit public database: ciphertext and public keys. World readable, and any signed-in Apple account can write to it, so every reader checks signatures and drops the rest. Nothing we run stores anything. Key holders on the web write through a stateless relay on our Cloudflare Worker (`worker/`), which only passes on entries they already signed; it could fail to deliver one, or delete one it delivered. |
 
 ## Where things are
 

@@ -34,6 +34,7 @@ import { isDeepStrictEqual, inspect } from "node:util";
 import {
   effectiveTime, policyWith, snapshot, voidReason, timeline, validAuthorizations,
   state, releaseEarned, silentDays, openingAllowed,
+  custodianCanClaim, custodianCanAuthorize, claimantCanRelease,
 } from "../../site/open/js/release.js";
 
 // ---------------------------------------------------------------- harness (SelfTest.Context)
@@ -98,20 +99,8 @@ function nextTransition(s, now) {
 }
 /** ReleaseMachine.ownerCanCancel */
 const ownerCanCancel = (s, now) => claimIsLive(state(s, now));
-/** ReleaseMachine.custodianCanClaim */
-function custodianCanClaim(s, now) {
-  if (state(s, now) === "overdue") return true;
-  if (voidReason(s) === "vetoed") return now - silenceAnchor(s) > s.policy.silenceDays * DAY;
-  return false;
-}
-/** ReleaseMachine.custodianCanAuthorize */
-function custodianCanAuthorize(s, now, custodianHash) {
-  const st = state(s, now);
-  if (st !== "claimOpen" && st !== "authorized") return false;
-  return !validAuthorizations(s, now).some((a) => a.custodianHash === custodianHash);
-}
-/** ReleaseMachine.claimantCanRelease */
-const claimantCanRelease = (s, now) => state(s, now) === "authorized";
+// custodianCanClaim, custodianCanAuthorize and claimantCanRelease now live
+// in release.js (the key holder page uses them) and are imported above.
 /** DepartureRules.earliestClaim */
 const earliestClaim = (s) => silenceAnchor(s) + s.policy.silenceDays * DAY;
 /** DepartureRules.earliestOpening */

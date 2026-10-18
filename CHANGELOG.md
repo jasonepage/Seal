@@ -3,7 +3,28 @@
 Dates are the day the work landed in the repository. Anything marked
 "not built yet" has been written but never compiled or run on a phone.
 
-## Web 1.2a, the recipient page (built 2026-10-17, not live)
+## Web 1.2b, key holders on the web (built 2026-10-17, not deployed)
+
+### Added
+
+- Key holders with a security key registered for them can confirm they
+  still have their key, start a claim, object, withdraw, tap, and combine,
+  at sealmessenger.com/open, Android included (PRODUCT.md section 15,
+  1.2b). Same guards as the phone, signed by their own device key.
+- The relay, `worker/index.js`, on the Worker that serves the site:
+  checks each entry the way a phone would, stamps claims, taps and
+  releases with FreeTSA, and saves with the server-to-server key
+  (`worker/cloudkit-s2s.js`). The page reads Apple's copy back before it
+  says saved. Secret `CLOUDKIT_PRIVATE_KEY`, key id in `wrangler.toml`.
+- Tests: `tools/webtests/keyholder.test.mjs`, 32 checks.
+
+### Changed
+
+- Site copy, stage B of docs/WEB_COPY_1.2.md, plus one line it did not
+  have: the relay can delete an entry it delivered.
+- The recipient page's own copy now covers key holders.
+
+## Web 1.2a, the recipient page (built 2026-10-17, live 2026-10-17)
 
 Not deployed. It goes live with `npx wrangler deploy` only after the
 CloudKit token is in `site/open/js/config.js`, the vectors pass on a Mac,

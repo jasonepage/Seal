@@ -724,6 +724,40 @@ Things a reviewer should know:
   that one security key gives the same PRF secret to Chrome, Safari and
   iOS (the "must be tried on real hardware" item below).
 
+### 1.2b as built (2026-10-17, not deployed)
+
+Key holders with a security key registered for them can do their part
+on the same page: confirm they still have their key, start a claim,
+object or withdraw an objection, tap, and, as the claimant, combine.
+Each is a port of the EstateEngine function of the same name, with the
+same guards (ReleaseMachine, now in release.js), signed by the sponsored
+virtual device's own P-256 key (signer.js), so every phone admits it as
+an entry from an endorsed device of that key holder. Code:
+`site/open/js/keyholder.js`, `signer.js`, and the relay in `worker/`.
+
+The relay (`POST /relay/event` on the same Worker as the site):
+same-origin only; refuses anything but a key holder's kind of entry,
+anything whose signature does not check out, and anything not signed by
+a device the actor's own root key endorsed; for claims, taps and
+releases, asks FreeTSA for a token and attaches it only if it verifies
+under the pinned certificate; then creates the record with the
+server-to-server key, never replacing one. The page then reads Apple's
+copy back and says "saved" only when it is the entry it signed.
+
+Found on 2026-10-17 in the CloudKit Console: `_creator` has Write on
+every record type, so the relay key can change or delete what it
+created. Changing breaks the signature, so the phones drop it; deleting
+is the real power, above all over an objection. The site says so.
+Taking Write away from `_creator` would break the phones, which update
+their own records.
+
+Not in 1.2b: making a new browser device for someone who uses the app
+(item 2 above). Only sponsored keys work on the web, for both roles.
+Tests: `tools/webtests/keyholder.test.mjs` (custody, claim refused early
+then accepted, objection and withdrawal, taps refused during warnings and
+twice, release refused for a non-claimant, the combine, the recipient
+opening, the relay refusing five ways, server-to-server signing).
+
 ### Vectors, set 2 (not written)
 
 Event body encoding and the bytes each event signs (EstateLog), the

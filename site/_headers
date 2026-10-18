@@ -5,7 +5,7 @@
 # own files, talks only to Apple's CloudKit, and cannot be framed. Asset
 # downloads come from Apple's content servers under icloud-content.com.
 /open/*
-  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; media-src blob:; connect-src https://api.apple-cloudkit.com https://*.icloud-content.com; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'
+  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; media-src blob:; connect-src 'self' https://api.apple-cloudkit.com https://*.icloud-content.com; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
   Cross-Origin-Opener-Policy: same-origin

@@ -1,6 +1,9 @@
 # Copy changes for Seal in a browser (1.2)
 
-Drafted 2026-10-16 from PRODUCT.md section 15. **Nothing here is live.**
+Drafted 2026-10-16 from PRODUCT.md section 15. **Stage A went live with
+1.2a on 2026-10-17. Stage B was applied with 1.2b (built 2026-10-17), with one
+addition: the relay can also delete what it delivered, since CloudKit lets a
+record's creator write it.** Kept for the record.
 Apply each stage in the same commit that ships it, and not before, or the
 site will describe a page that does not exist yet.
 

@@ -1,7 +1,21 @@
-# Deploys the static site in ./site to the existing Worker serving sealmessenger.com.
+# Deploys sealmessenger.com: the static site in ./site, plus one route,
+# POST /relay/event, the relay key holders on the web write through
+# (worker/index.js, PRODUCT.md section 15, 1.2b).
 # Usage: npx wrangler deploy   (from the repo root)
+#
+# The relay's private key is a secret, never in this file:
+#   npx wrangler secret put CLOUDKIT_PRIVATE_KEY
 name = "plain-darkness-c20d"
+main = "worker/index.js"
 compatibility_date = "2026-08-25"
 
 [assets]
 directory = "site"
+binding = "ASSETS"
+
+[vars]
+CLOUDKIT_CONTAINER = "iCloud.io.github.jasonepage.Seal"
+CLOUDKIT_ENVIRONMENT = "production"
+# The server-to-server key's ID from the CloudKit Console. Not a secret.
+CLOUDKIT_KEY_ID = "6b658047da971d44b2a7fd7710c791b12d12a89d18f8c2b7727ebf1dc9f6db3e"
+ALLOWED_ORIGIN = "https://sealmessenger.com"

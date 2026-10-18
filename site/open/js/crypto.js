@@ -13,7 +13,7 @@
 //  openTable and openContent.
 
 import { ml_kem768 } from "../vendor/noble-mlkem.js";
-import { utf8, fromUtf8, fromHex, fromB64, concat, same, sha256, subtle } from "./bytes.js";
+import { utf8, fromUtf8, fromHex, fromB64, toB64, concat, same, sha256, subtle } from "./bytes.js";
 
 export async function hkdf(ikm, salt, info, length = 32) {
   const k = await subtle.importKey("raw", ikm, "HKDF", false, ["deriveBits"]);
@@ -108,7 +108,95 @@ export async function unlockSponsored(lockedPrivate, prfOutput, prfSalt) {
   const x = fromB64(h.x25519);
   const seed = h.mlkem768Seed ? fromB64(h.mlkem768Seed) : null;
   const kem = await loadPrivateBundle(x, seed);
-  return { kem, kemBundle: encodeBundle(kem.xPub, kem.mlPublic) };
+  // The P-256 signing half, raw. Key holders on the web sign record entries
+  // with it (1.2b); a recipient never does.
+  return { kem, kemBundle: encodeBundle(kem.xPub, kem.mlPublic), signingKey: fromB64(h.signingKey) };
+}
+
+/**
+ * HybridWrap.wrap to one public bundle (KEMBundle.swift): a fresh X25519
+ * ephemeral, plus ML-KEM-768 when the bundle has a lattice key. Returns
+ * the Envelope as JSON, the shape the phones decode.
+ */
+export async function hybridWrap(secret, bundleBytes, aad) {
+  const bundle = parseBundle(bundleBytes);
+  if (!bundle) throw new Error("bad recipient bundle");
+  const eph = await subtle.generateKey({ name: "X25519" }, true, ["deriveBits"]);
+  const ephPub = new Uint8Array(await subtle.exportKey("raw", eph.publicKey));
+  const peer = await subtle.importKey("raw", bundle.x25519, { name: "X25519" }, false, []);
+  const ss1 = new Uint8Array(await subtle.deriveBits({ name: "X25519", public: peer }, eph.privateKey, 256));
+  let ss2 = new Uint8Array(0), ct = new Uint8Array(0);
+  if (bundle.mlkem768) {
+    const r = ml_kem768.encapsulate(bundle.mlkem768);
+    ss2 = r.sharedSecret; ct = r.cipherText;
+  }
+  const salt = concat(ephPub, bundle.x25519, await sha256(bundle.mlkem768 ?? new Uint8Array(0)), await sha256(ct));
+  const key = await hkdf(concat(ss1, ss2), salt, HYBRID_INFO);
+  return {
+    suite: bundle.mlkem768 ? "x25519+mlkem768" : "x25519",
+    ephemeralPublicKey: toB64(ephPub),
+    ...(bundle.mlkem768 ? { mlkemCiphertext: toB64(ct) } : {}),
+    ciphertext: toB64(await aesSeal(key, secret, aad)),
+  };
+}
+
+/** HybridWrap.wrapToAll: one copy per distinct bundle that parses; at least one. */
+export async function hybridWrapToAll(secret, bundles, aad) {
+  const seen = new Set();
+  const out = [];
+  for (const b of bundles) {
+    const k = toB64(b);
+    if (!b.length || seen.has(k) || !parseBundle(b)) continue;
+    seen.add(k);
+    try { out.push(await hybridWrap(secret, b, aad)); } catch { /* skipped, as on the phone */ }
+  }
+  if (!out.length) throw new Error("no device to wrap to");
+  return out;
+}
+
+/** CryptoKit AES.GCM.seal, combined form. */
+export async function aesSeal(key, plain, aad) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const k = await subtle.importKey("raw", key, "AES-GCM", false, ["encrypt"]);
+  const ct = new Uint8Array(await subtle.encrypt({ name: "AES-GCM", iv, additionalData: aad, tagLength: 128 }, k, plain));
+  return concat(iv, ct);
+}
+
+// ---------------------------------------------------------------- shares
+
+/** Shamir.Share(encoded:): index byte then bytes; index never 0. */
+export function parseShare(encoded) {
+  if (!encoded || encoded.length < 2 || encoded[0] === 0) return null;
+  return { index: encoded[0], bytes: encoded.slice(1), encoded };
+}
+export const shareCommitment = (share) => sha256(share.encoded);
+
+function gfMul(a, b) {
+  let r = 0;
+  while (b) { if (b & 1) r ^= a; a <<= 1; if (a & 0x100) a ^= 0x11b; b >>= 1; }
+  return r & 0xff;
+}
+function gfInv(a) {
+  let r = 1, base = a, e = 254;
+  while (e) { if (e & 1) r = gfMul(r, base); base = gfMul(base, base); e >>= 1; }
+  return r;
+}
+/** Shamir.combine over GF(2^8), polynomial 0x11B, first `threshold` shares. */
+export function shamirCombine(shares, threshold) {
+  if (shares.length < threshold || threshold < 1) throw new Error("not enough shares");
+  const used = shares.slice(0, threshold);
+  const xs = new Set(used.map((s) => s.index));
+  if (xs.size !== used.length || xs.has(0)) throw new Error("bad share index");
+  const length = used[0].bytes.length;
+  if (!length || used.some((s) => s.bytes.length !== length)) throw new Error("share lengths differ");
+  const basis = used.map((si, i) => {
+    let num = 1, den = 1;
+    used.forEach((sk, k) => { if (k !== i) { num = gfMul(num, sk.index); den = gfMul(den, si.index ^ sk.index); } });
+    return gfMul(num, gfInv(den));
+  });
+  const out = new Uint8Array(length);
+  for (let j = 0; j < length; j++) used.forEach((s, i) => { out[j] ^= gfMul(s.bytes[j], basis[i]); });
+  return out;
 }
 
 /**

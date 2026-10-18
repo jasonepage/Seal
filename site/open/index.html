@@ -11,7 +11,7 @@
 <link rel="stylesheet" href="../seal.css">
 <link rel="stylesheet" href="open.css">
 <title>Open your envelopes</title>
-<meta name="description" content="Open the Seal envelopes someone wrote to you, with the security key they gave you. Read only, in any current browser.">
+<meta name="description" content="Open the Seal envelopes someone wrote to you, or do your part as a key holder, with the security key they gave you, in any current browser.">
 <script type="module" src="js/app.js"></script>
 </head>
 <body>
@@ -33,6 +33,7 @@
 
   <div class="note">
     <p><b>What this page is.</b> It runs on your device, reads locked data from Apple’s servers, and opens it with your key. Nothing we run can read, open or change your envelopes, and this page saves nothing.</p>
+    <p>If you hold a key, what you sign here goes to Apple through a small relay of ours. It cannot forge or change what you signed. It can fail to deliver it, or delete it later, so the page checks Apple’s copy before it says anything was saved.</p>
     <p>A web page is weaker than the app in one way, and we would rather say so. It is fetched fresh on every visit and skips Apple’s review, so whoever controlled this website could change it, even for one visitor. It loads no code from anywhere else, and <a href="https://github.com/jasonepage/Seal/tree/main/site/open">its source is public</a>. If that is not enough, open your envelopes in the iPhone app, which never depends on this site.</p>
   </div>
 

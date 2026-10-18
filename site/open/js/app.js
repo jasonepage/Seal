@@ -4,12 +4,14 @@
 
 //  app.js
 //
-//  The recipient page (PRODUCT.md section 15, 1.2a). Read only. Two taps
-//  of the security key someone registered for this person: the first says
-//  which key it is, the second hands over the key's secret (WebAuthn PRF)
-//  that unlocks this person's private keys, in memory only. Then the page
-//  finds the envelopes written to them, judges each release the way the
-//  phone does, and opens only what was released.
+//  The web page for recipients and key holders (PRODUCT.md section 15,
+//  1.2a and 1.2b). Two taps of the security key someone registered for
+//  this person: the first says which key it is, the second hands over the
+//  key's secret (WebAuthn PRF) that unlocks this person's private keys, in
+//  memory only. Then the page finds every estate that named them, judges
+//  each release the way the phone does, opens only what was released, and
+//  lets a key holder confirm, claim, object, tap and combine, each one an
+//  entry signed here and sent through the relay (worker/index.js).
 //
 //  Everything the writer wrote is shown with textContent, never as HTML.
 //  Nothing is written to browser storage. Closing the tab forgets it all.
@@ -18,11 +20,16 @@ import { config } from "./config.js";
 import { toHex, sha256, same } from "./bytes.js";
 import { CloudKit, bytesField, stringField } from "./cloudkit.js";
 import { unlockSponsored } from "./crypto.js";
+import { signingKeyFrom } from "./signer.js";
+import { buildAction, publish } from "./keyholder.js";
+import { custodianCanClaim, custodianCanAuthorize, claimantCanRelease, voidReason, silentDays } from "./release.js";
 import { fetchIdentity, findInvites, judgeEstate, openEstate, openMedia } from "./estate.js";
 import { verifiedDevices } from "./identity.js";
 import { phrase } from "./words.js";
 
 const main = document.getElementById("app");
+/** The signed-in person, in memory only, for this tab. */
+let session = null;
 
 // ---------------------------------------------------------------- tiny DOM
 
@@ -143,20 +150,36 @@ async function run() {
   // The keys that unlocked must be the ones the person's own key endorsed.
   if (!same(unlocked.kemBundle, sponsored.kemBundlePublicKeys)) throw new Error("The unlocked keys do not match what the directory lists. Nothing was opened.");
   const kems = [unlocked.kem];
+  // The same device's signing half, for key holders (1.2b). Checked against
+  // the public half the endorsement commits to before it signs anything.
+  const signer = await signingKeyFrom(unlocked.signingKey, sponsored.devicePublicKey);
+  session = { ck, me, kems, holder: { hash: myHash, credentialID, signer, kems } };
+  await refresh();
+}
 
-  working("Finding envelopes written to you…");
-  const invites = (await findInvites(ck, myHash, kems)).filter((i) => i.role === "recipient");
+/** Everything this person is part of, judged again from the record. */
+async function refresh() {
+  const { ck, me, kems } = session;
+  working("Finding what you are part of…");
+  const invites = await findInvites(ck, me.root.credentialIDHash, kems);
   if (!invites.length) {
-    show(h("p", { class: "lede" }, `Signed in as ${me.root.displayName}.`), h("p", {}, "Nobody has written envelopes to you yet, or the writer has not sealed them. Check again later."));
+    show(h("p", { class: "lede" }, `Signed in as ${me.root.displayName}.`), h("p", {}, "Nobody has written envelopes to you or made you a key holder yet, or the writer has not sealed. Check again later."));
     return;
+  }
+  const byEstate = new Map();
+  for (const i of invites) {
+    const have = byEstate.get(i.estateID);
+    if (have) have.roles.add(i.role); else byEstate.set(i.estateID, { ...i, roles: new Set([i.role]) });
   }
   const now = nowSeconds();
   const judged = [];
-  for (const invite of invites) {
+  for (const invite of byEstate.values()) {
     working(`Checking the record for ${invite.ownerName || "a writer"}…`);
-    judged.push(await judgeEstate(ck, invite, now));
+    const j = await judgeEstate(ck, invite, now);
+    j.roles = invite.roles;
+    judged.push(j);
   }
-  await list(ck, me, kems, judged, now);
+  await list(judged, now);
 }
 
 // ---------------------------------------------------------------- the list
@@ -165,31 +188,102 @@ function stateLine(j, now) {
   if (j.problem === "owner") return "The writer's record could not be checked, so nothing here is opened.";
   if (!j.openingAllowed) return "The writer cancelled these envelopes when they deleted their Seal account. They can never be opened.";
   switch (j.state) {
-    case "released": return "Released. You can open them.";
+    case "released": return "Released.";
     case "warning":
-    case "grace": return `Not open yet. A key holder started the release, and the writer is being warned${j.timeline ? `. The earliest they could open is ${dateLine(j.timeline.claimOpensAt)}` : ""}.`;
-    case "claimOpen":
-    case "authorized": return "Not open yet. The key holders are being asked to tap their keys.";
-    case "objected": return "Not open yet. A key holder objected, so the release is on hold.";
-    default: return "Still sealed. They open only if the writer goes quiet for a long time and their key holders agree.";
+    case "grace": return `Not open yet. A key holder started the release, and the writer is being warned${j.timeline ? `. Keys can be tapped from ${dateLine(j.timeline.claimOpensAt)}` : ""}.`;
+    case "claimOpen": return "The key holders are being asked to tap their keys.";
+    case "authorized": return "Enough key holders have tapped. The one who started the claim can combine the keys.";
+    case "objected": return "A key holder objected, so the release is on hold.";
+    case "overdue": return `The writer has been quiet longer than their rule allows (${silentDays(j.snapshot, now)} days). Nothing opens unless a key holder starts a claim and the warnings run out.`;
+    case "cancelled": return "The writer stopped the last claim by checking in. Still sealed.";
+    default: return "Still sealed. Nothing opens unless the writer goes quiet for a long time and their key holders agree.";
   }
 }
 
-async function list(ck, me, kems, judged, now) {
+/** The key holder's buttons, each one the phone's own guard. */
+function holderActions(j, now) {
+  const me = session.holder.hash;
+  const s = j.snapshot;
+  if (!j.epoch?.custodianHashes.includes(me)) return [h("p", { class: "small" }, "You were made a key holder, but the writer has not sealed you in yet.")];
+  const out = [];
+  const myOpen = s?.claim && s.objections.some((o) => o.custodianHash === me && o.withdrawnAt === null);
+  if (s && j.openingAllowed && custodianCanClaim(s, now)) out.push(actionButton(j, "claim", "Start a claim"));
+  if (s && j.openingAllowed && custodianCanAuthorize(s, now, me)) out.push(actionButton(j, "tap", "Tap my key to release", true));
+  if (s?.claim && s.claim.claimantHash === me && j.openingAllowed && claimantCanRelease(s, now)) out.push(actionButton(j, "release", "Combine the keys and release", true));
+  if (s?.claim && voidReason(s) === "notVoid" && j.state !== "released") {
+    out.push(myOpen ? actionButton(j, "withdraw", "Withdraw my objection") : actionButton(j, "object", "Object to this claim"));
+  }
+  if (j.state !== "released") out.push(actionButton(j, "confirmCustody", "Confirm I still have my key"));
+  return out;
+}
+
+const ASK = {
+  claim: { line: "This starts the release. The writer is warned every day for weeks, and one check-in from them stops it. Only do this if you believe they are gone.", field: "Why are you starting it? (everyone in the record can read this)", go: "Start the claim" },
+  object: { line: "This puts the release on hold while your objection stands.", field: "A note (everyone in the record can read this)", go: "Object" },
+  withdraw: { line: "This takes back your objection. The countdown goes on.", go: "Withdraw it" },
+  tap: { line: "Your key, tapped here, is one of the keys that opens the envelopes. You will tap it once more to sign.", go: "Tap my key" },
+  release: { line: "This combines the keys and opens the envelopes for everyone they were written to. It cannot be undone.", go: "Release" },
+  confirmCustody: { line: "This tells the writer you still have your key. Tap it once more to sign.", go: "Confirm" },
+};
+
+function actionButton(j, action, label, primary = false) {
+  return h("button", { class: primary ? "cta" : "cta ghost", type: "button", on: { click: () => askFirst(j, action) } }, label);
+}
+
+function askFirst(j, action) {
+  const a = ASK[action];
+  const input = a.field ? h("textarea", { rows: 3, maxlength: 500, "aria-label": a.field }) : null;
+  show(
+    h("h2", {}, `From ${j.ownerName || "someone"}`),
+    h("p", {}, a.line),
+    a.field ? h("p", { class: "small" }, a.field) : null,
+    input,
+    h("p", {},
+      h("button", { class: "cta", type: "button", on: { click: () => act(j, action, input?.value?.trim() ?? "").catch(failedAction) } }, a.go),
+      h("button", { class: "cta ghost", type: "button", on: { click: () => refresh().catch(failed) } }, "Back"),
+    ),
+  );
+}
+
+async function act(j, action, text) {
+  working(action === "tap" || action === "confirmCustody" ? "Tap your security key." : "Signing…");
+  const built = await buildAction(action, {
+    ck: session.ck, judged: j, me: session.holder, now: nowSeconds(),
+    reason: text, note: text, rpId: config.rpId,
+  });
+  working("Sending it to Apple through the relay, then checking Apple's copy…");
+  await publish(session.ck, built);
+  show(
+    h("div", { class: "note", role: "status" }, h("p", {}, h("b", {}, "Saved. "), "Apple has it, exactly as you signed it. Every phone in this estate will check it for itself.")),
+    h("button", { class: "cta", type: "button", on: { click: () => refresh().catch(failed) } }, "Back to the list"),
+  );
+}
+
+function failedAction(err) {
+  if (err?.name === "NotAllowedError") return problem("The key was not tapped, or the request was cancelled. Nothing was sent.");
+  problem(err?.message || "Something went wrong. Nothing was sent.");
+}
+
+async function list(judged, now) {
+  const { ck } = session;
   const items = [];
   for (const j of judged) {
     const owner = await fetchIdentity(ck, j.ownerHash, { history: true }).catch(() => null);
     const words = owner ? await phrase(owner.root.publicKey) : null;
-    const open = j.state === "released" && j.openingAllowed;
+    const recipient = j.roles.has("recipient");
+    const holder = j.roles.has("custodian");
+    const open = recipient && j.state === "released" && j.openingAllowed;
     items.push(h("div", { class: "card" },
       h("h3", {}, `From ${j.ownerName || "someone"}`),
+      h("p", { class: "small" }, [recipient ? "They wrote to you." : null, holder ? "You hold one of their keys." : null].filter(Boolean).join(" ")),
       words ? h("p", { class: "small" }, `Their words: ${words}. In the app these show under their seal as "Your words". If you know theirs, check they match.`) : null,
       h("p", {}, stateLine(j, now)),
-      open ? h("button", { class: "cta", type: "button", on: { click: () => envelopes(ck, me, kems, j, now).catch(failed) } }, "Open") : null,
+      open ? h("button", { class: "cta", type: "button", on: { click: () => envelopes(ck, session.me, session.kems, j, now).catch(failed) } }, "Open my envelopes") : null,
+      holder && j.problem !== "owner" ? holderActions(j, now) : null,
     ));
   }
   show(
-    h("p", { class: "lede" }, `Signed in as ${me.root.displayName}.`),
+    h("p", { class: "lede" }, `Signed in as ${session.me.root.displayName}.`),
     ...items,
     h("p", { class: "small" }, "Nothing is saved in this browser. When you are done, close the tab."),
   );

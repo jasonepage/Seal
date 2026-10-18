@@ -154,6 +154,7 @@ export async function judgeEstate(ck, invite, now) {
   out.events = events;
   out.epoch = epoch;
   out.vault = vault;
+  out.directory = directory;   // the owner and the key holders, pinned (1.2b uses it)
   out.openingAllowed = await openingAllowed(events, ownerHash);
   if (!events.length) { out.state = "waiting"; return out; }
 

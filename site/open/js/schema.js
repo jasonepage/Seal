@@ -105,6 +105,10 @@ export const bodies = {
   }),
   released: obj({ claimID: str, epoch: uint, shareIndexes: arr(uint8), estateKey: data }),
   ownerDeparted: obj({ keepEnvelopes: bool, departedAtEpoch: int }),
+  // Read by nothing in the release judgment (ReleaseFeed ignores both);
+  // decoded so the relay can check a key holder's entry is well formed.
+  custodyConfirmed: obj({ epoch: uint, recordHeadDigest: data, assertion: webAuthnAssertion }),
+  silenceObserved: obj({ lastHeartbeatDigest: opt(data), lastHeartbeatAtEpoch: opt(int) }),
   cancellation: obj({ claimID: opt(str) }),
 };
 
