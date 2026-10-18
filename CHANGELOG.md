@@ -3,7 +3,7 @@
 Dates are the day the work landed in the repository. Anything marked
 "not built yet" has been written but never compiled or run on a phone.
 
-## Web 1.2b, key holders on the web (built 2026-10-17, not deployed)
+## Web 1.2b, key holders on the web (live 2026-10-17)
 
 ### Added
 
@@ -61,7 +61,7 @@ and one real security key has opened a released test estate in a browser.
 - Site copy, stage A of docs/WEB_COPY_1.2.md: how-it-works, objections,
   privacy, README.
 
-## 1.2 (build 2, with Passwords; build 1 was on TestFlight 2026-10-17)
+## 1.2 (build 3: Passwords, and the key holder role fix)
 
 ### Added
 

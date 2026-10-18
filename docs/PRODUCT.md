@@ -724,7 +724,14 @@ Things a reviewer should know:
   that one security key gives the same PRF secret to Chrome, Safari and
   iOS (the "must be tried on real hardware" item below).
 
-### 1.2b as built (2026-10-17, not deployed)
+### 1.2b as built (2026-10-17, live the same night)
+
+First real entry through the relay, 2026-10-17: a sponsored key holder
+confirmed custody from Firefox on a Mac, the relay's server key was
+accepted by CloudKit, and the page read the saved entry back. Three
+fixes on the way: an unbound `fetch` in the Worker, no `atomic` on a
+public default zone save, and the key holder role lost when a person is
+also a recipient (see the 1.2 changelog).
 
 Key holders with a security key registered for them can do their part
 on the same page: confirm they still have their key, start a claim,
