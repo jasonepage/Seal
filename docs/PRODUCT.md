@@ -712,6 +712,13 @@ Things a reviewer should know:
   public read does return `modified.timestamp`; and the page's identity
   checks accept 23 of 23 real device endorsements in the directory
   (`node tools/vectors/live-check.mjs <token>`).
+- **A real key in a real browser, 2026-10-17:** a YubiKey registered as a
+  sponsored key on the TestFlight build signed in on the live page in
+  Firefox on a Mac: both taps, the PRF secret, the unlock, and the
+  unlocked bundle matching the endorsement. So the key gives the browser
+  the same secret it gave the iPhone. Two fixes found on the way: a
+  script named fingerprint.js is blocked by privacy filters, and a JSON
+  content type makes CloudKit fail every browser request (preflight).
 - **Unknowns to settle before it goes live:** that asset
   downloads from `*.icloud-content.com` allow a browser to fetch them; and
   that one security key gives the same PRF secret to Chrome, Safari and
