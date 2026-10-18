@@ -13,6 +13,7 @@
 export const config = {
   container: "iCloud.io.github.jasonepage.Seal",
   environment: "production",
-  apiToken: "",   // not set yet: the page says so instead of failing quietly
+  // Production, read only, limited to https://sealmessenger.com. Made 2026-10-17.
+  apiToken: "2695644598fd1e998f710834375fd6d48b9510552bb29eefc0ab8c98d61170a4",
   rpId: "sealmessenger.com",
 };
