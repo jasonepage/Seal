@@ -36,7 +36,8 @@ if (!token || token.startsWith("--")) {
 const estates = [];
 for (let i = 1; i < args.length; i++) if (args[i] === "--estate" && args[i + 1]) estates.push(args[++i]);
 
-const ck = new CloudKit({ container: "iCloud.io.github.jasonepage.Seal", environment: "production", apiToken: token });
+// Named as the site, because the token is limited to sealmessenger.com.
+const ck = new CloudKit({ container: "iCloud.io.github.jasonepage.Seal", environment: "production", apiToken: token, origin: "https://sealmessenger.com" });
 let problems = 0;
 
 // 1. The directory.

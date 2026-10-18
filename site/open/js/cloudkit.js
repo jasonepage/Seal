@@ -17,15 +17,21 @@ import { fromB64 } from "./bytes.js";
 const HOST = "https://api.apple-cloudkit.com";
 
 export class CloudKit {
-  constructor({ container, environment, apiToken }) {
+  /**
+   * `origin` is for scripts only (tools/vectors/live-check.mjs): a token
+   * limited to sealmessenger.com refuses a request that does not name it.
+   * A browser sends its own Origin and never uses this.
+   */
+  constructor({ container, environment, apiToken, origin = null }) {
     this.base = `${HOST}/database/1/${encodeURIComponent(container)}/${environment}/public`;
     this.token = apiToken;
+    this.origin = origin;
   }
 
   async #post(path, body) {
     const res = await fetch(`${this.base}/${path}?ckAPIToken=${encodeURIComponent(this.token)}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(this.origin ? { Origin: this.origin } : {}) },
       body: JSON.stringify(body),
       credentials: "omit",
       cache: "no-store",
