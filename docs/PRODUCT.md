@@ -705,9 +705,12 @@ Things a reviewer should know:
   the words would differ.
 - **Copying a secret** goes through the browser clipboard, which a page
   cannot limit to the device or clear later. The page says so.
-- **Unknowns to settle before it goes live:** that CloudKit Web Services
-  returns `modified.timestamp` on an anonymous public read (the page falls
-  back to "now", the strictest floor, when it does not); that asset
+- **Checked on 2026-10-17 against Production:** the API token answers
+  only when the request names https://sealmessenger.com; an anonymous
+  public read does return `modified.timestamp`; and the page's identity
+  checks accept 23 of 23 real device endorsements in the directory
+  (`node tools/vectors/live-check.mjs <token>`).
+- **Unknowns to settle before it goes live:** that asset
   downloads from `*.icloud-content.com` allow a browser to fetch them; and
   that one security key gives the same PRF secret to Chrome, Safari and
   iOS (the "must be tried on real hardware" item below).
