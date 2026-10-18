@@ -2,7 +2,10 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//  fingerprint.js
+//  words.js
+//
+//  Named words.js, not fingerprint.js: privacy blockers refuse any script
+//  named like a tracker's, and Firefox would not load the page.
 //
 //  FingerprintPhrase (Seal/Crypto/FingerprintPhrase.swift): an emoji and
 //  three words from a public key. The writer sees the same words under

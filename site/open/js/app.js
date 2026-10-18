@@ -20,7 +20,7 @@ import { CloudKit, bytesField, stringField } from "./cloudkit.js";
 import { unlockSponsored } from "./crypto.js";
 import { fetchIdentity, findInvites, judgeEstate, openEstate, openMedia } from "./estate.js";
 import { verifiedDevices } from "./identity.js";
-import { phrase } from "./fingerprint.js";
+import { phrase } from "./words.js";
 
 const main = document.getElementById("app");
 
