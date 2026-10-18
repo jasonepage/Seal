@@ -590,7 +590,7 @@ implementation of this protocol is safe to ship.
    to it while the owner is alive: new release wraps for that recipient's
    table, and a new epoch for a key holder's share (cheap, see ROTATION in
    EstateKeys.swift). That is an iPhone change and goes in the 1.2 app.
-   **Built 2026-10-17, not yet compiled.** Recipients: every heartbeat
+   **Built 2026-10-17, compiled and on TestFlight the same day.** Recipients: every heartbeat
    rewraps a table whose recipient's verified devices differ from
    `Estate.publishedRecipientDevices`, at the same epoch, in the
    background (`EstateEngine.coverNewRecipientDevices`). Key holders: the
@@ -608,7 +608,7 @@ implementation of this protocol is safe to ship.
    person signs in on. It needs a key that does PRF. A hardware key
    (YubiKey 5) does in Chrome, Edge, Firefox and Safari. An iCloud Keychain
    passkey only exists on Apple devices, so on Android it means a hardware
-   key. (Proposed here, not yet confirmed by Jason.)
+   key. (Decided 2026-10-16.)
 3. **The page itself is the larger trust change, and it starts at 1.2a.**
    The site serves the code that holds the opened letter. Limits on that:
    a strict Content Security Policy in site/_headers (scripts from this
