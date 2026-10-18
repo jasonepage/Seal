@@ -71,7 +71,9 @@ export class CloudKitServer {
     this.path = `/database/1/${container}/${environment}/public`;
     this.keyID = keyID;
     this.key = privateKey;
-    this.fetch = fetchImpl;
+    // Wrapped, not stored as is: Cloudflare refuses a `fetch` called as
+    // someone else's method ("Illegal invocation").
+    this.fetch = (...args) => fetchImpl(...args);
     this.now = now;
   }
 
