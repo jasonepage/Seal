@@ -127,8 +127,9 @@ export class CloudKitServer {
   /** Creates one record. Returns { created: true } or { exists: true }. Never replaces. */
   async create(recordType, recordName, fields) {
     const json = await this.post("records/modify", {
+      // One operation, so nothing to make atomic, and CloudKit refuses
+      // "atomic" in the public database's default zone anyway.
       operations: [{ operationType: "create", record: { recordType, recordName, fields } }],
-      atomic: true,
     });
     const r = json.records?.[0];
     if (r && !r.serverErrorCode) return { created: true };
