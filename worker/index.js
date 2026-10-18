@@ -100,10 +100,17 @@ export async function relayEvent(request, env, { server, fetchImpl = fetch } = {
     privateKey: await importPrivateKey(env.CLOUDKIT_PRIVATE_KEY), fetchImpl,
   });
   // The signing device must be one the actor's own root key endorsed.
-  const actor = await fetchIdentity(ck, event.actorHash).catch(() => null);
-  const devices = actor ? await verifiedDevices(actor.root, actor.endorsements) : [];
+  // A lookup Apple refuses is said as such, never as "not endorsed".
+  let actor;
+  try {
+    actor = await fetchIdentity(ck, event.actorHash);
+  } catch (e) {
+    return refuse(502, `Apple refused the relay's lookup (${String(e?.message ?? e).slice(0, 200)}). Nothing was saved.`);
+  }
+  if (!actor) return refuse(403, "This key holder's identity could not be found in Seal's directory.");
+  const devices = await verifiedDevices(actor.root, actor.endorsements);
   if (!devices.some((d) => same(d.devicePublicKey, event.actorDevicePublicKey))) {
-    return refuse(403, "That entry was not signed by a device this key holder's key endorsed.");
+    return refuse(403, `That entry was not signed by a device this key holder's key endorsed (${devices.length} endorsed device(s) found).`);
   }
 
   if (STAMPED.has(event.kind)) {
@@ -119,8 +126,8 @@ export async function relayEvent(request, env, { server, fetchImpl = fetch } = {
       payload: { value: toB64(utf8(JSON.stringify(wire))), type: "BYTES" },
     });
     return reply(200, { ok: true, recordName, existed: !!result.exists, stamped: !!wire.timestampToken });
-  } catch {
-    return refuse(502, "Apple's server did not save it. Nothing was saved. Try again in a minute.");
+  } catch (e) {
+    return refuse(502, `Apple's server did not save it (${String(e?.message ?? e).slice(0, 200)}). Nothing was saved.`);
   }
 }
 
@@ -131,8 +138,8 @@ export default {
       if (request.method !== "POST") return refuse(405, "POST only.");
       try {
         return await relayEvent(request, env);
-      } catch {
-        return refuse(500, "The relay could not handle that. Nothing was saved.");
+      } catch (e) {
+        return refuse(500, `The relay could not handle that (${String(e?.message ?? e).slice(0, 200)}). Nothing was saved.`);
       }
     }
     return env.ASSETS.fetch(request);
