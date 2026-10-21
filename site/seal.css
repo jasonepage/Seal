@@ -128,7 +128,7 @@ body.home { display:flex; flex-direction:column; min-height:100vh; min-height:10
 .door-seal { width:clamp(112px,22vw,160px); height:auto; margin-bottom:28px;
   filter:drop-shadow(0 10px 18px rgba(80,55,15,.22)); }
 .door h1 { font-size:clamp(36px,7vw,60px); line-height:1.08; letter-spacing:-.015em;
-  margin:0 0 14px; max-width:14ch; }
+  margin:0 0 14px; max-width:18ch; }
 .door-line { font-size:20px; color:var(--dim); max-width:30ch; margin:0 0 32px; }
 .door-open { display:inline-block; background:var(--brass); color:var(--paper);
   font-size:20px; font-weight:650; text-decoration:none; padding:18px 38px;
