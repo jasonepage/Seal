@@ -25,6 +25,98 @@
     <noscript><p>This page needs JavaScript to open your envelopes on your own device. The Seal app on an iPhone opens them without it.</p></noscript>
   </main>
 
+  <!-- The guide. Plain words, big type, one idea per line, for someone who
+       has never used a security key and may be reading this alone. Shown
+       on the first screen and hidden once something has opened (app.js).
+       No inline styles or scripts: the Content Security Policy forbids
+       them, so the drawings use SVG attributes and open.css. -->
+  <section id="guide" class="guide" aria-labelledby="guide-title">
+    <h2 id="guide-title">How it works, step by step</h2>
+    <p class="guide-lede">It takes about a minute. Nothing you do here can break anything or delete anything, so take your time.</p>
+
+    <ol class="steps">
+      <li>
+        <svg class="pic" viewBox="0 0 120 80" aria-hidden="true">
+          <rect x="22" y="26" width="64" height="28" rx="9" fill="none" stroke="currentColor" stroke-width="3"/>
+          <rect x="86" y="33" width="14" height="14" rx="3" fill="none" stroke="currentColor" stroke-width="3"/>
+          <circle class="gold" cx="46" cy="40" r="7"/>
+          <circle cx="30" cy="40" r="3" fill="none" stroke="currentColor" stroke-width="2"/>
+        </svg>
+        <h3>Have your key ready</h3>
+        <p>This is the small key the writer gave you. It may say YubiKey on it.</p>
+        <p>If they told you a PIN, a short number for the key, have that ready too.</p>
+      </li>
+      <li>
+        <svg class="pic" viewBox="0 0 120 80" aria-hidden="true">
+          <rect x="40" y="6" width="40" height="68" rx="7" fill="none" stroke="currentColor" stroke-width="3"/>
+          <rect x="47" y="22" width="26" height="12" rx="4" fill="none" stroke="currentColor" stroke-width="2.5"/>
+          <circle class="gold" cx="53" cy="28" r="3"/>
+          <path d="M84 22 q8 6 0 12 M90 17 q14 11 0 22" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+        </svg>
+        <h3>Press the button, then touch the key</h3>
+        <p>Press <b>Use my security key</b> above. Your screen will ask for the key.</p>
+        <p><b>On a computer:</b> plug the key in. When its light blinks, touch the gold circle.</p>
+        <p><b>On a phone:</b> hold the key flat against the back of the phone and keep it still until the phone buzzes or shows a check mark.</p>
+        <p>You will do this twice. The second time unlocks your letters.</p>
+      </li>
+      <li>
+        <svg class="pic" viewBox="0 0 120 80" aria-hidden="true">
+          <path d="M18 24 h84 v44 h-84 z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
+          <path d="M18 24 l42 28 l42 -28" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
+          <circle class="gold" cx="60" cy="50" r="9"/>
+        </svg>
+        <h3>See what is waiting for you</h3>
+        <p>The page shows who wrote to you. If their letters are ready, you can read them right here, along with any photos, voice messages and passwords they left.</p>
+        <p>Nothing is saved on this phone or computer. Come back any time with the same key.</p>
+      </li>
+    </ol>
+
+    <div class="calm">
+      <h3>If it says &ldquo;Still sealed&rdquo;</h3>
+      <p>That is normal, and it means everything is working. A Seal letter only opens after its writer has been quiet for a long time and the people holding keys agree. Until then it stays closed, even to you.</p>
+      <p>You do not need to do anything. Keep the key somewhere safe, like with your important papers, and come back later.</p>
+    </div>
+
+    <h2>Questions people ask</h2>
+    <div class="faq">
+      <details>
+        <summary>Where exactly do I touch the key on my phone?</summary>
+        <p>On most iPhones, near the top of the back. On most Android phones, the middle of the back. If nothing happens, slide the key slowly around the back of the phone and hold it still for a few seconds. A phone case is fine.</p>
+        <p>If your key has a plug that fits your phone, you can plug it in instead and touch the gold circle.</p>
+      </details>
+      <details>
+        <summary>It is asking for a PIN</summary>
+        <p>Type the PIN the writer gave you with the key. If you were never given one, ask them, or ask whoever helps them with Seal.</p>
+        <p>Go slowly. After a few wrong tries in a row, most keys ask you to unplug them and start again, and after too many wrong tries in total a key locks for good.</p>
+      </details>
+      <details>
+        <summary>Which phones and computers work?</summary>
+        <p>Almost any phone or computer from the last few years: Android phones, iPhones, Windows, Mac and Chromebooks. Use Chrome, Edge, Firefox or Safari, kept up to date.</p>
+      </details>
+      <details>
+        <summary>Someone asked me to hold a key for them</summary>
+        <p>Thank you. It means they trust you. Holding a key is mostly waiting: keep the key safe, and once in a while you may be asked to confirm you still have it, here or in the Seal app.</p>
+        <p>If the writer ever goes quiet for a long time, the key holders together decide whether their letters should open. Seal warns the writer many times first, and they can stop it with one tap.</p>
+      </details>
+      <details>
+        <summary>I would like to write letters of my own</summary>
+        <p>We would love that. Writing and sealing letters happens in the Seal app, which needs an iPhone or iPad. The app keeps your keys in the iPhone&rsquo;s own secure chip, and so far it is only built for Apple devices.</p>
+        <p>If you use an Android phone, we are sorry: there is no Android app yet. It is the thing people ask for most. An older iPad or iPhone works fine, as long as it can run iOS 18 or iPadOS 18.</p>
+        <p>You can still receive letters and hold a key for someone from any phone, right here.</p>
+        <p><a href="https://apps.apple.com/app/id6779471126">Seal on the App Store</a></p>
+      </details>
+      <details>
+        <summary>I want to give someone in my family a key</summary>
+        <p>The writer does this in the Seal app on their iPhone. They plug in a spare security key, set it up for that person, and hand it over in person, like a house key. A YubiKey 5 series key works.</p>
+        <p>If the writer is you and you are not sure how, ask someone who helps you with your phone to sit with you for ten minutes. It only happens once.</p>
+      </details>
+      <details>
+        <summary>Nothing worked, or I am stuck</summary>
+        <p>Email <a href="mailto:support@sealmessenger.com">support@sealmessenger.com</a>. A real person answers, usually the same day. Say what you see on the screen, or send a photo of it. You will never be asked for your PIN or your key.</p>
+      </details>
+    </div>
+  </section>
+
   <details class="safe">
     <summary>Is this page safe?</summary>
     <p>It runs on your device, reads locked data from Apple’s servers, and opens it with your key. Nothing we run can read, open or change your envelopes, and this page saves nothing.</p>

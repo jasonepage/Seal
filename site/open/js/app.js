@@ -84,7 +84,15 @@ function start() {
     h("p", { class: "lede" }, "Have the security key you were given ready. If it has a PIN, you will need that too."),
     h("button", { class: "cta big", type: "button", on: { click: () => run().catch(failed) } }, "Use my security key"),
     h("p", { class: "small" }, "You will tap it twice. Nothing is saved in this browser."),
+    h("p", { class: "guide-jump" }, h("a", { href: "#guide" }, "First time? The steps are below, with pictures.")),
   );
+  showGuide(true);
+}
+
+/** The step by step guide under the page: on the first screen, out of the way once something is shown. */
+function showGuide(on) {
+  const g = document.getElementById("guide");
+  if (g) g.hidden = !on;
 }
 
 function failed(err) {
@@ -197,6 +205,7 @@ async function run() {
  * whom. Nothing is opened here; their envelopes are wrapped to their phone.
  */
 function showWaiting(me, found, ck, credentialID) {
+  showGuide(false);
   const name = me.root.displayName;
   const keyTools = h("div", { class: "keytools" },
     h("p", { class: "small" }, `Not ${name}? One key can hold more than one identity.`),
@@ -301,6 +310,7 @@ async function retire(me, ck, credentialID) {
 
 /** Everything this person is part of, judged again from the record. */
 async function refresh() {
+  showGuide(false);
   const { ck, me, kems } = session;
   working("Finding what you are part of…");
   const invites = await findInvites(ck, me.root.credentialIDHash, kems);
