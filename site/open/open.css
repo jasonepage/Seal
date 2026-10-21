@@ -17,3 +17,7 @@ details.safe summary:focus-visible { outline:3px solid var(--brass-bright); outl
 details.safe p { margin-top:12px; }
 .door-foot { display:flex; flex-wrap:wrap; justify-content:flex-start; gap:8px 22px; padding:40px 0 48px; font-size:14px; }
 .door-foot a { color:var(--faint); text-decoration:none; }
+.waiting { text-align:center; margin:12px 0 8px; }
+.waiting img { width:88px; height:auto; display:block; margin:0 auto 12px; }
+.waitlist { padding-left:20px; }
+.waitlist li { margin-bottom:12px; }

@@ -23,7 +23,7 @@ import { unlockSponsored } from "./crypto.js";
 import { signingKeyFrom } from "./signer.js";
 import { buildAction, publish } from "./keyholder.js";
 import { custodianCanClaim, custodianCanAuthorize, claimantCanRelease, voidReason, silentDays } from "./release.js";
-import { fetchIdentity, findInvites, judgeEstate, openEstate, openMedia } from "./estate.js";
+import { fetchIdentity, findInvites, judgeEstate, openEstate, openMedia, waitingFor } from "./estate.js";
 import { verifiedDevices } from "./identity.js";
 import { phrase } from "./words.js";
 
@@ -128,7 +128,10 @@ async function run() {
   const verified = await verifiedDevices(me.root, me.endorsements);
   const sponsored = verified.find((d) => d.lockedPrivate && d.prfSalt);
   if (!sponsored) {
-    throw new Error("This key belongs to someone who uses the Seal app. Open your envelopes there. The browser page is for keys that were registered for you by someone else.");
+    // An app user's envelopes open only on their own phone, but the page
+    // can still say, from the public record, that something is waiting.
+    working("Checking what is waiting for you…");
+    return showWaiting(me, await waitingFor(ck, myHash, nowSeconds()));
   }
 
   working("Tap your security key again to unlock.");
@@ -151,6 +154,41 @@ async function run() {
   const signer = await signingKeyFrom(unlocked.signingKey, sponsored.devicePublicKey);
   session = { ck, me, kems, holder: { hash: myHash, credentialID, signer, kems } };
   await refresh();
+}
+
+/**
+ * The signal for an app user's key: yes, something is waiting, and from
+ * whom. Nothing is opened here; their envelopes are wrapped to their phone.
+ */
+function showWaiting(me, found) {
+  const appLine = h("p", {}, "Open Seal on your iPhone or iPad to read them. This page only opens envelopes for keys that someone registered for you.");
+  const store = h("p", {}, h("a", { class: "cta ghost", href: "https://apps.apple.com/app/id6779471126" }, "Get Seal on the App Store"));
+  const envelopes = found.filter((f) => f.sealed && !f.keyHolder);
+  if (!found.length) {
+    return show(
+      h("p", { class: "lede" }, `Signed in as ${me.root.displayName}.`),
+      h("p", {}, "Nothing is waiting for you yet. When someone seals envelopes to you, it shows here."),
+    );
+  }
+  const rows = found.map((f) => {
+    const who = f.ownerName || "Someone";
+    const what = f.keyHolder
+      ? `${who}: you hold one of the keys to their envelopes.`
+      : f.sealed ? `${who}: an envelope is waiting for you.` : `${who}: added you, but has not sealed yet.`;
+    return h("li", {}, what, h("br"), h("span", { class: "small" }, stateLine(f.judged, nowSeconds())));
+  });
+  show(
+    h("div", { class: "waiting" },
+      h("img", { src: "/seal-mark.png", alt: "", width: 88 }),
+      h("h2", {}, envelopes.length === 1 ? "Yes. An envelope is waiting for you."
+        : envelopes.length > 1 ? `Yes. ${envelopes.length} envelopes are waiting for you.`
+        : "Yes. You are part of someone's Seal."),
+    ),
+    h("p", { class: "small" }, `Signed in as ${me.root.displayName}.`),
+    h("ul", { class: "waitlist" }, rows),
+    appLine,
+    store,
+  );
 }
 
 /** Everything this person is part of, judged again from the record. */

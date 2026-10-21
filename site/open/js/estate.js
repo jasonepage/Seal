@@ -99,6 +99,46 @@ export async function findInvites(ck, myHash, kems) {
   return found;
 }
 
+/**
+ * For a person whose key belongs to the Seal app (no locked device this
+ * page can unlock): which writers have named them, without opening
+ * anything. The invite records are addressed by the person's hash in the
+ * clear (record name estinv.<hash>.<estateID>), so their existence is
+ * public; what is inside them is not, and is not needed. Each estate is
+ * then judged from its signed record, the same as for a sponsored key,
+ * which gives the writer (from the owner's own signed events), whether
+ * anything is sealed, and whether this person holds a key.
+ * Returns [{ ownerName, sealed, keyHolder, judged }].
+ */
+export async function waitingFor(ck, myHash, now) {
+  const prefix = `estinv.${myHash}.`;
+  const records = await ck.query("GroupInvite", "recipient", myHash, { desiredKeys: [] });
+  const estateIDs = [...new Set(records.map((r) => r.recordName)
+    .filter((n) => typeof n === "string" && n.startsWith(prefix))
+    .map((n) => n.slice(prefix.length)))];
+  const out = [];
+  for (const estateID of estateIDs) {
+    // The writer is whoever signed the estate's creation. Anyone can write
+    // a record, so every candidate is judged, and only one whose own signed
+    // events check out counts.
+    const events = await fetchEvents(ck, estateID, now);
+    const candidates = [...new Set(events.filter((e) => e.kind === "estateCreated").map((e) => e.actorHash))];
+    for (const ownerHash of candidates) {
+      const j = await judgeEstate(ck, { estateID, ownerHash, ownerName: null }, now).catch(() => null);
+      if (!j || j.problem || !j.events?.length) continue;
+      j.ownerName = j.directory?.get(ownerHash)?.root?.displayName || null;
+      out.push({
+        ownerName: j.ownerName,
+        sealed: (j.vault?.tableIDs?.length ?? 0) > 0,
+        keyHolder: !!j.epoch?.custodianHashes.includes(myHash),
+        judged: j,
+      });
+      break;
+    }
+  }
+  return out;
+}
+
 /** SyncEngine.fetchEstateEvents, plus Apple's modification time on each record. */
 async function fetchEvents(ck, estateID, now) {
   const records = await ck.query("EstateEvent", "estate", estateID, { maxPages: 100 });
