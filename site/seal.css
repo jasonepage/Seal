@@ -136,7 +136,13 @@ body.home { display:flex; flex-direction:column; min-height:100vh; min-height:10
 .door-open:hover { background:var(--brass-bright); color:#1A1714; }
 .door-open:focus-visible, .write-get:focus-visible, .door-foot a:focus-visible {
   outline:3px solid var(--brass-bright); outline-offset:4px; }
-.door-also { font-size:15px; color:var(--faint); margin:18px 0 0; }
+.door-also { font-size:15px; color:var(--faint); margin:18px 0 0; max-width:36ch; }
+.door-actions { display:flex; flex-wrap:wrap; justify-content:center; gap:14px; }
+.door-write { display:inline-block; color:var(--brass); border:2px solid var(--brass);
+  font-size:20px; font-weight:650; text-decoration:none; padding:16px 34px; border-radius:999px; }
+.door-write:hover { background:var(--brass); color:var(--paper); }
+.door-write:focus-visible { outline:3px solid var(--brass-bright); outline-offset:4px; }
+@media (max-width:520px) { .door-actions { flex-direction:column; width:100%; max-width:340px; } .door-open, .door-write { text-align:center; } }
 
 .write { max-width:560px; margin:0 auto; padding:28px 24px 8px; border-top:1px solid var(--rule);
   text-align:center; color:var(--dim); font-size:17px; }
