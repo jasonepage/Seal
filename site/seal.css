@@ -143,6 +143,16 @@ body.home { display:flex; flex-direction:column; min-height:100vh; min-height:10
 .write b { color:var(--ink); font-weight:600; }
 .write-get { display:inline-block; margin-top:4px; font-weight:600; color:var(--brass); }
 
+.ph-card { display:flex; align-items:center; gap:14px; margin:22px 0 4px; padding:14px 16px;
+  border:1px solid var(--rule); border-radius:14px; background:var(--paper2); color:var(--ink); text-decoration:none; text-align:left; }
+.ph-card img { width:44px; height:auto; flex-shrink:0; }
+.ph-text { flex:1; min-width:0; line-height:1.35; }
+.ph-text b { display:block; font-weight:600; }
+.ph-text span { font-size:14px; color:var(--dim); }
+.ph-go { background:#FF6154; color:#fff; border-radius:999px; padding:7px 14px; font-weight:600; font-size:15px; white-space:nowrap; }
+.ph-card:hover .ph-go { background:#F04A3C; }
+.ph-card:focus-visible { outline:2px solid var(--brass); outline-offset:3px; }
+@media (max-width:440px) { .ph-card { flex-wrap:wrap; } .ph-go { width:100%; text-align:center; } }
 .door-foot { display:flex; flex-wrap:wrap; justify-content:center; gap:8px 22px;
   padding:28px 24px 40px; font-size:14px; }
 .door-foot a { color:var(--faint); text-decoration:none; }
