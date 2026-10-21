@@ -17,19 +17,26 @@
 //  Nothing is written to browser storage. Closing the tab forgets it all.
 
 import { config } from "./config.js";
-import { toHex, sha256, same } from "./bytes.js";
+import { toHex, sha256, same, utf8, concat, toB64, fromB64 } from "./bytes.js";
 import { CloudKit, bytesField, stringField } from "./cloudkit.js";
 import { unlockSponsored } from "./crypto.js";
 import { signingKeyFrom } from "./signer.js";
 import { buildAction, publish } from "./keyholder.js";
 import { custodianCanClaim, custodianCanAuthorize, claimantCanRelease, voidReason, silentDays } from "./release.js";
 import { fetchIdentity, findInvites, judgeEstate, openEstate, openMedia, waitingFor } from "./estate.js";
-import { verifiedDevices } from "./identity.js";
+import { verifiedDevices, parseAssertion, verifyAssertion, clientDataChallengeMatches } from "./identity.js";
 import { phrase } from "./words.js";
 
 const main = document.getElementById("app");
 /** The signed-in person, in memory only, for this tab. */
 let session = null;
+/**
+ * Credentials this tab was told to pass over ("Not Karen?"). One security
+ * key can hold more than one Seal identity, and with a list of IDs the key
+ * answers with the first it holds, so leaving one out is the only way to
+ * reach the next. In memory only.
+ */
+const skipIDs = [];
 
 // ---------------------------------------------------------------- tiny DOM
 
@@ -88,13 +95,42 @@ function failed(err) {
 
 // ---------------------------------------------------------------- the taps
 
+/**
+ * TombstoneProof.markerCounts: a "tomb.<hash>" marker retires an identity
+ * only when its proof is a tap by that identity's own root key over the
+ * delete challenge. Anyone can write a record, so a marker without one is
+ * ignored, the same as on every phone.
+ */
+async function markerCounts(hash, proofBytes, publicKey) {
+  if (!publicKey) return true;
+  try {
+    const proof = JSON.parse(new TextDecoder().decode(proofBytes));
+    const a = parseAssertion(utf8(JSON.stringify(proof.assertion)));
+    if (!a || toHex(await sha256(a.credentialID)) !== hash) return false;
+    const challenge = await sha256(concat(utf8("seal.identity.delete.v1"), fromB64(proof.nonce)));
+    return clientDataChallengeMatches(a.clientDataJSON, challenge) && await verifyAssertion(a, publicKey);
+  } catch {
+    return false;
+  }
+}
+
 async function credentialIDs(ck) {
-  const records = await ck.query("Identity", null, null, { desiredKeys: ["credentialID", "tier"], maxPages: 50 });
-  const ids = [];
+  const records = await ck.query("Identity", null, null, { desiredKeys: ["credentialID", "tier", "publicKey", "revocations"], maxPages: 50 });
+  const live = new Map();
+  const markers = new Map();
   for (const r of records) {
-    if (r.recordName.startsWith("tomb.") || stringField(r, "tier") !== "verified") continue;
+    if (r.recordName.startsWith("tomb.")) { markers.set(r.recordName.slice(5), bytesField(r, "revocations")); continue; }
+    if (stringField(r, "tier") !== "verified") continue;
     const id = bytesField(r, "credentialID");
-    if (id) ids.push(id);
+    if (id) live.set(r.recordName, { id, publicKey: bytesField(r, "publicKey") });
+  }
+  const ids = [];
+  for (const [hash, { id, publicKey }] of live) {
+    // A retired identity stays out of the list, so a key that holds it and
+    // another one answers with the other (a web retire cannot flip the live
+    // record, only its creator can, so the marker is what says it is gone).
+    if (markers.has(hash) && await markerCounts(hash, markers.get(hash), publicKey)) continue;
+    ids.push(id);
   }
   return ids;
 }
@@ -113,7 +149,7 @@ const keyRequest = (ids, extensions) => ({
 async function run() {
   const ck = new CloudKit(config);
   working("Getting ready…");
-  const ids = await credentialIDs(ck);
+  const ids = (await credentialIDs(ck)).filter((id) => !skipIDs.some((s) => same(s, id)));
   if (!ids.length) throw new Error("Seal's directory could not be read. Try again in a minute.");
 
   working("Tap your security key.");
@@ -131,7 +167,7 @@ async function run() {
     // An app user's envelopes open only on their own phone, but the page
     // can still say, from the public record, that something is waiting.
     working("Checking what is waiting for you…");
-    return showWaiting(me, await waitingFor(ck, myHash, nowSeconds()));
+    return showWaiting(me, await waitingFor(ck, myHash, nowSeconds()), ck, credentialID);
   }
 
   working("Tap your security key again to unlock.");
@@ -160,7 +196,15 @@ async function run() {
  * The signal for an app user's key: yes, something is waiting, and from
  * whom. Nothing is opened here; their envelopes are wrapped to their phone.
  */
-function showWaiting(me, found) {
+function showWaiting(me, found, ck, credentialID) {
+  const name = me.root.displayName;
+  const keyTools = h("div", { class: "keytools" },
+    h("p", { class: "small" }, `Not ${name}? One key can hold more than one identity.`),
+    h("p", {},
+      h("button", { class: "cta ghost", type: "button", on: { click: () => { skipIDs.push(credentialID); run().catch(failed); } } }, "Use another identity on this key"),
+      h("button", { class: "cta ghost", type: "button", on: { click: () => confirmRetire(me, found, ck, credentialID) } }, `Retire ${name} from this key`),
+    ),
+  );
   const appLine = h("p", {}, "Open Seal on your iPhone or iPad to read them. This page only opens envelopes for keys that someone registered for you.");
   const store = h("p", {}, h("a", { class: "cta ghost", href: "https://apps.apple.com/app/id6779471126" }, "Get Seal on the App Store"));
   const envelopes = found.filter((f) => f.sealed && !f.keyHolder);
@@ -168,6 +212,7 @@ function showWaiting(me, found) {
     return show(
       h("p", { class: "lede" }, `Signed in as ${me.root.displayName}.`),
       h("p", {}, "Nothing is waiting for you yet. When someone seals envelopes to you, it shows here."),
+      keyTools,
     );
   }
   const rows = found.map((f) => {
@@ -188,6 +233,69 @@ function showWaiting(me, found) {
     h("ul", { class: "waitlist" }, rows),
     appLine,
     store,
+    keyTools,
+  );
+}
+
+// ---------------------------------------------------------------- retire a key
+
+/**
+ * The web version of the app's "An old key is in the way? Retire it"
+ * (RetireKeyCeremony.swift): one tap over the delete challenge, sent to
+ * the relay, which checks it and writes the same write-once marker the
+ * phone writes (worker/index.js, relayRetire). For a key whose identity
+ * was made on a phone that is gone.
+ */
+function confirmRetire(me, found, ck, credentialID) {
+  const name = me.root.displayName;
+  const holds = found.filter((f) => f.keyHolder).map((f) => f.ownerName || "someone");
+  show(
+    h("h2", {}, `Retire ${name} from this key?`),
+    h("p", {}, `This deletes the Seal identity "${name}" for good. Nobody can sign in as ${name} again, with this key or any other, and it cannot be undone.`),
+    holds.length ? h("div", { class: "note", role: "note" }, h("p", {}, `${name} holds one of the keys to ${holds.join(" and ")}'s envelopes. That key stops counting. The writer should open Seal and pick another key holder.`)) : null,
+    h("p", {}, "Use this when the phone that made this identity is gone and the key is needed for someone else."),
+    h("p", {},
+      h("button", { class: "cta", type: "button", on: { click: () => retire(me, ck, credentialID).catch(failed) } }, `Retire ${name}`),
+      h("button", { class: "cta ghost", type: "button", on: { click: () => run().catch(failed) } }, "Back"),
+    ),
+  );
+}
+
+async function retire(me, ck, credentialID) {
+  const name = me.root.displayName;
+  const nonce = random(32);
+  const challenge = await sha256(concat(utf8("seal.identity.delete.v1"), nonce));
+  working("Tap your security key to retire it.");
+  const cred = await navigator.credentials.get({ publicKey: {
+    rpId: config.rpId, challenge, userVerification: "preferred", timeout: 120_000,
+    allowCredentials: [{ type: "public-key", id: credentialID, transports: ["usb", "nfc"] }],
+  } });
+  if (!same(new Uint8Array(cred.rawId), credentialID)) throw new Error("A different key answered. Nothing was changed.");
+  const r = cred.response;
+  const body = { retire: { nonce: toB64(nonce), assertion: {
+    credentialID: toB64(credentialID),
+    clientDataJSON: toB64(new Uint8Array(r.clientDataJSON)),
+    authenticatorData: toB64(new Uint8Array(r.authenticatorData)),
+    signature: toB64(new Uint8Array(r.signature)),
+  } } };
+  working("Sending it to Apple through the relay…");
+  const res = await fetch("/relay/retire", {
+    method: "POST", headers: { "Content-Type": "text/plain;charset=UTF-8" },
+    body: JSON.stringify(body), credentials: "omit", cache: "no-store",
+  });
+  const answer = await res.json().catch(() => null);
+  if (!res.ok || !answer?.ok) throw new Error(answer?.message ?? `The relay did not take it (HTTP ${res.status}). Nothing was changed.`);
+  // Apple's copy, not the relay's word.
+  let back = null;
+  for (let i = 0; i < 6 && !back; i++) {
+    back = await ck.record(`tomb.${answer.hash}`).catch(() => null);
+    if (!back) await new Promise((ok) => setTimeout(ok, 1500));
+  }
+  if (!back) throw new Error("The relay said it saved this, but Apple's copy could not be found yet. Try again in a minute.");
+  session = null;
+  show(
+    h("div", { class: "note", role: "status" }, h("p", {}, h("b", {}, "Retired. "), `This key no longer holds ${name}'s Seal identity. You can register it for someone else now.`)),
+    h("button", { class: "cta", type: "button", on: { click: () => run().catch(failed) } }, "Sign in with this key again"),
   );
 }
 

@@ -21,3 +21,5 @@ details.safe p { margin-top:12px; }
 .waiting img { width:88px; height:auto; display:block; margin:0 auto 12px; }
 .waitlist { padding-left:20px; }
 .waitlist li { margin-bottom:12px; }
+.keytools { margin-top:28px; padding-top:16px; border-top:1px solid var(--rule); }
+.keytools .cta { margin:0 8px 8px 0; }

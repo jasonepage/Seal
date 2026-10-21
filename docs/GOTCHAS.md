@@ -88,6 +88,22 @@ from the outside.
 - Renaming is metadata only. A display name is in no signature, commitment or
   credential hash, so it never affects verification.
 
+- **One security key can hold more than one Seal identity, and the old one
+  wins.** Found 2026-10-20: a YubiKey 5Ci had an identity ("Karen") made on
+  another iPhone, then was registered as a sponsored key for someone else.
+  The web page asks with every credential ID in the directory, and a key
+  given a list answers with the first one it holds, so it kept signing in
+  as Karen. The iPhone in hand said "no credentials" when asked to retire
+  it, most likely because it was an Xcode build reading Development, where
+  Karen does not exist (see Environments); not confirmed. Retiring needs a
+  tap by that identity's own key, and only the phone that made it had the
+  button. Fixed on the web the same day: after signing in, "Use another
+  identity on this key" (leaves that credential out of the next ask) and
+  "Retire ... from this key" (POST /relay/retire, worker/index.js), which
+  writes the phone's own `tomb.<hash>` marker with the same TombstoneProof.
+  The page also leaves retired identities out of its list now, because a
+  web retire cannot flip the live record (only its creator can).
+
 ## Messaging
 
 - **The cross-device desync of 2026-06-26** looked like two unrelated bugs:

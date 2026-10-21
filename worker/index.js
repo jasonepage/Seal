@@ -29,10 +29,10 @@
 
 import { CloudKitServer, importPrivateKey } from "./cloudkit-s2s.js";
 import { parseEvent, signatureIsValid, custodianKinds } from "../site/open/js/estatelog.js";
-import { verifiedDevices } from "../site/open/js/identity.js";
+import { verifiedDevices, parseAssertion, verifyAssertion, clientDataChallengeMatches, DELETED_TIER } from "../site/open/js/identity.js";
 import { verifiedGenTime } from "../site/open/js/timestamp.js";
 import { fetchIdentity, names } from "../site/open/js/estate.js";
-import { utf8, toB64, same, concat } from "../site/open/js/bytes.js";
+import { utf8, toB64, fromB64, toHex, sha256, same, concat } from "../site/open/js/bytes.js";
 
 const MAX_BODY = 256 * 1024;
 const STAMPED = new Set(["releaseClaimed", "authorization", "released"]);
@@ -131,6 +131,90 @@ export async function relayEvent(request, env, { server, fetchImpl = fetch } = {
   }
 }
 
+// ---------------------------------------------------------------- retire a key
+
+/** TombstoneProof.challenge: SHA256("seal.identity.delete.v1" || nonce). */
+export const retireChallenge = (nonce) => sha256(concat(utf8("seal.identity.delete.v1"), nonce));
+
+/**
+ * POST /relay/retire. The web version of the app's "An old key is in the
+ * way? Retire it" (RetireKeyCeremony.swift), for a key whose identity was
+ * made on a phone the person no longer has. Added 2026-10-20 after a
+ * YubiKey holding an old identity ("Karen", made on another iPhone) kept
+ * answering the page's sign-in instead of the identity just registered on
+ * it, and the iPhone in hand could not retire it.
+ *
+ * What proves the right: one tap on the key over the delete challenge,
+ * exactly the proof the phone stores (TombstoneProof). The relay checks it
+ * against the root key published under that credential's hash before it
+ * writes anything, and every phone checks it again when it reads the
+ * marker, so the relay cannot retire anyone on its own: a marker without a
+ * proof that verifies is ignored (TombstoneProof.markerCounts).
+ *
+ * What it writes: the same write-once "tomb.<hash>" Identity record the
+ * phone writes, tier "deleted", the proof in "revocations". It cannot flip
+ * the live record (only its creator can), and does not need to: the marker
+ * is what every reader trusts.
+ *
+ * Refused: a key with no live identity under its own hash. That covers a
+ * backup key, which has no record of its own, so the same trap the phone
+ * refuses (retiring the backup's hash while the identity lives on) cannot
+ * happen here.
+ */
+export async function relayRetire(request, env, { server, fetchImpl = fetch } = {}) {
+  const allowed = env.ALLOWED_ORIGIN ?? "https://sealmessenger.com";
+  if (request.headers.get("Origin") !== allowed) return refuse(403, "This only takes requests from sealmessenger.com.");
+  const text = await request.text();
+  if (text.length > 16 * 1024) return refuse(413, "That request is too large.");
+  let wire;
+  try { wire = JSON.parse(text).retire; } catch { return refuse(400, "That was not a retire request."); }
+  const a = wire?.assertion;
+  if (!wire || typeof wire.nonce !== "string" || !a || typeof a !== "object") return refuse(400, "That was not a retire request.");
+  let nonce, assertion;
+  try {
+    nonce = fromB64(wire.nonce);
+    const clean = { credentialID: a.credentialID, clientDataJSON: a.clientDataJSON, authenticatorData: a.authenticatorData, signature: a.signature };
+    assertion = parseAssertion(utf8(JSON.stringify(clean)));
+  } catch { return refuse(400, "That tap did not read correctly."); }
+  if (!assertion || nonce.length < 16 || nonce.length > 64) return refuse(400, "That tap did not read correctly.");
+  if (!clientDataChallengeMatches(assertion.clientDataJSON, await retireChallenge(nonce))) {
+    return refuse(400, "That tap was not made for retiring a key.");
+  }
+  const hash = toHex(await sha256(assertion.credentialID));
+  const tombName = `tomb.${hash}`;
+
+  const ck = server ?? new CloudKitServer({
+    container: env.CLOUDKIT_CONTAINER, environment: env.CLOUDKIT_ENVIRONMENT, keyID: env.CLOUDKIT_KEY_ID,
+    privateKey: await importPrivateKey(env.CLOUDKIT_PRIVATE_KEY), fetchImpl,
+  });
+  let identity;
+  try {
+    if (await ck.record(tombName)) return reply(200, { ok: true, hash, existed: true });
+    identity = await fetchIdentity(ck, hash);
+  } catch (e) {
+    return refuse(502, `Apple refused the relay's lookup (${String(e?.message ?? e).slice(0, 200)}). Nothing was changed.`);
+  }
+  if (!identity) {
+    return refuse(404, "This key has no Seal identity of its own. If it is a backup key, the identity it backs up is deleted from that identity's own phone. Nothing was changed.");
+  }
+  if (!(await verifyAssertion(assertion, identity.root.publicKey))) {
+    return refuse(403, "That tap does not match the identity published under this key. Nothing was changed.");
+  }
+  const proof = { nonce: toB64(nonce), assertion: {
+    credentialID: toB64(assertion.credentialID), clientDataJSON: toB64(assertion.clientDataJSON),
+    authenticatorData: toB64(assertion.authenticatorData), signature: toB64(assertion.signature),
+  } };
+  try {
+    const result = await ck.create("Identity", tombName, {
+      tier: { value: DELETED_TIER, type: "STRING" },
+      revocations: { value: toB64(utf8(JSON.stringify(proof))), type: "BYTES" },
+    });
+    return reply(200, { ok: true, hash, existed: !!result.exists });
+  } catch (e) {
+    return refuse(502, `Apple's server did not save it (${String(e?.message ?? e).slice(0, 200)}). Nothing was changed.`);
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -140,6 +224,14 @@ export default {
         return await relayEvent(request, env);
       } catch (e) {
         return refuse(500, `The relay could not handle that (${String(e?.message ?? e).slice(0, 200)}). Nothing was saved.`);
+      }
+    }
+    if (url.pathname === "/relay/retire") {
+      if (request.method !== "POST") return refuse(405, "POST only.");
+      try {
+        return await relayRetire(request, env);
+      } catch (e) {
+        return refuse(500, `The relay could not handle that (${String(e?.message ?? e).slice(0, 200)}). Nothing was changed.`);
       }
     }
     return env.ASSETS.fetch(request);

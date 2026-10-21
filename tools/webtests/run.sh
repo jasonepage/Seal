@@ -11,7 +11,7 @@ set -e
 cd "$(dirname "$0")/../.."
 for f in site/open/js/*.js; do node --check "$f"; done
 failed=0
-for t in timestamp identity release estate keyholder; do
+for t in timestamp identity release estate keyholder retire; do
   printf '%-10s ' "$t"
   if out=$(node "tools/webtests/$t.test.mjs" 2>&1); then
     echo "$out" | tail -1
