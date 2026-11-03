@@ -3,9 +3,9 @@ import Foundation
 
 let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
 let output = root.appendingPathComponent("docs/appstore", isDirectory: true)
-let iconURL = root.appendingPathComponent("Seal/Assets.xcassets/AppIcon.appiconset/icon-1024.png")
+let iconURL = root.appendingPathComponent("site/harbor-home.png")
 
-guard let icon = NSImage(contentsOf: iconURL) else {
+guard let harbor = NSImage(contentsOf: iconURL) else {
     fatalError("Could not read \(iconURL.path)")
 }
 
@@ -38,7 +38,7 @@ func render(
     contentY: CGFloat,
     contentWidth: CGFloat,
     headlineSize: CGFloat,
-    iconRect: NSRect
+    harborRect: NSRect
 ) throws {
     let canvas = NSImage(size: size)
     canvas.lockFocusFlipped(true)
@@ -61,7 +61,7 @@ func render(
     gold.setFill()
     rule.fill()
 
-    icon.draw(in: iconRect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high])
+    harbor.draw(in: harborRect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high])
     canvas.unlockFocus()
 
     guard let tiff = canvas.tiffRepresentation,
@@ -86,7 +86,7 @@ try render(
     contentY: 250,
     contentWidth: 1880,
     headlineSize: 180,
-    iconRect: NSRect(x: 2860, y: 320, width: 960, height: 960)
+    harborRect: NSRect(x: 2750, y: 245, width: 1040, height: 1040)
 )
 
 // Search Results can also carry controls and tight crops on its left edge.
@@ -101,5 +101,5 @@ try render(
     contentY: 1080,
     contentWidth: 2760,
     headlineSize: 210,
-    iconRect: NSRect(x: 2380, y: 160, width: 1180, height: 1180)
+    harborRect: NSRect(x: 2320, y: 100, width: 1260, height: 1260)
 )
