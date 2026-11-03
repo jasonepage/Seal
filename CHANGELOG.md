@@ -45,6 +45,12 @@ Dates are the day the work landed in the repository. Anything marked
 - Harbor's next step puts a key holder who deleted their account first:
   "Next: replace [name] as a key holder."
 
+- Kit first: "Use a key from your kit" is now the first button when adding a
+  key holder, from the setup card. It opens the sponsored key screen, and once
+  the key is registered the flow goes straight on to "Make them a key holder?".
+  An owner with a kit can finish setup alone in one evening.
+  (`AddKeyHolderFlow.swift`, `SponsoredKeyView.onRegistered`)
+
 ### Fixed
 
 - A silent push no longer checks the owner in. Before, a push that woke the app

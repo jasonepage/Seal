@@ -1,5 +1,22 @@
 # Where Seal stands
 
+## 1.3, KIT FIRST (2026-11-03, UNCOMPILED)
+
+Decision (Jason, 2026-11-03): the goal is money. Gut call: the product to
+sell is the kit (keys plus the app), and the app must let one person finish
+setup alone. Before this, every path to "Choose who can open them" in the
+setup card needed another person next to you with Seal on their phone; the
+sponsored key screen that needs nobody was only under People.
+
+- `AddKeyHolderFlow` "who" stage: primary button "Use a key from your kit"
+  opens `SponsoredKeyView` as a sheet; `onRegistered` hands back the new
+  identity and the sheet's `onDismiss` moves to `.confirm(person)`. The scan
+  button is now secondary.
+- Setup card copy for the key holder step mentions the kit.
+
+Most likely to fail to compile: the `.sheet` placed after
+`.preferredColorScheme(.dark)` on the NavigationStack in `body`.
+
 ## 1.3, VEGA'S ROUND (2026-11-03, UNCOMPILED)
 
 Vega (Muse) asked for four things. What the code showed:

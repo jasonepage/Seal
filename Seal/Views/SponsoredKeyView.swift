@@ -29,6 +29,9 @@ struct SponsoredKeyView: View {
     let sync: SyncEngine
     @Bindable var friendStore: FriendStore
     let onClose: () -> Void
+    /// Told the moment a key is registered, so the guided key holder flow
+    /// can go straight on to "Make them a key holder?" (1.3, kit first).
+    var onRegistered: ((RootIdentity) -> Void)? = nil
 
     @State private var name = ""
     @State private var working = false
@@ -173,6 +176,7 @@ struct SponsoredKeyView: View {
                                         sponsored: true)
             friendStore.add(identity: root, friendship: friendship)
             done = root
+            onRegistered?(root)
         } catch {
             problem = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }

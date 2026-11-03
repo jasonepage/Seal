@@ -1082,7 +1082,7 @@ struct EstateHomeView: View {
         case .envelope:
             return "A letter, a few photos, and the secrets. You do not need anybody else to start. Type a name and write tonight."
         case .keyHolders:
-            return "People you meet in person and trust to act together after you are gone. Tap here with them next to you; it takes two minutes."
+            return "People you trust to act together after you are gone. Have a Seal kit? Set up their keys yourself, tonight. Or add someone who is next to you with their phone."
         case .rule:
             if let estate, !estate.custodians.isEmpty {
                 let p = estate.policy

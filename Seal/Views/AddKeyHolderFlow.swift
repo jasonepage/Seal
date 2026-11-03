@@ -45,6 +45,11 @@ struct AddKeyHolderFlow: View {
 
     @State private var stage: Stage = .who
     @State private var kitURL: URL?
+    /// "Use a key from your kit" (1.3): the sponsored key sheet, and who it
+    /// registered. The flow moves on from the sheet's onDismiss, because a
+    /// stage change under a sheet that is still closing is easy to lose.
+    @State private var showKitKey = false
+    @State private var kitPerson: RootIdentity?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// People already met who are not key holders of this set yet.
@@ -84,6 +89,16 @@ struct AddKeyHolderFlow: View {
             }
         }
         .preferredColorScheme(.dark)
+        .sheet(isPresented: $showKitKey, onDismiss: {
+            if let person = kitPerson {
+                kitPerson = nil
+                move(.confirm(person))
+            }
+        }) {
+            SponsoredKeyView(myRoot: myRoot, ceremony: ceremony, sync: sync, friendStore: friendStore,
+                             onClose: { showKitKey = false },
+                             onRegistered: { kitPerson = $0 })
+        }
     }
 
     private var isFinished: Bool {
@@ -140,7 +155,7 @@ struct AddKeyHolderFlow: View {
     private var who: some View {
         column {
             title("Who holds a key?")
-            body("Someone you trust to act with the others after you are gone, who will still be reachable in ten years. They need to be next to you with their phone, and Seal on it.")
+            body("Someone you trust to act with the others after you are gone, who will still be reachable in ten years. Have a key from a Seal kit? You can set it up for them right now, by yourself. Otherwise they need to be next to you with Seal on their phone.")
 
             if !candidates.isEmpty {
                 Text("Already met")
@@ -165,13 +180,27 @@ struct AddKeyHolderFlow: View {
                 }
             }
         } actions: {
+            // Kit first (1.3): the one way an owner can finish setup alone,
+            // tonight, with nobody else in the room.
             Button {
-                move(.scanning)
+                showKitKey = true
             } label: {
-                Label(candidates.isEmpty ? "Scan their seal" : "Someone new: scan their seal", systemImage: "qrcode.viewfinder")
+                Label("Use a key from your kit", systemImage: "key.fill")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(SealPrimaryButtonStyle())
+            .parentTapTarget(60)
+            .disabled(DemoFixtures.isActive)
+            Text("No phone needed for them. Type their name, tap the key twice, and give it to them later with the printed page.")
+                .font(.footnote).foregroundStyle(.white.opacity(0.45))
+                .fixedSize(horizontal: false, vertical: true)
+            Button {
+                move(.scanning)
+            } label: {
+                Label(candidates.isEmpty ? "They are here: scan their seal" : "Someone new: scan their seal", systemImage: "qrcode.viewfinder")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(SealSecondaryButtonStyle())
             .parentTapTarget(60)
             .disabled(DemoFixtures.isActive)
             Text("Their seal is the square code on their People screen.")
