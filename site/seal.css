@@ -148,6 +148,8 @@ body.home { display:flex; flex-direction:column; min-height:100vh; min-height:10
   text-align:center; color:var(--dim); font-size:17px; }
 .write b { color:var(--ink); font-weight:600; }
 .write-get { display:inline-block; margin-top:4px; font-weight:600; color:var(--brass); }
+.key-kit-link { margin-left:18px; }
+@media (max-width:520px) { .key-kit-link { display:block; margin:12px 0 0; } }
 .door-foot { display:flex; flex-wrap:wrap; justify-content:center; gap:8px 22px;
   padding:28px 24px 40px; font-size:14px; }
 .door-foot a { color:var(--faint); text-decoration:none; }

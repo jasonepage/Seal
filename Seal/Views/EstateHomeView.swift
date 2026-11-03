@@ -1208,13 +1208,13 @@ struct EstateHomeView: View {
     // MARK: - Harbor's one next step (1.3)
 
     /// The one thing worth doing next once everything is sealed, or nil.
-    /// One at a time, in this order: a key handover nobody recorded, a key
-    /// holder whose yearly check is overdue, then a backup key. Unsealed
-    /// changes are left out on purpose: the orange strip and the Seal bar
-    /// already say that, and Harbor saying it too would be two voices for
-    /// one job. Key holders who deleted their account are left to the
-    /// warning on the Keys tab.
+    /// One at a time, in this order: a key holder who deleted their Seal
+    /// account, a key handover nobody recorded, a key holder whose yearly
+    /// check is overdue, then a backup key. Unsealed changes are left out on
+    /// purpose: the orange strip and the Seal bar already say that, and
+    /// Harbor saying it too would be two voices for one job.
     private enum NextStep {
+        case replaceGone(friend: FriendStore.StoredFriend?, engine: EstateEngine, name: String)
         case recordHandover(friend: FriendStore.StoredFriend, engine: EstateEngine, name: String)
         case checkKey(friend: FriendStore.StoredFriend, engine: EstateEngine, name: String, detail: String)
         case backupKey
@@ -1226,6 +1226,11 @@ struct EstateHomeView: View {
 
     private var nextStep: NextStep? {
         guard !DemoFixtures.isActive, !inSetup else { return nil }
+        // Gone first: their key can no longer help, so the rule may already
+        // need one more person than can be counted on.
+        if let row = engines.keyHolderRows.first(where: { gone[$0.custodian.rootHash] != nil }) {
+            return .replaceGone(friend: storedFriend(for: row.custodian), engine: row.primary, name: row.custodian.displayName)
+        }
         let rows = engines.keyHolderRows.filter { gone[$0.custodian.rootHash] == nil }
         for row in rows where !row.handoverSigned {
             if let friend = storedFriend(for: row.custodian) {
@@ -1248,6 +1253,24 @@ struct EstateHomeView: View {
     @ViewBuilder
     private var harborNextStepCard: some View {
         switch nextStep {
+        case .replaceGone(let friend, let engine, let name):
+            let line = "Next: replace \(name) as a key holder."
+            let sub = "\(name) deleted their Seal account, so their key can't help open your envelopes anymore. Take them off, add someone else, then seal again."
+            if let friend {
+                NavigationLink {
+                    PersonView(person: friend, myRoot: myRoot, friendStore: friendStore,
+                               estateEngine: engine, ceremony: ceremony, sync: sync,
+                               allEngines: engines.all)
+                } label: {
+                    nextStepRow(line: line, sub: sub)
+                }
+                .buttonStyle(.plain)
+                .parentTapTarget()
+            } else {
+                Button { tab = .keys } label: { nextStepRow(line: line, sub: sub) }
+                    .buttonStyle(.plain)
+                    .parentTapTarget()
+            }
         case .recordHandover(let friend, let engine, let name):
             NavigationLink {
                 PersonView(person: friend, myRoot: myRoot, friendStore: friendStore,

@@ -121,7 +121,20 @@ struct HomeView: View {
     /// The heartbeat first, because it is the line that matters most, then
     /// the estates this phone guards.
     private func refreshEverything() async {
-        for engine in engines.all { await engine.heartbeat() }
+        // Only a person opening the app checks in (1.3). A silent push wakes
+        // the app in the background, and before 1.3 that wake signed a
+        // heartbeat too, which cancels a claim. The signing key works on any
+        // unlocked phone, and on a phone with no passcode it always works,
+        // so a phone left on a charger could stop every claim forever, with
+        // nobody looking at it and around the app lock. CheckInIntent.swift
+        // gives the same reasons for never checking in from the background.
+        // In the background the owner's record is still read, so the claim
+        // warnings below can speak.
+        if UIApplication.shared.applicationState == .background {
+            for engine in engines.all { await engine.refreshOwner() }
+        } else {
+            for engine in engines.all { await engine.heartbeat() }
+        }
         answerCheckInRequest()
         // The heartbeat just moved, so the owner's own reminders are measured
         // again from now (OwnerNotices). Nothing is posted here; three
@@ -133,6 +146,9 @@ struct HomeView: View {
             // the owner's tap; this is the line that asks for it. A
             // recipient's new device was already handled by the heartbeat.
             await OwnerNotices.postNewKeyHolderDevices(engine: engine, ownerHash: engine.storeHash)
+            // A claim on the owner's own envelopes: said now and once a day
+            // (1.3). After a heartbeat there is none, and this clears them.
+            await OwnerNotices.postClaimWarnings(engine: engine, ownerHash: engine.storeHash)
         }
         // The "still right?" reminder, at the next due date (SecretReview).
         await SecretReview.schedule(ownerHash: myRoot.credentialIDHash,

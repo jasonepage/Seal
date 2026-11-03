@@ -122,6 +122,10 @@ enum OwnerNotices {
         }
         KeychainStore.delete(key(ownerHash))
         KeychainStore.delete(newDeviceKey(ownerHash))
+        if let claim = loadClaimRecord(ownerHash: ownerHash), !claim.identifiers.isEmpty {
+            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: claim.identifiers)
+        }
+        KeychainStore.delete(claimKey(ownerHash))
     }
 
     private static func identifier(estateID: String, level: Level) -> String {
@@ -144,6 +148,15 @@ enum OwnerNotices {
             return "In about \(days) days your quiet period ends and your key holders are told you have gone silent. Opening Seal today keeps that from happening. Nothing opens for a long time after that, and opening the app at any point stops it."
         }
     }
+
+    /// The days right after the quiet period ends (1.3). The phone cannot
+    /// know whether a key holder has started a claim yet, so it says only
+    /// what is true either way.
+    static let afterSilenceLine = "Your quiet time is over, so a key holder can now start opening your envelopes. If you are here, open Seal once. That stops everything."
+
+    /// How many daily lines follow the end of the quiet period. A claim
+    /// started right away is the case that most needs a loud phone.
+    static let afterSilenceDays = 7
 
     // MARK: - Scheduling
 
@@ -173,14 +186,27 @@ enum OwnerNotices {
         // The record is written FIRST, so a failure to add a request does not
         // turn every later refresh into another attempt to add it.
         var record = Record(anchorEpoch: anchor.timeIntervalSince1970, silenceDays: silenceDays, identifiers: [])
-        var pending: [(id: String, level: Level, fireIn: TimeInterval)] = []
+        var pending: [(id: String, body: String, fireIn: TimeInterval)] = []
         for level in Level.allCases {
             let fireAt = anchor.addingTimeInterval(level.offset(silenceDays: silenceDays))
             let fireIn = fireAt.timeIntervalSince(engine.now)
             guard fireIn > 60 else { continue }   // the trigger refuses a non positive interval
             let id = identifier(estateID: estate.id, level: level)
             record.identifiers.append(id)
-            pending.append((id, level, fireIn))
+            pending.append((id, line(for: level, silenceDays: silenceDays), fireIn))
+        }
+        // One line a day for a week after the quiet period ends (1.3). These
+        // are scheduled now, while the app runs, so they fire even if the
+        // push about a claim is late or never wakes the app. The next
+        // heartbeat replaces them like the three above.
+        let silenceEnds = anchor.addingTimeInterval(snapshot.policy.silence)
+        for day in 0..<afterSilenceDays {
+            let fireAt = silenceEnds.addingTimeInterval(TimeInterval(day) * 86_400 + 3_600)
+            let fireIn = fireAt.timeIntervalSince(engine.now)
+            guard fireIn > 60 else { continue }
+            let id = "\(checkInIdentifierPrefix)\(estate.id).after.\(day)"
+            record.identifiers.append(id)
+            pending.append((id, afterSilenceLine, fireIn))
         }
         saveRecord(record, ownerHash: ownerHash)
         guard !pending.isEmpty else { return }
@@ -195,7 +221,7 @@ enum OwnerNotices {
         for item in pending {
             let content = UNMutableNotificationContent()
             content.title = "Seal"
-            content.body = line(for: item.level, silenceDays: silenceDays)
+            content.body = item.body
             content.sound = .default
             content.categoryIdentifier = checkInCategory
             let trigger = UNTimeIntervalNotificationTrigger(timeInterval: item.fireIn, repeats: false)
@@ -207,6 +233,117 @@ enum OwnerNotices {
                 log.error("owner notices: could not schedule \(item.id, privacy: .public): \(error.localizedDescription, privacy: .public)")
             }
         }
+    }
+
+    // MARK: - A claim on the owner's own envelopes (1.3)
+
+    //  THE PROMISE THIS KEEPS. Key holders, the rule screen and the printed
+    //  page all say the owner "is warned every day" once a claim starts.
+    //  Before 1.3 nothing on the owner's phone did that: the reminders above
+    //  fire before the quiet period ends, and the claim itself reached this
+    //  phone only as a silent push. Now any refresh that finds a live claim
+    //  on one of the owner's own rules (a push wake, an open) says so at
+    //  once and schedules one line a day until keys can be tapped. Opening
+    //  the app stops the claim, and the next refresh takes the rest of the
+    //  lines off the phone.
+    //
+    //  The schedule matters more than the first line. A silent push can be
+    //  late, throttled, or never reach an app that was swiped away. Once the
+    //  lines are scheduled they fire whether or not the app runs again.
+    //
+    //  The identifiers sit under the check-in prefix, so each line carries
+    //  the "I'm still here" button and a tap on it is a check-in.
+
+    private static func claimKey(_ ownerHash: String) -> String { "seal.ownernotices.claim.\(ownerHash)" }
+
+    private struct ClaimRecord: Codable {
+        var claimID: String
+        var identifiers: [String]
+    }
+
+    private static func loadClaimRecord(ownerHash: String) -> ClaimRecord? {
+        guard let data = KeychainStore.load(claimKey(ownerHash)) else { return nil }
+        return try? JSONDecoder().decode(ClaimRecord.self, from: data)
+    }
+
+    /// At most this many daily lines, so a long warning period cannot crowd
+    /// out the phone's 64 pending notifications.
+    private static let claimDailyCap = 21
+
+    static let claimStartedLine = "A key holder has started opening your envelopes. If you are here, open Seal. One open stops it, and you do not need your key."
+
+    static func claimDailyLine(daysLeft: Int) -> String {
+        let when = daysLeft <= 1 ? "as soon as tomorrow" : "in about \(daysLeft) days"
+        return "Your key holders are still waiting to open your envelopes. If you are here, open Seal once to stop it. Keys can be tapped \(when)."
+    }
+
+    /// Called after every refresh, for each of the owner's rules.
+    static func postClaimWarnings(engine: EstateEngine, ownerHash: String) async {
+        guard !DemoFixtures.isActive else { return }
+        let center = UNUserNotificationCenter.current()
+        let previous = loadClaimRecord(ownerHash: ownerHash)
+
+        guard let estate = engine.estate, estate.epochPublished,
+              let snapshot = engine.ownerSnapshot, let claim = snapshot.claim,
+              let state = engine.ownerState, state.claimIsLive else {
+            // No live claim: take any lines still waiting off the phone.
+            if let previous {
+                center.removePendingNotificationRequests(withIdentifiers: previous.identifiers)
+                KeychainStore.delete(claimKey(ownerHash))
+            }
+            return
+        }
+        // Already told, already scheduled.
+        if previous?.claimID == claim.id { return }
+        if let previous {
+            center.removePendingNotificationRequests(withIdentifiers: previous.identifiers)
+        }
+
+        let now = engine.now
+        let tapsFrom = ReleaseMachine.timeline(snapshot, now: now)?.claimOpensAt
+        let base = "\(checkInIdentifierPrefix)claim.\(estate.id).\(claim.id)"
+        var items: [(id: String, body: String, fireIn: TimeInterval?)] = [("\(base).now", claimStartedLine, nil)]
+        if let tapsFrom {
+            for day in 1...claimDailyCap {
+                let fireAt = now.addingTimeInterval(TimeInterval(day) * 86_400)
+                guard fireAt < tapsFrom else { break }
+                let daysLeft = Int((tapsFrom.timeIntervalSince(fireAt) / 86_400).rounded(.up))
+                items.append(("\(base).\(day)", claimDailyLine(daysLeft: daysLeft), fireAt.timeIntervalSince(now)))
+            }
+        }
+
+        // The record is written FIRST, as everywhere in this file, so six
+        // refreshes an hour cannot turn one claim into six alerts.
+        let record = ClaimRecord(claimID: claim.id, identifiers: items.map { $0.id })
+        if let data = try? JSONEncoder().encode(record) {
+            KeychainStore.save(data, for: claimKey(ownerHash))
+        }
+
+        let settings = await center.notificationSettings()
+        guard settings.authorizationStatus == .authorized
+                || settings.authorizationStatus == .provisional else {
+            log.info("owner notices: claim lines held back, notifications are not allowed")
+            return
+        }
+
+        for item in items {
+            let content = UNMutableNotificationContent()
+            content.title = "Seal"
+            content.body = item.body
+            content.sound = .default
+            content.categoryIdentifier = checkInCategory
+            // A no-op until the time-sensitive entitlement is added; see
+            // CustodianNotices for why it is left in.
+            content.interruptionLevel = .timeSensitive
+            let trigger = item.fireIn.map { UNTimeIntervalNotificationTrigger(timeInterval: max($0, 61), repeats: false) }
+            let request = UNNotificationRequest(identifier: item.id, content: content, trigger: trigger)
+            do {
+                try await center.add(request)
+            } catch {
+                log.error("owner notices: could not add \(item.id, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        log.info("owner notices: claim \(claim.id, privacy: .public) announced, \(items.count - 1, privacy: .public) daily lines")
     }
 
     // MARK: - A key holder has a new device

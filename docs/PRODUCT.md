@@ -783,7 +783,7 @@ nobody has watched it happen and no vector can prove it.
 
 ## 16. Easier for everyone (planned for 1.3)
 
-Built 2026-11-02, not compiled yet. Five small things, each aimed at the
+Built 2026-11-02 and 2026-11-03, not compiled yet. Six small things, each aimed at the
 person over sixty this app is written for.
 
 ### The failure this exists for
@@ -818,8 +818,18 @@ what the family will see that sat in a menu most people never open.
 5. **The preview in plain sight.** "See what your family sees" under the
    envelope list and on the sealed confirmation.
 
+6. **The owner is really warned during a claim** (added 2026-11-03).
+   Key holders are told the owner "is warned every day". Before 1.3 the
+   owner's phone said nothing after the quiet period ended. Now a refresh
+   that finds a live claim says so at once and schedules a line a day
+   until keys can be tapped, and the week after the quiet period ends has
+   a line a day of its own, so a missed push cannot make a claim silent.
+   And a background wake never checks in: only a person opening the app
+   does, which is what section 7 and CheckInIntent.swift always said.
+
 ### What it must not do
 
+- Check the owner in from a background wake.
 - Read a secret out loud.
 - Sign a check-in from the lock screen or in the background.
 - Put Harbor on a screen where somebody is deciding about a key or a

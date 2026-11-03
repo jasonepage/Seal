@@ -1,5 +1,38 @@
 # Where Seal stands
 
+## 1.3, VEGA'S ROUND (2026-11-03, UNCOMPILED)
+
+Vega (Muse) asked for four things. What the code showed:
+
+1. "Owner-side rewrap for browser heirs": the phone half shipped in 1.2
+   (`coverNewRecipientDevices`, `custodiansWithNewPhones`, PRODUCT.md 15
+   item 1). What is missing is the browser half, item 2: a page that makes
+   a PRF virtual device for somebody who uses the app and has their root
+   key endorse it. Web only, no App Store. Not started; needs vectors set 2
+   first. Only helps people whose sign-in key does PRF in a browser (a
+   hardware key; an iCloud passkey does not leave Apple devices).
+2. Key holder gone or lost: the path existed (PersonView's gone card, take
+   off, add, seal). Fixed the button label and put a gone key holder first
+   in Harbor's next step.
+3. Honest browser copy: already there (privacy, open page, how it works).
+   Added the delete sentence to the privacy page. Site not deployed: the
+   working tree also has Jason's unfinished get.html and index changes.
+4. False claim protection: the key holder copy was clear, but the owner was
+   never actually warned during a claim. Built `OwnerNotices.postClaimWarnings`
+   and the seven after-silence lines. Found and fixed on the way: a silent
+   push in the background signed a heartbeat (see CHANGELOG, Fixed).
+
+Most likely to fail to compile: the tuple array with an optional
+`fireIn` in `postClaimWarnings`; `for day in 1...claimDailyCap` with
+`break`; the `replaceGone` case's `let` lines inside the ViewBuilder switch.
+
+To try: a test rule with the shortest silence. Let it lapse, have a test key
+holder start a claim from another phone while this phone is locked. This
+phone should show "A key holder has started opening your envelopes" (if the
+push wakes it) and, either way, a daily line. Open the app: the claim stops,
+the pending lines go (Settings has no list, so check the Console log line
+"claim ... announced" and that nothing fires the next day).
+
 ## 1.3 EASIER FOR EVERYONE (2026-11-02, UNCOMPILED)
 
 PRODUCT.md section 16. Five pieces, all on top of the Harbor commit.

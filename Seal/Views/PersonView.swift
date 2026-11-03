@@ -184,7 +184,7 @@ struct PersonView: View {
                     if let kitError { Text(kitError).font(.caption).foregroundStyle(.orange) }
                 }
                 Button(role: .destructive) { estateEngine.removeCustodian(hash) } label: {
-                    Text("Stop being a key holder").frame(maxWidth: .infinity)
+                    Text("Take \(person.identity.displayName) off your key holders").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered).tint(.orange)
                 .parentTapTarget()
@@ -239,7 +239,7 @@ struct PersonView: View {
                 Button(role: .destructive) {
                     for engine in stillHolding { engine.removeCustodian(hash) }
                 } label: {
-                    Text("Stop being a key holder").frame(maxWidth: .infinity)
+                    Text("Take \(name) off your key holders").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered).tint(.orange)
                 .parentTapTarget()

@@ -34,8 +34,32 @@ Dates are the day the work landed in the repository. Anything marked
 - "See what your family sees" in plain sight: under the envelope list, and on
   the sealed confirmation. It was only in the "..." menu before.
 
+- The owner is now really warned every day during a claim. Every screen told
+  key holders this, and nothing on the owner's phone did it. When a refresh
+  finds a live claim on one of the owner's own rules, the phone says so at once
+  and schedules one line a day until keys can be tapped (at most 21), each with
+  the "I'm still here" button. A heartbeat takes them off. Separately, seven
+  daily lines are scheduled for the week after the quiet period ends, so a
+  claim is loud even if its push never wakes the app.
+  (`OwnerNotices.postClaimWarnings`, `OwnerNotices.afterSilenceLine`)
+- Harbor's next step puts a key holder who deleted their account first:
+  "Next: replace [name] as a key holder."
+
+### Fixed
+
+- A silent push no longer checks the owner in. Before, a push that woke the app
+  in the background signed a heartbeat, which cancels a claim, on any unlocked
+  phone and always on a phone with no passcode, with nobody looking and around
+  the app lock. Now only a foreground refresh checks in; a background one only
+  reads the record. (`HomeView.refreshEverything`)
+- The owner's button to take someone off their key holders said "Stop being a
+  key holder", which reads like the owner quitting. It now says "Take [name]
+  off your key holders". (`PersonView.swift`)
+
 ### Changed
 
+- Privacy page: the relay paragraph now also says Apple lets the relay delete
+  an entry it delivered, as the open page and How it works already did.
 - Plain words for the lines that were still technical: "Revoke device" is
   "Remove device", "Delete identity" is "Delete my account", "identity" is
   "account" wherever a person reads it, "key shares" are "key pieces", and the
