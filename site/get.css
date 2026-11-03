@@ -49,3 +49,4 @@
 @media(max-width:560px){.key-hero-art img,.key-give .key-hero-art img{width:min(72vw,320px)}.key-hero{min-height:0;gap:36px}}
 
 .key-buy{display:block;text-align:center}.key-thanks{padding:110px max(28px,calc((100vw - 1120px)/2)) 40px;color:var(--key-ivory);background:var(--key-black);border-bottom:1px solid #3a3127}.key-thanks[hidden]{display:none}.key-thanks h2{margin:0;font-family:var(--serif);font-size:clamp(34px,4.5vw,54px);font-weight:600;line-height:1.05}.key-thanks p:last-child{max-width:640px;margin:16px 0 0;color:#cfc7ba;font-size:18px;line-height:1.55}.key-thanks a{color:#dfb65f}
+.key-breakdown .key-total{border-top:1px solid #b9a98f;color:#29231c;font-size:13px;font-weight:700}
