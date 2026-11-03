@@ -196,7 +196,7 @@ struct GuardedEstateView: View {
                 }
                 if ReleaseMachine.custodianCanAuthorize(s, now: now, custodianHash: myRoot.credentialIDHash) {
                     action("Tap my key", icon: "key.fill", tint: SealTheme.brass,
-                           note: "Have your security key ready. Your tap authorises the release and sends your share of the key to whoever started the claim.") {
+                           note: "Have your security key ready. Your tap says yes to opening the envelopes. It sends your piece of the key to the person who started the claim.") {
                         Task { await run { try await estateEngine.authorize(estateID: guarded.estateID, ceremony: ceremony) } }
                     }
                 }
@@ -340,7 +340,7 @@ struct GuardedEstateView: View {
                     Text("The rule").font(.headline).foregroundStyle(.white)
                     Text(s.policy.summary(custodianCount: epoch.custodianHashes.count))
                         .font(.callout).foregroundStyle(.white.opacity(0.7)).fixedSize(horizontal: false, vertical: true)
-                    Text("Key shares issued in round \(epoch.epoch). Your share is checked against the owner's signed commitment before it is ever used.")
+                    Text("Your piece of the key is up to date. Seal checks it against \(live.ownerName)'s own signed list before it is ever used.")
                         .font(.caption).foregroundStyle(.white.opacity(0.45)).fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

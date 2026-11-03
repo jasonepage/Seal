@@ -213,14 +213,14 @@ struct RecordView: View {
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Every line here is signed by the phone that made it, and can be checked again later against the public directory.")
+            Text("Every line here is signed by the phone that wrote it. Anyone can check it again later.")
             if timestampsOn {
-                Text("Seal asks a timestamp authority to sign each line's digest, and only the digest ever leaves this phone. It keeps the token that comes back. That token's own signature is checked when you export the record, not here.")
-                Text("A line still marked Signed has no token yet. It gets one the next time this screen opens with a connection.")
+                Text("An outside clock service stamps the time on each line. Only a short code leaves this phone, never the line itself. The stamps are checked when you save a copy of the record.")
+                Text("A line still marked Signed is waiting for its time stamp. It gets one the next time you open this screen while online.")
             } else {
-                Text("The times are that phone's own clock, so Seal can prove who signed something and that its contents have not changed, but not when it happened. Turn on independent timestamps on the You screen to close that.")
+                Text("The times come from that phone's own clock. Seal can prove who signed a line and that it was not changed, but not when. To prove when, turn on Independent timestamps on the You screen.")
             }
-            Text("A line here says credential A did something with credential B. It is not proof of anyone's legal identity, and it does not say whether what they agreed to was wise.")
+            Text("A line shows that one key did something with another key. It does not prove who a person is in the eyes of the law, and it does not say whether what they agreed to was wise.")
         }
         .font(.caption2)
         .foregroundStyle(.white.opacity(0.4))

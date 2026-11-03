@@ -780,3 +780,53 @@ The PRF secret. One hardware key, one salt: unlock the same sponsored
 blob on an iPhone and in Chrome on Android and on a computer. WebAuthn
 hashes the salt the same way everywhere, so the secret should match, but
 nobody has watched it happen and no vector can prove it.
+
+## 16. Easier for everyone (planned for 1.3)
+
+Built 2026-11-02, not compiled yet. Five small things, each aimed at the
+person over sixty this app is written for.
+
+### The failure this exists for
+
+Nothing in 1.2 is broken for somebody who is good with phones. The gaps are
+for everybody else: a technical word on a screen that has to be read
+aloud, a check-in reminder that only says "open the app", a letter in small
+type for somebody who cannot read small type any more, and a preview of
+what the family will see that sat in a menu most people never open.
+
+### What it is
+
+1. **Plain words.** "Revoke device" became "Remove device", "Delete
+   identity" became "Delete my account", key shares became key pieces, and
+   every line a person reads says "account" where it said "identity". The
+   promises in section 7 did not change; only how they are said.
+2. **Harbor's one next step.** On the quiet home screen, once everything
+   is sealed, Harbor holds one line: the single most useful thing left. A
+   key handover nobody recorded, then a key holder whose yearly check is
+   overdue, then a backup key. Nothing while something is unsealed, because
+   the strip and the Seal bar already say that. Harbor stays off key,
+   identity and release decision screens; this card is on the home screen
+   and opens them.
+3. **Read it to me.** Under an opened letter. The phone's own voice, on
+   the phone, reads the title and the letter. Never the secrets. It stops
+   on a page change, on close, and the moment the app leaves the
+   foreground.
+4. **"I'm still here" on the reminder.** The button opens the app, the
+   same as Siri and the widget (CheckInIntent.swift). It never writes in the
+   background, because the check-in is signed by a key that works only on
+   an unlocked phone, and it never goes around the app lock.
+5. **The preview in plain sight.** "See what your family sees" under the
+   envelope list and on the sealed confirmation.
+
+### What it must not do
+
+- Read a secret out loud.
+- Sign a check-in from the lock screen or in the background.
+- Put Harbor on a screen where somebody is deciding about a key or a
+  release.
+
+### Left for later
+
+- A practice run for key holders (a pretend release), so the first time is
+  not the real day. It must not teach anything the real one does not do.
+- Spanish. Crypto, estate and recovery words need a careful human review.

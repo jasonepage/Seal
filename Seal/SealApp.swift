@@ -24,6 +24,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        OwnerNotices.registerCategories()
         return true
     }
 
@@ -60,6 +61,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             NotificationCenter.default.post(name: Self.weeklyQuestionTapped, object: nil)
         } else if identifier.hasPrefix("seal.owner.newdevice.") {
             NotificationCenter.default.post(name: Self.newKeyHolderDeviceTapped, object: nil)
+        } else if identifier.hasPrefix(OwnerNotices.checkInIdentifierPrefix) {
+            // A check-in reminder, tapped or its "I'm still here" button.
+            // Either way the app is now open, and opening it is the
+            // check-in (OwnerNotices, CheckInIntent.swift). The flag is the
+            // Siri one, so the home screen says "You are checked in." The
+            // post runs a refresh in case the foreground one already ran.
+            CheckInRequest.flag()
+            NotificationCenter.default.post(name: Self.messageArrived, object: nil)
         }
         completionHandler()
     }

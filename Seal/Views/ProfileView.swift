@@ -87,7 +87,7 @@ struct ProfileView: View {
                         Button("Save") { Task { await saveName() } }
                         Button("Cancel", role: .cancel) {}
                     } message: {
-                        Text("This is only a label, your key stays your identity. Friends see the new name next time they sync.")
+                        Text("This only changes the name people see. Your key stays the same. Others see the new name the next time their app updates.")
                     }
                     Label(myRoot.tier == .verified ? "Verified, hardware key" : "Passkey",
                           systemImage: myRoot.tier == .verified ? "key.radiowaves.forward.fill" : Biometry.symbol)
@@ -152,7 +152,7 @@ struct ProfileView: View {
                 }
             }
             .confirmationDialog(
-                "This deletes this device's copy of your envelopes and your people. They do not come back. Your identity survives; sign in again with your key or \(Biometry.name).",
+                "This deletes this device's copy of your envelopes and your people. They do not come back. Your account is kept. Sign in again with your key or \(Biometry.name).",
                 isPresented: $confirmReset, titleVisibility: .visible
             ) {
                 Button("Sign out and delete local data", role: .destructive) {
@@ -184,11 +184,11 @@ struct ProfileView: View {
                 }
             }
             .confirmationDialog(
-                "Revoke this device? It can never sign or decrypt again. Your key signs the revocation, one more tap.",
+                "Remove this device? It can never open or sign anything again. Tap your key once more to confirm.",
                 isPresented: .init(get: { revoking != nil }, set: { if !$0 { revoking = nil } }),
                 titleVisibility: .visible
             ) {
-                Button("Revoke device", role: .destructive) {
+                Button("Remove device", role: .destructive) {
                     if let device = revoking {
                         Task {
                             do {
@@ -210,7 +210,7 @@ struct ProfileView: View {
                     revoking = nil
                 }
             }
-            .alert("Could not revoke", isPresented: Binding(get: { revokeError != nil }, set: { if !$0 { revokeError = nil } })) {
+            .alert("Could not remove the device", isPresented: Binding(get: { revokeError != nil }, set: { if !$0 { revokeError = nil } })) {
                 Button("OK", role: .cancel) {}
             } message: { Text(revokeError ?? "") }
             .task {
@@ -246,7 +246,7 @@ struct ProfileView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("No backup key yet")
                         .foregroundStyle(.white)
-                    Text("Lose your key and this identity is gone. Nobody can reset it. Add one under Your keys, below.")
+                    Text("Lose your key and this account is gone. Nobody can reset it. Add one under Your keys, below.")
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.6))
                         .fixedSize(horizontal: false, vertical: true)
@@ -337,7 +337,7 @@ struct ProfileView: View {
                     .font(.caption2)
                     .foregroundStyle(.white.opacity(0.4))
                 infoRow("Directory", directoryStatus)
-                infoRow("This device", identity.deviceEndorsement != nil ? "Endorsed" : "Not endorsed")
+                infoRow("This device", identity.deviceEndorsement != nil ? "Approved by your key" : "Not approved yet")
             }
         }
     }
@@ -491,7 +491,7 @@ struct ProfileView: View {
         .padding(.horizontal, 24)
         .padding(.top, 16)
 
-        Text("Signing out deletes this device's copy of your envelopes and your people. Your identity stays in the directory. Sign back in with your key or \(Biometry.name).")
+        Text("Signing out deletes this device's copy of your envelopes and your people. Your account is kept. Sign back in with your key or \(Biometry.name).")
             .font(.caption2)
             .foregroundStyle(.white.opacity(0.5))
             .multilineTextAlignment(.center)
@@ -501,7 +501,7 @@ struct ProfileView: View {
         // first, then the full local wipe.
         Button(role: .destructive) { confirmDelete = true } label: {
             Group {
-                if deleting { ProgressView() } else { Text("Delete identity") }
+                if deleting { ProgressView() } else { Text("Delete my account") }
             }
             .frame(maxWidth: .infinity)
         }
@@ -518,7 +518,7 @@ struct ProfileView: View {
                 .padding(.horizontal, 40)
         }
 
-        Text("Deleting removes your identity from the directory permanently. Friends can no longer verify you, and your history is gone for good. There is no recovery.")
+        Text("Deleting removes your account for good. People you have met can no longer check that it is you, and your history is gone. There is no way to undo it.")
             .font(.caption2)
             .foregroundStyle(.white.opacity(0.5))
             .multilineTextAlignment(.center)
@@ -597,7 +597,7 @@ struct ProfileView: View {
             }
             Spacer()
             if isRevoked {
-                Text("Revoked")
+                Text("Removed")
                     .font(.caption2)
                     .foregroundStyle(.orange.opacity(0.7))
             } else if !isThisDevice {

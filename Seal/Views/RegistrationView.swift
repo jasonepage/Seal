@@ -132,7 +132,7 @@ struct RegistrationView: View {
                                 .foregroundStyle(.white.opacity(0.55))
                         }
                         .disabled(busy)
-                        .confirmationDialog("Retire a key. Tap the key or passkey you want to retire. The identity under it is deleted for good, and nothing is signed in to.",
+                        .confirmationDialog("Retire a key. Tap the key or passkey you want to retire. The account under it is deleted for good, and you are not signed in.",
                                             isPresented: $showRetireOptions, titleVisibility: .visible) {
                             Button("\(Biometry.title) (passkey)", role: .destructive) { Task { await retire(.passkey) } }
                             Button("Security key", role: .destructive) { Task { await retire(.verified) } }
@@ -143,7 +143,7 @@ struct RegistrationView: View {
                             Button("OK", role: .cancel) {}
                         } message: { Text(retiredMessage ?? "") }
 
-                        Text("Your key is your identity. People are added in person.\nA backup key can bring your identity back.")
+                        Text("Your key is how Seal knows it is you. People are added in person.\nA backup key can bring your account back.")
                             .font(.caption2)
                             .foregroundStyle(.white.opacity(0.6))
                             .multilineTextAlignment(.center)
@@ -225,7 +225,7 @@ struct RegistrationView: View {
         ceremony.resetPhase()
         do {
             _ = try await ceremony.retireCredential(directory: sync, tier: tier)
-            retiredMessage = "That key no longer holds a Seal identity. You can set up a new one now."
+            retiredMessage = "That key no longer has a Seal account. You can set up a new one now."
         } catch {
             // The ceremony already put the reason into `phase`, which the
             // status line shows in orange.

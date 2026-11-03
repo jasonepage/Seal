@@ -21,13 +21,13 @@ import SwiftUI
 
 enum BackupKeyCopy {
     /// docs/UI.md §3.1, verbatim. Do not soften.
-    static let stakes = "Lose every key, lose this identity. Nobody can reset it, not us, not Apple."
+    static let stakes = "Lose every key and you lose this account. Nobody can reset it, not us, not Apple."
 
     static let notMessages = "A backup key brings back who you are: the same name, the same seal, so your family can still check it's really you. It does NOT move your envelopes or your people onto the new phone. Those live on the phone you lost. Your family adds you again, in person, the way they did the first time, and you seal your envelopes again."
 
-    static let stolenNotLost = "If your main key is stolen rather than lost, delete the identity and start fresh. A backup key can carry your identity forward, but it can't lock the thief out."
+    static let stolenNotLost = "If your main key is stolen, not lost, delete this account and start fresh. A backup key can bring your account back, but it can't lock the thief out."
 
-    static let mustBeDifferent = "Use a second security key, or a passkey on someone else's phone, a helper you'd trust with your identity. The key you already sign in with can't back itself up."
+    static let mustBeDifferent = "Use a second security key, or a passkey on someone else's phone, someone you would trust with your account. The key you already sign in with can't back itself up."
 
     static let needsMainKey = "Adding or removing a backup key needs your main key, the one you started with. A phone you recovered using a backup key can't do it."
 
@@ -39,7 +39,7 @@ enum BackupKeyCopy {
     /// Same reasoning as promptTitle: the flag no longer knows whether
     /// anyone else is involved, so the copy stops assuming one.
     static func recoveredAction(parentMode: Bool) -> String {
-        "Start fresh when you can. This identity can't be made safe again."
+        "Start fresh when you can. This account can't be made safe again."
     }
 
     /// One string. This used to aim at "the family helper" whenever Parent
@@ -170,11 +170,11 @@ struct BackupKeysSection: View {
             }
         }
         .confirmationDialog(
-            "Revoke this backup key? It can never sign in again, and any phone that was set up using it stops working too, permanently. Your main key signs the revocation, so this needs one more tap of it.",
+            "Remove this backup key? It can never sign in again, and any phone set up with it stops working too, for good. Tap your main key once more to confirm.",
             isPresented: .init(get: { revoking != nil }, set: { if !$0 { revoking = nil } }),
             titleVisibility: .visible
         ) {
-            Button("Revoke backup key", role: .destructive) {
+            Button("Remove backup key", role: .destructive) {
                 if let backup = revoking {
                     Task {
                         try? await ceremony.revokeBackupCredential(backup, myRoot: myRoot, directory: sync)

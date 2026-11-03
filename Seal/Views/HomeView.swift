@@ -94,7 +94,7 @@ struct HomeView: View {
         if let estate = estateEngine.estate, estate.epochPublished {
             checkInLine = estateEngine.lastError == nil
                 ? "You are checked in. The people holding your keys can see you are still here."
-                : "Seal could not reach the record just now. Open the app again when you have a signal, and it will check you in."
+                : "Seal could not get online just now. Open the app again when you have a signal, and it will check you in."
         } else {
             checkInLine = "Nothing to check in to yet. Seal your envelopes first, and then a check-in means something."
         }

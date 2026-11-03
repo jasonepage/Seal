@@ -38,7 +38,7 @@ struct RevealView: View {
             },
             ownerName: ownerName,
             emptyTitle: "Nothing addressed to you.",
-            emptyLine: "The release went through, and none of the envelopes were written for this identity.",
+            emptyLine: "The envelopes opened, but none of them were written to you.",
             banner: nil,
             onClose: onClose,
             // The recipient's own identity hash: their check marks on "what
@@ -99,6 +99,9 @@ struct RevealPager: View {
     /// (AppLock.confirmReveal). Per page, so moving to the next envelope
     /// asks again.
     @State private var secretsShownFor: Set<String> = []
+    /// "Read it to me" (LetterReader.swift, 1.3).
+    @StateObject private var reader = LetterReader()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         NavigationStack {
@@ -161,6 +164,12 @@ struct RevealPager: View {
             .task {
                 if let viewerHash { done = FirstStepsDone.load(viewerHash: viewerHash) }
             }
+            // The reader never talks over a different page, a closed
+            // screen or a locked phone.
+            .onChange(of: index) { _, _ in reader.stop() }
+            .onChange(of: scenePhase) { _, phase in
+                if phase != .active { reader.stop() }
+            }
             .onChange(of: pages.count) { _, count in
                 // The preview's reorder can shrink or shuffle the list under
                 // us; never point past the end.
@@ -173,6 +182,7 @@ struct RevealPager: View {
                 Button("OK", role: .cancel) {}
             } message: { Text(saved ?? "") }
             .onDisappear {
+                reader.stop()
                 for url in voiceFiles.values { try? FileManager.default.removeItem(at: url) }
             }
             .alert("Seal", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
@@ -219,6 +229,17 @@ struct RevealPager: View {
                     .font(.body).foregroundStyle(.white.opacity(0.9))
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(16).background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
+                let reading = reader.readingID == page.id
+                Button {
+                    reader.toggle(id: page.id, title: e.title, letter: e.letter)
+                } label: {
+                    Label(reading ? "Stop reading" : "Read it to me",
+                          systemImage: reading ? "stop.circle" : "speaker.wave.2")
+                        .frame(maxWidth: .infinity).padding(.vertical, 6)
+                }
+                .buttonStyle(.bordered).tint(SealTheme.brass)
+                .parentTapTarget()
+                .accessibilityHint("The phone reads the letter out loud. The secrets are never read.")
             }
             if let voice = e.voiceNote { voiceView(voice, page: page) }
             if let video = e.videoNote { videoView(video, page: page) }

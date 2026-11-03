@@ -82,6 +82,10 @@ struct EstateHomeView: View {
     @State private var sealedOK = false
     @State private var showTimeTravel = false
     @State private var showFamilyPreview = false
+    /// "See what your family sees" on the sealed confirmation. The preview
+    /// opens from that sheet's onDismiss, because presenting a second sheet
+    /// in the same turn as dismissing the first never shows it.
+    @State private var previewAfterSealed = false
     @State private var showSecretReview = false
     /// The key button on the Envelopes screen (PasswordsView).
     @State private var showPasswords = false
@@ -284,6 +288,16 @@ struct EstateHomeView: View {
                                 .clipShape(RoundedRectangle(cornerRadius: wide ? 14 : 0))
                                 .padding(.bottom, wide ? 12 : 0)
                         }
+                        // Harbor's one next step (1.3). Only on the quiet
+                        // home: not during setup (the setup card is the next
+                        // step), not over a loud card, and not while
+                        // something is unsealed (the strip and the Seal bar
+                        // already say that).
+                        if !guardsOnly, !inSetup, loudEngine == nil, !anyUnsealed, nextStep != nil {
+                            harborNextStepCard
+                                .padding(.top, wide ? 0 : 12)
+                                .padding(.bottom, 12)
+                        }
                         // On a wide screen the rows sit in one soft card,
                         // like Mail on iPad, instead of floating in the dark.
                         VStack(spacing: 0) { inbox }
@@ -404,6 +418,16 @@ struct EstateHomeView: View {
                     }
                 Divider().overlay(.white.opacity(0.08)).padding(.leading, 76)
             }
+            // The preview used to live only in the "..." menu, where most
+            // people never look (1.3). Under the list, in plain sight.
+            Button { showFamilyPreview = true } label: {
+                Label("See what your family sees", systemImage: "eye")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(SealSecondaryButtonStyle())
+            .parentTapTarget()
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
         } else {
             SealMascot(
                 size: 92,
@@ -945,11 +969,18 @@ struct EstateHomeView: View {
             .alert("Could not seal", isPresented: Binding(get: { sealError != nil }, set: { if !$0 { sealError = nil } })) {
                 Button("OK", role: .cancel) {}
             } message: { Text(sealError ?? "") }
-            .sheet(isPresented: $sealedOK) {
+            .sheet(isPresented: $sealedOK, onDismiss: {
+                if previewAfterSealed {
+                    previewAfterSealed = false
+                    showFamilyPreview = true
+                }
+            }) {
                 sealedConfirmation
                     .environment(\.parentMode, parentMode)
                     .parentTypeScale()
-                    .presentationDetents([.medium])
+                    // Large since 1.3: a second button and Bigger text no
+                    // longer fit in half a small phone.
+                    .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
             }
             .onReceive(NotificationCenter.default.publisher(for: Clocks.changed)) { _ in
@@ -976,6 +1007,15 @@ struct EstateHomeView: View {
                 Button("Done") { sealedOK = false }
                     .buttonStyle(SealPrimaryButtonStyle())
                     .parentTapTarget()
+                Button {
+                    previewAfterSealed = true
+                    sealedOK = false
+                } label: {
+                    Label("See what your family sees", systemImage: "eye")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(SealSecondaryButtonStyle())
+                .parentTapTarget()
             }
             .padding(28)
             .frame(maxWidth: 460)
@@ -997,7 +1037,7 @@ struct EstateHomeView: View {
             let subject = drafts == 1 ? "1 envelope is" : "\(drafts) envelopes are"
             return "\(subject) only on this phone. Until you seal them they cannot open for anyone, ever. Tap Seal the envelopes below."
         }
-        return "Your rule or your key holders changed since you last sealed. Seal again to give your key holders fresh shares. Your envelopes themselves are not touched."
+        return "Your rule or your key holders changed since you last sealed. Seal again so your key holders get new key pieces. Your envelopes are not touched."
     }
 
     // MARK: - The first run
@@ -1052,7 +1092,7 @@ struct EstateHomeView: View {
             }
             return "How long the silence has to be, how many warnings you get, and how many of them it takes."
         case .seal:
-            return "Everything is encrypted on this phone and published. Seal opens nothing early."
+            return "Everything is locked on this phone before it is saved. Nothing can open early."
         }
     }
 
@@ -1096,6 +1136,11 @@ struct EstateHomeView: View {
                     Text("\(done) of 4 done")
                         .font(.caption).foregroundStyle(.white.opacity(0.5))
                 }
+                Spacer(minLength: 0)
+                // Harbor keeps the owner company through setup (1.3,
+                // MOTION.md "compact status card": trailing edge, blink only).
+                HarborFigure(state: .idle, animated: true)
+                    .frame(width: 66, height: 56)
             }
 
             Text("Sealed envelopes for the people you leave behind. Nobody, including us, can open one early. It takes an evening.")
@@ -1158,6 +1203,107 @@ struct EstateHomeView: View {
         .background((isCurrent ? Color.white.opacity(0.07) : Color.clear),
                     in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .contentShape(Rectangle())
+    }
+
+    // MARK: - Harbor's one next step (1.3)
+
+    /// The one thing worth doing next once everything is sealed, or nil.
+    /// One at a time, in this order: a key handover nobody recorded, a key
+    /// holder whose yearly check is overdue, then a backup key. Unsealed
+    /// changes are left out on purpose: the orange strip and the Seal bar
+    /// already say that, and Harbor saying it too would be two voices for
+    /// one job. Key holders who deleted their account are left to the
+    /// warning on the Keys tab.
+    private enum NextStep {
+        case recordHandover(friend: FriendStore.StoredFriend, engine: EstateEngine, name: String)
+        case checkKey(friend: FriendStore.StoredFriend, engine: EstateEngine, name: String, detail: String)
+        case backupKey
+    }
+
+    private var anyUnsealed: Bool {
+        !DemoFixtures.isActive && engines.all.contains { $0.estate?.hasUnsealedChanges ?? false }
+    }
+
+    private var nextStep: NextStep? {
+        guard !DemoFixtures.isActive, !inSetup else { return nil }
+        let rows = engines.keyHolderRows.filter { gone[$0.custodian.rootHash] == nil }
+        for row in rows where !row.handoverSigned {
+            if let friend = storedFriend(for: row.custodian) {
+                return .recordHandover(friend: friend, engine: row.primary, name: row.custodian.displayName)
+            }
+        }
+        for row in rows {
+            if let standing = row.primary.custodyStanding(for: row.custodian, gone: gone), standing.overdue,
+               let friend = storedFriend(for: row.custodian) {
+                return .checkKey(friend: friend, engine: row.primary, name: row.custodian.displayName, detail: standing.line)
+            }
+        }
+        let root = identity.rootIdentity ?? myRoot
+        if (root.backupCredentials ?? []).isEmpty {
+            return .backupKey
+        }
+        return nil
+    }
+
+    @ViewBuilder
+    private var harborNextStepCard: some View {
+        switch nextStep {
+        case .recordHandover(let friend, let engine, let name):
+            NavigationLink {
+                PersonView(person: friend, myRoot: myRoot, friendStore: friendStore,
+                           estateEngine: engine, ceremony: ceremony, sync: sync,
+                           allEngines: engines.all)
+            } label: {
+                nextStepRow(line: "Next: record handing \(name) a key.",
+                            sub: "Do it with \(name) next to you. It takes a minute.")
+            }
+            .buttonStyle(.plain)
+            .parentTapTarget()
+        case .checkKey(let friend, let engine, let name, let detail):
+            NavigationLink {
+                PersonView(person: friend, myRoot: myRoot, friendStore: friendStore,
+                           estateEngine: engine, ceremony: ceremony, sync: sync,
+                           allEngines: engines.all)
+            } label: {
+                nextStepRow(line: "Next: ask \(name) about their key.", sub: detail)
+            }
+            .buttonStyle(.plain)
+            .parentTapTarget()
+        case .backupKey:
+            Button(action: onOpenProfile) {
+                nextStepRow(line: "Next: add a backup key.",
+                            sub: "If you lose your key, a backup key brings your account back. Tap here, then Your keys.")
+            }
+            .buttonStyle(.plain)
+            .parentTapTarget()
+        case nil:
+            EmptyView()
+        }
+    }
+
+    private func nextStepRow(line: String, sub: String) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(line)
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(sub)
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.6))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+            HarborFigure(state: .idle, animated: true)
+                .frame(width: 66, height: 56)
+            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.white.opacity(0.3))
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 16))
+        .contentShape(Rectangle())
+        .padding(.horizontal, 20)
+        .accessibilityElement(children: .combine)
     }
 
     /// This owner's real rule, for the explainer. Falls back to the defaults

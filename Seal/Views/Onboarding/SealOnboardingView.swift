@@ -310,7 +310,7 @@ enum OnboardingScript {
         out.append(OnboardingScreen(
             id: "\(p).backup",
             title: "A backup key, for yourself.",
-            body: "Right after you sign up, Seal asks you to add a backup key. Do it then. There is no email reset, on purpose: nobody can take your identity by resetting it, not even us. So if you lose your only key, your identity is gone with it. A second security key, or a passkey on a phone you trust, brings it back.",
+            body: "Right after you sign up, Seal asks you to add a backup key. Do it then. There is no email reset, on purpose: nobody can take your account by resetting it, not even us. So if you lose your only key, your identity is gone with it. A second security key, or a passkey on a phone you trust, brings it back.",
             figure: .spare))
 
         out.append(OnboardingScreen(

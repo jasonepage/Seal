@@ -268,7 +268,7 @@ struct RuleSheet: View {
                 .parentTapTarget()
                 .accessibilityLabel("\(friend.identity.displayName), \(on ? "holds a key" : "does not hold a key") for \(engine.slot.name)")
             }
-            Text("Then hand each of them a key in person and record it from their name under Keys. Taking someone off issues fresh shares at the next seal.")
+            Text("Then hand each of them a key in person and record it from their name under Keys. If you take someone off, the others get new key pieces the next time you seal.")
                 .font(.caption).foregroundStyle(.white.opacity(0.4))
                 .fixedSize(horizontal: false, vertical: true)
         }

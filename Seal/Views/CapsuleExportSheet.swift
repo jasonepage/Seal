@@ -33,14 +33,14 @@ struct CapsuleExportSheet: View {
                 ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     Text("A copy you keep").font(.system(.title3, design: .rounded, weight: .semibold)).foregroundStyle(.white)
-                    Text("One file with the whole signed record, every key share as it was wrapped, the encrypted key tables, and every public key needed to check it. Nothing in it is readable without the key holders' keys. It verifies with a small script and no Seal, no Apple and no account: tools/verify_capsule.py in the Seal repository.")
+                    Text("One file with the whole signed record and the locked key pieces. Nobody can read it without the key holders' keys. It still works even if Seal and Apple are gone: a small free script checks it (tools/verify_capsule.py in the Seal code).")
                         .font(.callout).foregroundStyle(.white.opacity(0.75)).fixedSize(horizontal: false, vertical: true)
                     if isOwner {
                         Toggle("Include the encrypted envelopes themselves", isOn: $includeContent).tint(SealTheme.brass).foregroundStyle(.white)
-                        Text("Larger, but then the file alone is enough to open the envelopes after a release. Still encrypted. Keep it somewhere your key holders can reach.")
+                        Text("The file is bigger, but then it is enough by itself to open the envelopes after they are released. It stays locked. Keep it somewhere your key holders can reach.")
                             .font(.caption).foregroundStyle(.white.opacity(0.5)).fixedSize(horizontal: false, vertical: true)
                     } else {
-                        Text("As a key holder you export the record and the wrapped shares. The envelopes themselves are not yours to carry and are not in this file.")
+                        Text("As a key holder, your copy has the record and the locked key pieces. The envelopes are not in it. They are not yours to carry.")
                             .font(.caption).foregroundStyle(.white.opacity(0.5)).fixedSize(horizontal: false, vertical: true)
                     }
                     Button {

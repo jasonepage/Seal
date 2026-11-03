@@ -89,7 +89,7 @@ struct PolicyView: View {
 
                         if let problem { Text(problem).font(.callout).foregroundStyle(.orange) }
 
-                        Text("Changing who must agree issues fresh key shares the next time you seal. Your envelopes are not touched.")
+                        Text("If you change who must agree, your key holders get new key pieces the next time you seal. Your envelopes are not touched.")
                             .font(.caption).foregroundStyle(.white.opacity(0.45)).fixedSize(horizontal: false, vertical: true)
                     }
                     .padding(20)

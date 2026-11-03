@@ -1,5 +1,43 @@
 # Where Seal stands
 
+## 1.3 EASIER FOR EVERYONE (2026-11-02, UNCOMPILED)
+
+PRODUCT.md section 16. Five pieces, all on top of the Harbor commit.
+
+- Copy pass: 36 string literals in 12 view files. Text only, no logic. The
+  one that changed an interpolation is GuardedEstateView's rule card, which
+  now says `\(live.ownerName)` instead of `\(epoch.epoch)`; `epoch` is still
+  used on the line above, so no unused binding.
+- `EstateHomeView`: `NextStep` enum, `nextStep`, `harborNextStepCard`,
+  `nextStepRow`, `anyUnsealed`. Shown under the status strip when not in
+  setup, not guards only, no loud card, nothing unsealed. Harbor also sits at
+  the trailing edge of the setup card header.
+- `Seal/Views/LetterReader.swift` (new): AVSpeechSynthesizer behind an
+  ObservableObject. Delegate methods are `nonisolated` and hop to the main
+  actor with an `ObjectIdentifier` token, so a late cancel cannot switch off
+  the next page's button. `RevealPager` holds it as a `@StateObject`.
+- `OwnerNotices.registerCategories()` (called from `didFinishLaunching`): one
+  category, one action, `.foreground` and `.authenticationRequired`. The
+  delegate sets `CheckInRequest.flag()` for any `seal.owner.checkin.` tap and
+  posts `messageArrived` so a refresh runs even if the foreground one already
+  did. Reminders scheduled by 1.2 have no category until the next heartbeat
+  reschedules them, which is the next open.
+- Preview: a secondary button under the inbox rows, and one on the sealed
+  sheet that opens `FamilyPreviewPicker` from the sheet's `onDismiss`.
+  The sealed sheet is `.large` now.
+
+Most likely to fail to compile: `switch nextStep` matching enum cases through
+the optional (`case .recordHandover(let friend, ...)` and `case nil`);
+`identity.rootIdentity ?? myRoot`; `LetterReader`'s `override init()` and the
+`nonisolated` delegate methods under `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`.
+
+To try on a phone: seal with one key holder whose handover is not recorded
+(Harbor says "Next: record handing ..."), record it (the card moves on to the
+backup key if there is none); open a released test envelope and tap Read it
+to me, then lock the phone mid letter (it must stop); set the silence to its
+shortest in a DEBUG build, wait for a reminder, press and hold it, tap I'm
+still here on a locked phone.
+
 ## ADD A KEY HOLDER IN ONE GO, AND THE SHORT WALK (2026-10-14, UNCOMPILED)
 
 PRODUCT.md section 14. Two pieces.

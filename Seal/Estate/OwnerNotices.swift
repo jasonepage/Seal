@@ -44,6 +44,37 @@ enum OwnerNotices {
 
     private static func key(_ ownerHash: String) -> String { "seal.ownernotices.\(ownerHash)" }
 
+    // MARK: - The "I'm still here" button (1.3)
+
+    //  Each check-in reminder carries one button. Like Siri and the widget
+    //  (CheckInIntent.swift), it only opens the app: the check-in is signed
+    //  by a key that works only while the phone is unlocked, and opening
+    //  the app IS the check-in. So the button is marked foreground and
+    //  authentication required. iOS asks for Face ID or the passcode if the
+    //  phone is locked, Seal comes up, and the home screen says it is done.
+    //  Nothing is written in the background, nothing goes around the app
+    //  lock, and no new code signs anything.
+
+    /// Every check-in reminder's identifier starts with this. SealApp's
+    /// notification delegate routes a tap on one, or on its button, to the
+    /// same flag the Siri check-in sets.
+    static let checkInIdentifierPrefix = "seal.owner.checkin."
+    static let checkInCategory = "seal.owner.checkin"
+    static let checkInAction = "seal.owner.checkin.now"
+
+    /// Called once at launch. Seal has no other notification categories,
+    /// so setting the whole list here replaces nothing.
+    static func registerCategories() {
+        let here = UNNotificationAction(identifier: checkInAction,
+                                        title: "I'm still here",
+                                        options: [.foreground, .authenticationRequired])
+        let category = UNNotificationCategory(identifier: checkInCategory,
+                                              actions: [here],
+                                              intentIdentifiers: [],
+                                              options: [])
+        UNUserNotificationCenter.current().setNotificationCategories([category])
+    }
+
     /// The three moments, as a fraction of the silence window, or as days
     /// before its end for the last one.
     enum Level: String, CaseIterable {
@@ -94,7 +125,7 @@ enum OwnerNotices {
     }
 
     private static func identifier(estateID: String, level: Level) -> String {
-        "seal.owner.checkin.\(estateID).\(level.rawValue)"
+        "\(checkInIdentifierPrefix)\(estateID).\(level.rawValue)"
     }
 
     // MARK: - The line
@@ -166,6 +197,7 @@ enum OwnerNotices {
             content.title = "Seal"
             content.body = line(for: item.level, silenceDays: silenceDays)
             content.sound = .default
+            content.categoryIdentifier = checkInCategory
             let trigger = UNTimeIntervalNotificationTrigger(timeInterval: item.fireIn, repeats: false)
             let request = UNNotificationRequest(identifier: item.id, content: content, trigger: trigger)
             do {

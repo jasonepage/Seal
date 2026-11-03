@@ -17,6 +17,32 @@ Dates are the day the work landed in the repository. Anything marked
   (`EstateHomeView.swift`, `SealOnboardingView.swift`)
 - The Harbor motion studies, placement sheet and native animation rules live in
   `docs/design/harbor/`.
+- Harbor shows the one next step on the quiet home screen, once everything is
+  sealed: a key handover nobody recorded, then a key holder whose yearly check
+  is overdue, then a backup key. One at a time, and nothing while something is
+  unsealed. He also sits in the corner of the setup card.
+  (`EstateHomeView.nextStep`, PRODUCT.md section 16)
+- "Read it to me" under an opened letter: the phone's own voice reads the title
+  and the letter, never the secrets. It plays with the ring switch on silent,
+  follows the Spoken Content voice and speed when one is set, and stops on a
+  page change, on close and when the app leaves the foreground.
+  (`Seal/Views/LetterReader.swift`, `RevealView.swift`)
+- An "I'm still here" button on every check-in reminder. It opens the app,
+  exactly like the Siri and widget check-in, and asks for Face ID or the
+  passcode first on a locked phone. A plain tap on the reminder now also ends
+  with "You are checked in." (`OwnerNotices.registerCategories`, `SealApp.swift`)
+- "See what your family sees" in plain sight: under the envelope list, and on
+  the sealed confirmation. It was only in the "..." menu before.
+
+### Changed
+
+- Plain words for the lines that were still technical: "Revoke device" is
+  "Remove device", "Delete identity" is "Delete my account", "identity" is
+  "account" wherever a person reads it, "key shares" are "key pieces", and the
+  record screen, the key holder rule card, the export sheet and the backup key
+  screen were rewritten to be read aloud. 36 lines in 12 files.
+- The sealed confirmation is a full sheet now, so its two buttons fit with
+  Bigger text on a small phone.
 
 ## Web 1.2b, key holders on the web (live 2026-10-17)
 
