@@ -8,7 +8,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png?v=3">
 <meta name="theme-color" content="#0e0d0c">
 <link rel="stylesheet" href="seal.css">
-<link rel="stylesheet" href="get.css?v=2">
+<link rel="stylesheet" href="get.css?v=3">
 <title>Get a Seal kit</title>
 <meta name="description" content="Security keys for the people you trust, a printed setup card, and the Seal app. Seal your letters and passwords in one evening, by yourself.">
 </head>
@@ -23,6 +23,12 @@
 </header>
 
 <main>
+  <section id="ordered" class="key-thanks" hidden>
+    <p class="key-section-number">Order received</p>
+    <h2>Thank you. Your order is in.</h2>
+    <p>Your receipt is on its way to your email. Your kit ships within 3 business days, and we will email you when it ships. Questions? Write to <a href="mailto:support@sealmessenger.com">support@sealmessenger.com</a>.</p>
+  </section>
+  <script>if(new URLSearchParams(location.search).get("ordered")==="1"){document.getElementById("ordered").hidden=false}</script>
   <section class="key-hero">
     <div class="key-hero-copy">
       <p class="key-kicker">The complete Seal setup</p>
@@ -103,8 +109,8 @@
           <div><span>Card, packing, fulfillment, support and Seal</span><b>$20</b></div>
         </div>
         <div class="key-price"><strong>$49</strong><span>per key, plus shipping</span></div>
-        <span class="key-pending" aria-disabled="true">Checkout link coming soon</span>
-        <small>Orders open once this key is confirmed with Seal's key setup on a real phone.</small>
+        <a class="key-primary key-buy" href="https://buy.stripe.com/28EcMY5aT4aBfpi5Xs0Fi01">Buy the USB-C kit</a>
+        <small>Secure checkout by Stripe. $7.95 shipping per order.</small>
       </article>
 
       <article class="key-product lightning-product">
@@ -119,8 +125,8 @@
           <div><span>Card, packing, fulfillment, support and Seal</span><b>$34</b></div>
         </div>
         <div class="key-price"><strong>$119</strong><span>per key, plus shipping</span></div>
-        <span class="key-pending" aria-disabled="true">Checkout link coming soon</span>
-        <small>Orders open after the Seal checkout link is ready.</small>
+        <a class="key-primary key-buy" href="https://buy.stripe.com/aFaaEQ46PePfelebhM0Fi00">Buy the Lightning kit</a>
+        <small>Secure checkout by Stripe. $7.95 shipping per order.</small>
       </article>
     </div>
   </section>
@@ -142,8 +148,8 @@
     <div>
       <p><strong>Your phone</strong> Seal needs an iPhone with iOS 18 or later. The kit's plug has to match the phone you set the keys up on.</p>
       <p><strong>Compatibility</strong> Seal checks each key during setup and refuses it before saving anything if a needed feature is missing.</p>
-      <p><strong>Shipping</strong> US addresses only at first. The shipping price and how soon it ships will show before checkout opens.</p>
-      <p><strong>Returns</strong> The return policy will be posted before orders open. A key that arrives broken is replaced.</p>
+      <p><strong>Shipping</strong> US addresses only, including US territories and military addresses. $7.95 per order, however many kits are in it. Orders ship within 3 business days and usually arrive 3 to 8 business days after you order.</p>
+      <p><strong>Returns</strong> Unopened kits can be returned within 30 days of delivery for a refund of the kit price. Email <a href="mailto:support@sealmessenger.com">support@sealmessenger.com</a> first. If a key arrives damaged or does not work, email us a photo within 30 days and we will send a new one free.</p>
       <p><strong>Privacy</strong> Stripe handles payment. Your order details are used only to ship it and help you with it.</p>
       <p><strong>Prices</strong> Based on Yubico's listed US prices, which can change.</p>
     </div>
