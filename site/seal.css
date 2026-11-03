@@ -118,15 +118,15 @@ footer.site { border-top:1px solid var(--rule); margin-top:72px; padding:26px 0 
 footer.site a { color:var(--dim); }
 
 /* ---------------------------------------------------------------- home
-   The home page is a door, not a brochure: the wax seal, one sentence, one
+   The home page is a door, not a brochure: Harbor, one sentence, one
    button. Someone arriving here has usually been handed a key and may be
    grieving, so nothing competes with "Open your envelopes". Writers get
    one quiet paragraph below it; everything else is on the other pages. */
 body.home { display:flex; flex-direction:column; min-height:100vh; min-height:100dvh; }
 .door { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
   text-align:center; padding:56px 24px 40px; }
-.door-seal { width:clamp(112px,22vw,160px); height:auto; margin-bottom:28px;
-  filter:drop-shadow(0 10px 18px rgba(80,55,15,.22)); }
+.door-harbor { width:clamp(250px,45vw,380px); height:auto; margin:-24px 0 18px;
+  filter:drop-shadow(0 14px 22px rgba(80,55,15,.18)); }
 .door h1 { font-size:clamp(36px,7vw,60px); line-height:1.08; letter-spacing:-.015em;
   margin:0 0 14px; max-width:18ch; }
 .door-line { font-size:20px; color:var(--dim); max-width:30ch; margin:0 0 32px; }
@@ -148,28 +148,20 @@ body.home { display:flex; flex-direction:column; min-height:100vh; min-height:10
   text-align:center; color:var(--dim); font-size:17px; }
 .write b { color:var(--ink); font-weight:600; }
 .write-get { display:inline-block; margin-top:4px; font-weight:600; color:var(--brass); }
-
-.ph-card { display:flex; align-items:center; gap:14px; margin:22px 0 4px; padding:14px 16px;
-  border:1px solid var(--rule); border-radius:14px; background:var(--paper2); color:var(--ink); text-decoration:none; text-align:left; }
-.ph-card img { width:44px; height:auto; flex-shrink:0; }
-.ph-text { flex:1; min-width:0; line-height:1.35; }
-.ph-text b { display:block; font-weight:600; }
-.ph-text span { font-size:14px; color:var(--dim); }
-.ph-go { background:#FF6154; color:#fff; border-radius:999px; padding:7px 14px; font-weight:600; font-size:15px; white-space:nowrap; }
-.ph-card:hover .ph-go { background:#F04A3C; }
-.ph-card:focus-visible { outline:2px solid var(--brass); outline-offset:3px; }
-@media (max-width:440px) { .ph-card { flex-wrap:wrap; } .ph-go { width:100%; text-align:center; } }
 .door-foot { display:flex; flex-wrap:wrap; justify-content:center; gap:8px 22px;
   padding:28px 24px 40px; font-size:14px; }
 .door-foot a { color:var(--faint); text-decoration:none; }
 .door-foot a:hover { color:var(--ink); }
 
-/* One moment: the seal is pressed into place once, as wax is. */
+/* Harbor settles in once. He stays still after that. */
 @media (prefers-reduced-motion: no-preference) {
-  .door-seal { animation:press .7s cubic-bezier(.2,.9,.25,1.15) both; }
-  @keyframes press { from { opacity:0; transform:scale(1.12) rotate(-6deg); } to { opacity:1; transform:none; } }
+  .door-harbor { animation:harbor-arrive .8s cubic-bezier(.2,.8,.25,1) both; }
+  @keyframes harbor-arrive {
+    from { opacity:0; transform:translateY(10px) scale(.98); }
+    to { opacity:1; transform:none; }
+  }
 }
 @media (prefers-color-scheme: dark) {
   .door-open:hover { color:#14120F; }
-  .door-seal { filter:drop-shadow(0 10px 22px rgba(0,0,0,.5)); }
+  .door-harbor { filter:drop-shadow(0 14px 24px rgba(0,0,0,.48)); }
 }

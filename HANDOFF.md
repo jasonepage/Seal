@@ -1204,3 +1204,25 @@ and a review screenshot.
 
 Numbered steps for ops tasks. Concise replies. No em dashes anywhere. Commit
 after each working milestone, and check `git status` first. Mom is a tester.
+# HARBOR FOR 1.3 (2026-11-02, built clean)
+
+Harbor replaces the old generic seal silhouette with an older, patient mascot.
+The production character is native SwiftUI, not one of the generated reference
+images in `docs/design/harbor/` and not a new dependency.
+
+`Seal/Views/SealMascot.swift` now has separate body, face, eyelid, brow,
+whisker, flipper, medallion and envelope layers. `HarborState` covers idle,
+listening, waiting, receiving, protecting, releasing, edge peek and still.
+Breathing and blinking stop after three cycles. Reduce Motion goes straight to
+the final still state. `SealFigure` remains as a compatibility wrapper for its
+existing call site in the forge log.
+
+The first three placements are deliberately social: the empty envelope list,
+the final onboarding steps, and a sheet after a successful seal. Harbor is not
+on People, Keys, identity verification, claims, release authorization or other
+security decision screens. The old sealing alert became the Harbor sheet, with
+the same factual confirmation copy.
+
+Validation: a full unsigned device build succeeded with Xcode 26.6 and the iOS
+26.5 SDK. Run the DEBUG app on a phone next and inspect all three placements at
+normal text, `.accessibility5`, and Reduce Motion. The app build number is 4.

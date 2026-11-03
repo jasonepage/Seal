@@ -4,144 +4,377 @@
 
 import SwiftUI
 
-// MARK: - The Seal, drawn properly
+// MARK: - Harbor
 
-/// Side-profile silhouette of a hauled-out seal: chest up, head raised,
-/// tail resting. Coordinate space 220×140, scaled to fit.
-struct SealBodyShape: Shape {
+/// Harbor is the warm side of Seal. He appears on writing, onboarding and
+/// empty-state surfaces, never where a person is deciding whether to trust a
+/// key or authorize a release.
+enum HarborState: Equatable {
+    case idle
+    case listening
+    case waiting
+    case receiving
+    case protecting
+    case releasing
+    case edgePeek
+    case still
+}
+
+private struct HarborBodyShape: Shape {
     func path(in rect: CGRect) -> Path {
-        let w = rect.width / 220.0
-        let h = rect.height / 140.0
-        func P(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
-            CGPoint(x: rect.minX + x * w, y: rect.minY + y * h)
+        func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+            CGPoint(x: rect.minX + rect.width * x, y: rect.minY + rect.height * y)
         }
-        var p = Path()
-        p.move(to: P(10, 55))                                                       // tail tip (raised)
-        p.addCurve(to: P(120, 30), control1: P(50, 38), control2: P(85, 28))        // back
-        p.addCurve(to: P(162, 16), control1: P(140, 28), control2: P(150, 16))      // neck rise
-        p.addCurve(to: P(200, 38), control1: P(180, 16), control2: P(196, 24))      // crown
-        p.addCurve(to: P(196, 52), control1: P(204, 44), control2: P(202, 50))      // snout
-        p.addCurve(to: P(160, 64), control1: P(188, 60), control2: P(174, 64))      // chin
-        p.addCurve(to: P(140, 96), control1: P(150, 72), control2: P(146, 84))      // chest
-        p.addCurve(to: P(60, 104), control1: P(120, 106), control2: P(88, 108))     // belly
-        p.addCurve(to: P(14, 70), control1: P(40, 100), control2: P(22, 84))        // rear
-        p.addCurve(to: P(10, 55), control1: P(6, 64), control2: P(5, 58))           // tail underside
-        p.closeSubpath()
-        return p
+        var path = Path()
+        path.move(to: p(0.08, 0.80))
+        path.addCurve(to: p(0.19, 0.40), control1: p(0.08, 0.61), control2: p(0.11, 0.47))
+        path.addCurve(to: p(0.50, 0.25), control1: p(0.27, 0.30), control2: p(0.39, 0.25))
+        path.addCurve(to: p(0.81, 0.40), control1: p(0.61, 0.25), control2: p(0.74, 0.30))
+        path.addCurve(to: p(0.92, 0.80), control1: p(0.89, 0.48), control2: p(0.92, 0.62))
+        path.addCurve(to: p(0.50, 0.93), control1: p(0.83, 0.91), control2: p(0.68, 0.93))
+        path.addCurve(to: p(0.08, 0.80), control1: p(0.31, 0.93), control2: p(0.17, 0.91))
+        path.closeSubpath()
+        return path
     }
 }
 
-/// The drawn seal. `detailed` adds eye/nose/flipper/belly; false gives a
-/// flat silhouette for tiny contexts (badges, colony bar).
-struct SealFigure: View {
-    var detailed = true
-    var animated = false
-    var tint: Color = Color(white: 0.72)
+private struct HarborFlipperShape: Shape {
+    var mirrored = false
 
-    @State private var breathing = false
-    @State private var eyeOpen = true
+    func path(in rect: CGRect) -> Path {
+        func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+            let unitX = mirrored ? 1 - x : x
+            return CGPoint(x: rect.minX + rect.width * unitX, y: rect.minY + rect.height * y)
+        }
+        var path = Path()
+        path.move(to: point(0.12, 0.18))
+        path.addCurve(to: point(0.90, 0.83), control1: point(0.36, 0.24), control2: point(0.62, 0.61))
+        path.addCurve(to: point(0.45, 0.95), control1: point(0.80, 0.97), control2: point(0.59, 1.0))
+        path.addCurve(to: point(0.12, 0.18), control1: point(0.20, 0.76), control2: point(0.04, 0.39))
+        path.closeSubpath()
+        return path
+    }
+}
+
+private struct HarborWhiskers: Shape {
+    var mirrored = false
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        for row in 0..<3 {
+            let y = rect.minY + rect.height * (0.28 + CGFloat(row) * 0.22)
+            let startX = mirrored ? rect.maxX : rect.minX
+            let endX = mirrored ? rect.minX : rect.maxX
+            let bend = CGFloat(row - 1) * rect.height * 0.08
+            path.move(to: CGPoint(x: startX, y: y))
+            path.addQuadCurve(
+                to: CGPoint(x: endX, y: y + bend),
+                control: CGPoint(x: rect.midX, y: y - rect.height * 0.08)
+            )
+        }
+        return path
+    }
+}
+
+private struct HarborEnvelope: View {
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+            ZStack {
+                RoundedRectangle(cornerRadius: w * 0.06, style: .continuous)
+                    .fill(Color(red: 0.90, green: 0.86, blue: 0.77))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: w * 0.06, style: .continuous)
+                            .stroke(Color.black.opacity(0.18), lineWidth: max(1, w * 0.015))
+                    }
+                Path { path in
+                    path.move(to: CGPoint(x: 0, y: 0))
+                    path.addLine(to: CGPoint(x: w / 2, y: h * 0.58))
+                    path.addLine(to: CGPoint(x: w, y: 0))
+                    path.move(to: CGPoint(x: 0, y: h))
+                    path.addLine(to: CGPoint(x: w * 0.38, y: h * 0.57))
+                    path.move(to: CGPoint(x: w, y: h))
+                    path.addLine(to: CGPoint(x: w * 0.62, y: h * 0.57))
+                }
+                .stroke(Color.black.opacity(0.20), style: StrokeStyle(lineWidth: max(1, w * 0.014), lineCap: .round))
+                Circle()
+                    .fill(SealTheme.brass)
+                    .overlay(Circle().stroke(Color.black.opacity(0.25), lineWidth: max(1, w * 0.012)))
+                    .frame(width: w * 0.22)
+                    .position(x: w / 2, y: h * 0.58)
+            }
+        }
+        .aspectRatio(1.45, contentMode: .fit)
+    }
+}
+
+/// The native Harbor rig. Each visible part stays separate so animation does
+/// not need a bitmap, a package, or a second drawing system.
+struct HarborFigure: View {
+    var state: HarborState = .idle
+    var animated = true
+    var tint: Color = Color(white: 0.20)
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var breath: CGFloat = 0
+    @State private var blink: CGFloat = 1
+    @State private var action: CGFloat = 0
+
+    private var silver: Color { Color(red: 0.61, green: 0.59, blue: 0.55) }
+    private var paper: Color { Color(red: 0.90, green: 0.86, blue: 0.77) }
+
+    private var eyesClosed: Bool { state == .waiting || state == .protecting }
+
+    private var envelopeVisible: Bool {
+        switch state {
+        case .waiting, .receiving, .protecting, .releasing: true
+        default: false
+        }
+    }
+
+    private var envelopeOffset: CGSize {
+        switch state {
+        case .receiving:
+            CGSize(width: (1 - action) * 88, height: (1 - action) * 10)
+        case .releasing:
+            CGSize(width: action * 120, height: -action * 10)
+        default:
+            .zero
+        }
+    }
+
+    private var envelopeOpacity: Double {
+        state == .releasing ? Double(1 - action * 0.65) : 1
+    }
+
+    private var headRotation: Double { state == .listening ? -3.5 : 0 }
+    private var figureOffset: CGFloat { state == .edgePeek ? 0.32 : 0 }
 
     var body: some View {
         GeometryReader { geo in
-            let s = geo.size
+            let w = geo.size.width
+            let h = geo.size.height
             ZStack {
-                if detailed {
-                    // Body with soft top-light gradient
-                    SealBodyShape()
-                        .fill(LinearGradient(
-                            colors: [Color(white: 0.82), Color(white: 0.55)],
-                            startPoint: .top, endPoint: .bottom))
-                    // Belly highlight
-                    Ellipse()
-                        .fill(Color(white: 0.9).opacity(0.35))
-                        .frame(width: s.width * 0.38, height: s.height * 0.22)
-                        .position(x: s.width * 0.5, y: s.height * 0.68)
-                        .mask(SealBodyShape())
-                    // Front flipper, resting on the body, not hanging off it
-                    Ellipse()
-                        .fill(Color(white: 0.45))
-                        .frame(width: s.width * 0.15, height: s.height * 0.09)
-                        .rotationEffect(.degrees(24))
-                        .position(x: s.width * 0.54, y: s.height * 0.62)
-                    // Eye (blinks)
-                    Circle()
-                        .fill(SealTheme.ink)
-                        .frame(width: s.width * 0.045, height: s.width * 0.045)
-                        .scaleEffect(y: eyeOpen ? 1 : 0.08)
-                        .position(x: s.width * 0.78, y: s.height * 0.25)
-                    // Eye glint, the one brass touch
-                    Circle()
-                        .fill(SealTheme.brass)
-                        .frame(width: s.width * 0.014, height: s.width * 0.014)
-                        .opacity(eyeOpen ? 1 : 0)
-                        .position(x: s.width * 0.787, y: s.height * 0.235)
-                    // Nose
-                    Ellipse()
-                        .fill(SealTheme.ink.opacity(0.85))
-                        .frame(width: s.width * 0.035, height: s.width * 0.028)
-                        .position(x: s.width * 0.905, y: s.height * 0.305)
-                } else {
-                    SealBodyShape().fill(tint)
+                Ellipse()
+                    .fill(Color.black.opacity(0.24))
+                    .frame(width: w * 0.82, height: h * 0.08)
+                    .position(x: w * 0.50, y: h * 0.90)
+
+                HarborBodyShape()
+                    .fill(tint)
+                    .overlay {
+                        HarborBodyShape()
+                            .fill(LinearGradient(colors: [.white.opacity(0.06), .clear, .black.opacity(0.10)],
+                                                 startPoint: .top, endPoint: .bottom))
+                    }
+
+                Group {
+                    Ellipse().frame(width: w * 0.10, height: h * 0.055).rotationEffect(.degrees(-18))
+                        .position(x: w * 0.25, y: h * 0.48)
+                    Ellipse().frame(width: w * 0.065, height: h * 0.042).rotationEffect(.degrees(16))
+                        .position(x: w * 0.19, y: h * 0.58)
+                    Ellipse().frame(width: w * 0.045, height: h * 0.030).rotationEffect(.degrees(-8))
+                        .position(x: w * 0.31, y: h * 0.62)
                 }
+                .foregroundStyle(silver.opacity(0.70))
+
+                ZStack {
+                    Circle()
+                        .fill(tint)
+                        .frame(width: w * 0.47, height: w * 0.47)
+
+                    HStack(spacing: -w * 0.028) {
+                        Ellipse().fill(silver.opacity(0.88))
+                        Ellipse().fill(silver.opacity(0.88))
+                    }
+                    .frame(width: w * 0.29, height: h * 0.13)
+                    .offset(y: h * 0.055)
+
+                    HStack(spacing: w * 0.09) {
+                        Capsule().fill(silver.opacity(0.90)).frame(width: w * 0.105, height: h * 0.025)
+                        Capsule().fill(silver.opacity(0.90)).frame(width: w * 0.105, height: h * 0.025)
+                    }
+                    .offset(y: -h * 0.075)
+
+                    HStack(spacing: w * 0.115) {
+                        eye
+                        eye
+                    }
+                    .offset(y: -h * 0.025)
+
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(Color.black.opacity(0.88))
+                        .frame(width: w * 0.060, height: h * 0.035)
+                        .offset(y: h * 0.035)
+
+                    Path { path in
+                        path.move(to: CGPoint(x: w * 0.235, y: h * 0.283))
+                        path.addLine(to: CGPoint(x: w * 0.235, y: h * 0.315))
+                        path.addQuadCurve(to: CGPoint(x: w * 0.19, y: h * 0.323),
+                                          control: CGPoint(x: w * 0.215, y: h * 0.332))
+                        path.move(to: CGPoint(x: w * 0.235, y: h * 0.315))
+                        path.addQuadCurve(to: CGPoint(x: w * 0.28, y: h * 0.323),
+                                          control: CGPoint(x: w * 0.255, y: h * 0.332))
+                    }
+                    .stroke(Color.black.opacity(0.72), style: StrokeStyle(lineWidth: max(1, w * 0.008), lineCap: .round))
+
+                    HStack(spacing: w * 0.245) {
+                        HarborWhiskers(mirrored: true)
+                        HarborWhiskers()
+                    }
+                    .foregroundStyle(paper.opacity(0.85))
+                    .frame(width: w * 0.61, height: h * 0.12)
+                    .offset(y: h * 0.07)
+                }
+                .frame(width: w * 0.47, height: w * 0.47)
+                .rotationEffect(.degrees(headRotation), anchor: .bottom)
+                .position(x: w * 0.50, y: h * (0.31 + breath * 0.004))
+
+                if envelopeVisible {
+                    HarborEnvelope()
+                        .frame(width: w * 0.23)
+                        .offset(envelopeOffset)
+                        .opacity(envelopeOpacity)
+                        .position(x: w * 0.50, y: h * 0.73)
+                        .zIndex(2)
+                }
+
+                HarborFlipperShape()
+                    .fill(tint.opacity(0.98))
+                    .frame(width: w * 0.30, height: h * 0.42)
+                    .rotationEffect(.degrees(state == .receiving ? -8 + action * 7 : 0), anchor: .top)
+                    .position(x: w * 0.36, y: h * 0.69)
+                    .zIndex(3)
+                HarborFlipperShape(mirrored: true)
+                    .fill(tint.opacity(0.98))
+                    .frame(width: w * 0.30, height: h * 0.42)
+                    .rotationEffect(.degrees(state == .releasing ? action * -8 : 0), anchor: .top)
+                    .position(x: w * 0.64, y: h * 0.69)
+                    .zIndex(3)
+
+                VStack(spacing: 0) {
+                    Capsule().fill(SealTheme.brass.opacity(0.88)).frame(width: w * 0.012, height: h * 0.12)
+                    ZStack {
+                        Circle().fill(SealTheme.brass)
+                        Image(systemName: "envelope")
+                            .font(.system(size: max(7, w * 0.038), weight: .semibold))
+                            .foregroundStyle(SealTheme.ink.opacity(0.75))
+                    }
+                    .frame(width: w * 0.10, height: w * 0.10)
+                }
+                .position(x: w * 0.50, y: h * 0.52)
+                .zIndex(4)
             }
-            .scaleEffect(y: breathing ? 1.025 : 1.0, anchor: .bottom)
+            .scaleEffect(y: 1 + breath * 0.012, anchor: .bottom)
+            .offset(x: w * figureOffset)
         }
-        .aspectRatio(220.0 / 140.0, contentMode: .fit)
-        .task {
-            guard animated else { return }
-            // Breathing: slow, anchored at the ground, like a resting animal.
-            withAnimation(.easeInOut(duration: 2.6).repeatForever(autoreverses: true)) {
-                breathing = true
+        .aspectRatio(1.18, contentMode: .fit)
+        .accessibilityHidden(true)
+        .task(id: state) { await animate() }
+    }
+
+    private var eye: some View {
+        ZStack {
+            Capsule().fill(Color(red: 0.77, green: 0.68, blue: 0.54))
+            Circle().fill(Color.black.opacity(0.88)).padding(3)
+        }
+        .frame(width: 24, height: 12)
+        .scaleEffect(y: eyesClosed ? 0.08 : blink)
+    }
+
+    @MainActor
+    private func animate() async {
+        breath = 0
+        blink = eyesClosed ? 0.08 : 1
+        action = 0
+        guard animated, !reduceMotion else {
+            if state == .receiving || state == .releasing { action = 1 }
+            return
+        }
+
+        switch state {
+        case .receiving:
+            withAnimation(.easeInOut(duration: 1.1)) { action = 1 }
+        case .releasing:
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 1.4)) { action = 1 }
+        case .idle, .listening, .waiting:
+            for cycle in 0..<3 {
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeInOut(duration: 1.8)) { breath = 1 }
+                try? await Task.sleep(for: .seconds(1.8))
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeInOut(duration: 1.8)) { breath = 0 }
+                try? await Task.sleep(for: .seconds(cycle == 1 ? 0.7 : 1.3))
+                guard !Task.isCancelled, !eyesClosed else { continue }
+                withAnimation(.easeOut(duration: 0.09)) { blink = 0.08 }
+                try? await Task.sleep(for: .milliseconds(120))
+                withAnimation(.easeIn(duration: 0.12)) { blink = 1 }
             }
-            // Blink loop: irregular intervals so it reads as alive, not metronomic.
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(Double.random(in: 2.4...4.8)))
-                withAnimation(.easeOut(duration: 0.07)) { eyeOpen = false }
-                try? await Task.sleep(for: .milliseconds(110))
-                withAnimation(.easeIn(duration: 0.10)) { eyeOpen = true }
-            }
+        case .protecting, .edgePeek, .still:
+            break
         }
     }
 }
 
-// MARK: - Mascot block (empty states, onboarding)
+// MARK: - Compatibility and empty states
+
+/// Kept for the existing call sites. New surfaces should name the Harbor
+/// state they need through `HarborFigure`.
+struct SealFigure: View {
+    var detailed = true
+    var animated = false
+    var tint: Color = Color(white: 0.20)
+
+    var body: some View {
+        HarborFigure(state: detailed ? .idle : .still, animated: animated, tint: tint)
+    }
+}
 
 struct SealMascot: View {
-    var size: CGFloat = 56          // height of the figure
+    var size: CGFloat = 72
+    var state: HarborState = .idle
     var line: String? = nil
     var sub: String? = nil
 
     var body: some View {
         VStack(spacing: 12) {
-            SealFigure(detailed: true, animated: true)
-                .frame(height: size * 1.4)
+            HarborFigure(state: state, animated: true)
+                .frame(width: size * 1.5, height: size * 1.27)
             if let line {
                 Text(line)
                     .font(.system(.callout, design: .rounded, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(.white.opacity(0.76))
                     .multilineTextAlignment(.center)
             }
             if let sub {
                 Text(sub)
                     .font(.caption)
-                    .foregroundStyle(.white.opacity(0.4))
+                    .foregroundStyle(.white.opacity(0.50))
                     .multilineTextAlignment(.center)
             }
         }
     }
 }
 
-#Preview {
+#Preview("Harbor states") {
     ZStack {
         SealTheme.ink.ignoresSafeArea()
-        SealMascot(size: 72, line: "No envelopes yet.", sub: "Write the first one.")
+        ScrollView(.horizontal) {
+            HStack(spacing: 28) {
+                SealMascot(state: .idle, line: "I can wait.")
+                SealMascot(state: .listening, line: "Take your time.")
+                SealMascot(state: .protecting, line: "Kept safe.")
+                SealMascot(state: .releasing, line: "When it is time.")
+            }
+            .padding(28)
+        }
     }
 }
 
-/// The empty state for a SECURITY surface: the People screen, where root
-/// keys are pinned, and the history of who was met in person. GOTCHAS says
-/// the mascot appears on social surfaces only, and both of these are where
-/// trust is decided, so they get words and no animal.
+/// Security surfaces get words and no animal.
 struct PlainEmptyState: View {
     let line: String
     var sub: String? = nil

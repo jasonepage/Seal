@@ -405,14 +405,12 @@ struct EstateHomeView: View {
                 Divider().overlay(.white.opacity(0.08)).padding(.leading, 76)
             }
         } else {
-            VStack(spacing: 10) {
-                Image(systemName: "envelope").font(.system(size: 36)).foregroundStyle(.white.opacity(0.25))
-                Text("No envelopes yet.").font(.headline).foregroundStyle(.white.opacity(0.8))
-                Text("A letter, a few photos, your voice, and the secrets. Tap Write, or Help me write it if you do not know where to start.")
-                    .font(.callout).foregroundStyle(.white.opacity(0.5))
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            SealMascot(
+                size: 92,
+                state: .listening,
+                line: "No envelopes yet.",
+                sub: "A letter, a few photos, your voice, and the secrets. Tap Write, or Help me write it if you do not know where to start."
+            )
             .padding(.horizontal, 32).padding(.top, 60)
         }
     }
@@ -947,10 +945,12 @@ struct EstateHomeView: View {
             .alert("Could not seal", isPresented: Binding(get: { sealError != nil }, set: { if !$0 { sealError = nil } })) {
                 Button("OK", role: .cancel) {}
             } message: { Text(sealError ?? "") }
-            .alert("Sealed", isPresented: $sealedOK) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text("Your envelopes are sealed and your key holders have been told they hold a key. Open Seal now and then; that is all it takes to keep them closed.")
+            .sheet(isPresented: $sealedOK) {
+                sealedConfirmation
+                    .environment(\.parentMode, parentMode)
+                    .parentTypeScale()
+                    .presentationDetents([.medium])
+                    .presentationDragIndicator(.visible)
             }
             .onReceive(NotificationCenter.default.publisher(for: Clocks.changed)) { _ in
                 Task { for engine in engines.all { await engine.refreshOwner() } }
@@ -958,6 +958,30 @@ struct EstateHomeView: View {
     }
 
     // MARK: - Status
+
+    private var sealedConfirmation: some View {
+        ZStack {
+            SealTheme.ink.ignoresSafeArea()
+            VStack(spacing: 18) {
+                HarborFigure(state: .protecting, animated: true)
+                    .frame(width: 210, height: 178)
+                Text("Sealed and safe.")
+                    .font(.system(.title2, design: .rounded, weight: .bold))
+                    .foregroundStyle(.white)
+                Text("Your key holders have been told they hold a key. Open Seal now and then. That is all it takes to keep your envelopes closed.")
+                    .font(.callout)
+                    .foregroundStyle(.white.opacity(0.72))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Done") { sealedOK = false }
+                    .buttonStyle(SealPrimaryButtonStyle())
+                    .parentTapTarget()
+            }
+            .padding(28)
+            .frame(maxWidth: 460)
+        }
+        .preferredColorScheme(.dark)
+    }
 
     /// What is waiting to be sealed, in plain words, or nil when everything
     /// the owner has written is published and wrapped. Drafts are named first

@@ -119,8 +119,10 @@ struct OnboardingScreen: Identifiable {
         /// What the drawing shows, in words, for VoiceOver.
         func accessibilityLabel(_ n: OnboardingNumbers) -> String {
             switch self {
-            case .mark, .ask, .steps, .quiet:
+            case .mark, .ask, .quiet:
                 return "The Seal mark: a wax seal with an envelope pressed into it."
+            case .steps:
+                return "Harbor, an old seal, waits calmly beside a sealed envelope."
             case .envelope:
                 return "A closed envelope with a wax seal on the flap."
             case .timeline(let outcome):
@@ -707,8 +709,11 @@ struct SealOnboardingView: View {
             ShamirCurveFigure(numbers: numbers)
         case .keep:
             painted("OnboardingDrawer")
-        case .steps, .quiet:
-            // Pewter. Paying is not a trust moment, and neither is a list.
+        case .steps:
+            SealMascot(size: 104, state: .listening)
+                .padding(.vertical, 4)
+        case .quiet:
+            // Pewter. Paying is not a trust moment.
             SealMark(size: 72, trust: false, pressOnAppear: true)
                 .padding(.vertical, 4)
         case .phones:

@@ -3,6 +3,21 @@
 Dates are the day the work landed in the repository. Anything marked
 "not built yet" has been written but never compiled or run on a phone.
 
+## 1.3, Harbor mascot (in development)
+
+### Added
+
+- Harbor, an old and patient seal drawn entirely in SwiftUI. Harbor breathes,
+  blinks, listens, protects a sealed envelope and can release one carefully.
+  Reduce Motion always gets a complete still pose, and each animation settles
+  instead of running forever. (`Seal/Views/SealMascot.swift`)
+- Harbor now welcomes an empty envelope list, appears on the final onboarding
+  steps, and protects the envelope in the confirmation shown after a successful
+  seal. He remains absent from key, identity and release decision screens.
+  (`EstateHomeView.swift`, `SealOnboardingView.swift`)
+- The Harbor motion studies, placement sheet and native animation rules live in
+  `docs/design/harbor/`.
+
 ## Web 1.2b, key holders on the web (live 2026-10-17)
 
 ### Added
