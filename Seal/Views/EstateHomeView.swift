@@ -428,7 +428,7 @@ struct EstateHomeView: View {
             .parentTapTarget()
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
-        } else {
+        } else if !inSetup {
             SealMascot(
                 size: 92,
                 state: .listening,
@@ -529,34 +529,38 @@ struct EstateHomeView: View {
     /// The floating Write button, and the Seal bar when there is
     /// something to seal. Both sit above the tab bar and never cover a row.
     private var inboxBottom: some View {
-        VStack(spacing: 10) {
-            HStack {
-                Spacer()
-                Menu {
-                    Button {
-                        pickerMode = .blank
-                        showRecipientPicker = true
-                    } label: { Label("Write an envelope", systemImage: "square.and.pencil") }
-                    Button {
-                        pickerMode = .interview
-                        showRecipientPicker = true
-                    } label: { Label("Help me write it", systemImage: "bubble.left.and.text.bubble.right") }
-                } label: {
-                    Label("Write", systemImage: "square.and.pencil")
-                        .font(.system(.headline, design: .rounded))
-                        .foregroundStyle(SealTheme.ink)
-                        .padding(.horizontal, 20).padding(.vertical, 14)
-                        .background(SealTheme.brass, in: Capsule())
-                        .shadow(color: .black.opacity(0.4), radius: 10, y: 4)
+        Group {
+            if !inSetup {
+                VStack(spacing: 10) {
+                    HStack {
+                        Spacer()
+                        Menu {
+                            Button {
+                                pickerMode = .blank
+                                showRecipientPicker = true
+                            } label: { Label("Write an envelope", systemImage: "square.and.pencil") }
+                            Button {
+                                pickerMode = .interview
+                                showRecipientPicker = true
+                            } label: { Label("Help me write it", systemImage: "bubble.left.and.text.bubble.right") }
+                        } label: {
+                            Label("Write", systemImage: "square.and.pencil")
+                                .font(.system(.headline, design: .rounded))
+                                .foregroundStyle(SealTheme.ink)
+                                .padding(.horizontal, 20).padding(.vertical, 14)
+                                .background(SealTheme.brass, in: Capsule())
+                                .shadow(color: .black.opacity(0.4), radius: 10, y: 4)
+                        }
+                        .parentTapTarget(56)
+                    }
+                    .padding(.horizontal, 20)
+                    if engines.all.contains(where: { $0.estate?.hasUnsealedChanges ?? false }), !DemoFixtures.isActive {
+                        sealBar
+                    }
                 }
-                .parentTapTarget(56)
-            }
-            .padding(.horizontal, 20)
-            if engines.all.contains(where: { $0.estate?.hasUnsealedChanges ?? false }), !inSetup, !DemoFixtures.isActive {
-                sealBar
+                .padding(.bottom, wide ? 20 : 8)
             }
         }
-        .padding(.bottom, wide ? 20 : 8)
         .frame(maxWidth: columnWidth)
         .frame(maxWidth: .infinity)
     }
@@ -1080,6 +1084,24 @@ struct EstateHomeView: View {
         }
     }
 
+    private func stepHeading(_ step: SetupStep) -> String {
+        switch step {
+        case .envelope: "Who would you like to write to?"
+        case .keyHolders: "Who do you trust to help?"
+        case .rule: "When should it open?"
+        case .seal: "Ready when you are."
+        }
+    }
+
+    private func stepButtonTitle(_ step: SetupStep) -> String {
+        switch step {
+        case .envelope: "Write your first letter"
+        case .keyHolders: "Choose a key holder"
+        case .rule: "Choose when it opens"
+        case .seal: "Seal your envelopes"
+        }
+    }
+
     /// Only the step somebody is actually on gets a second line. Four
     /// explanations at once is the wall this card exists to replace.
     private func stepDetail(_ step: SetupStep) -> String {
@@ -1129,7 +1151,9 @@ struct EstateHomeView: View {
         }
     }
 
-    /// ONE card, instead of a paragraph over four empty containers.
+    /// ONE calm decision, instead of four jobs at once. The person sees the
+    /// next human question, one button, and quiet progress underneath. The
+    /// details still exist, but only for the step they are doing now.
     ///
     /// What a fresh install used to render: a status card explaining the
     /// product, an empty envelopes section, an empty key holders section, an
@@ -1139,86 +1163,76 @@ struct EstateHomeView: View {
     private var setupCard: some View {
         let current = firstUndone
         let done = SetupStep.allCases.filter { isDone($0) }.count
-        return VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .center, spacing: 14) {
-                // Pewter. Nothing is sealed yet, so there is no trust moment
-                // to spend brass on.
-                SealMark(size: 44, trust: false, pressOnAppear: true)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Sealed envelopes")
-                        .font(.system(.title2, design: .rounded, weight: .semibold))
+        return VStack(alignment: .leading, spacing: 20) {
+            HStack(alignment: .top, spacing: 14) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("PASS DOWN A SECRET LETTER")
+                        .font(.caption2.weight(.bold))
+                        .tracking(1.2)
+                        .foregroundStyle(SealTheme.brass)
+                    Text(current.map(stepHeading) ?? "Your envelopes are ready.")
+                        .font(.system(.title, design: .rounded, weight: .bold))
                         .foregroundStyle(.white)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text("\(done) of 4 done")
-                        .font(.caption).foregroundStyle(.white.opacity(0.5))
                 }
-                Spacer(minLength: 0)
-                // Harbor keeps the owner company through setup (1.3,
-                // MOTION.md "compact status card": trailing edge, blink only).
+                Spacer(minLength: 4)
                 HarborFigure(state: .idle, animated: true)
-                    .frame(width: 66, height: 56)
+                    .frame(width: 82, height: 72)
+                    .accessibilityHidden(true)
             }
 
-            Text("Sealed envelopes for the people you leave behind. Nobody, including us, can open one early. It takes an evening.")
-                .font(.callout).foregroundStyle(.white.opacity(0.7))
-                .fixedSize(horizontal: false, vertical: true)
-
-            VStack(spacing: 8) {
-                ForEach(SetupStep.allCases) { step in
-                    Button { perform(step) } label: {
-                        setupRow(step, isCurrent: step == current)
-                    }
-                    .buttonStyle(.plain)
-                    .parentTapTarget()
-                }
-            }
-
-            Button {
-                explain = ExplainRequest(role: .sealer, numbers: numbersForMyEstate)
-            } label: {
-                Label("Watch it happen", systemImage: "play.circle")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(SealSecondaryButtonStyle())
-            .parentTapTarget()
-        }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 20))
-        .padding(.horizontal, 20)
-    }
-
-    private func setupRow(_ step: SetupStep, isCurrent: Bool) -> some View {
-        let done = isDone(step)
-        return HStack(alignment: .top, spacing: 12) {
-            Image(systemName: done ? "checkmark.circle.fill" : "circle")
-                .font(.title3)
-                // Brass on the last step only when it is the one to tap: that
-                // tap is the trust moment of the whole product.
-                .foregroundStyle(done ? SealTheme.brass
-                                 : (isCurrent && step == .seal ? SealTheme.brass : .white.opacity(0.35)))
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(stepTitle(step))
-                    .font(.headline)
-                    .foregroundStyle(done ? .white.opacity(0.5) : .white)
-                    .strikethrough(done, color: .white.opacity(0.35))
+            if let current {
+                Text(stepDetail(current))
+                    .font(.body)
+                    .foregroundStyle(.white.opacity(0.72))
                     .fixedSize(horizontal: false, vertical: true)
-                if isCurrent {
-                    Text(stepDetail(step))
-                        .font(.caption).foregroundStyle(.white.opacity(0.6))
-                        .fixedSize(horizontal: false, vertical: true)
+
+                Button { perform(current) } label: {
+                    Label(stepButtonTitle(current), systemImage: current == .seal ? "checkmark.seal.fill" : "arrow.right")
+                        .font(.system(.headline, design: .rounded))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 5)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(SealTheme.brass)
+                .foregroundStyle(SealTheme.ink)
+                .parentTapTarget(54)
+            }
+
+            HStack(spacing: 8) {
+                ForEach(SetupStep.allCases) { step in
+                    Capsule()
+                        .fill(isDone(step) ? SealTheme.brass : .white.opacity(step == current ? 0.32 : 0.12))
+                        .frame(height: 5)
                 }
             }
-            Spacer(minLength: 0)
-            if !done {
-                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.white.opacity(0.3))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(done) of 4 setup steps complete")
+
+            HStack {
+                Text("\(done) of 4 complete")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.5))
+                Spacer()
+                Button("See how Seal works") {
+                    explain = ExplainRequest(role: .sealer, numbers: numbersForMyEstate)
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.72))
             }
         }
-        .padding(14)
-        .background((isCurrent ? Color.white.opacity(0.07) : Color.clear),
-                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .contentShape(Rectangle())
+        .padding(22)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            LinearGradient(colors: [Color.white.opacity(0.09), SealTheme.brass.opacity(0.07)],
+                           startPoint: .topLeading, endPoint: .bottomTrailing),
+            in: RoundedRectangle(cornerRadius: 24, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(.white.opacity(0.08), lineWidth: 1)
+        }
+        .padding(.horizontal, 20)
     }
 
     // MARK: - Harbor's one next step (1.3)
