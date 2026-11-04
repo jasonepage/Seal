@@ -89,7 +89,6 @@ struct EstateHomeView: View {
     @State private var showSecretReview = false
     /// The key button on the Envelopes screen (PasswordsView).
     @State private var showPasswords = false
-    @State private var showCoupleSetup = false
     @State private var showPaywall = false
     @State private var showKeyHelp = false
     @Environment(SealPurchase.self) private var purchase
@@ -626,7 +625,6 @@ struct EstateHomeView: View {
             }
         }
         keyHoldersSection
-        coupleRow
         keyHelp
     }
 
@@ -716,28 +714,6 @@ struct EstateHomeView: View {
         .contentShape(Rectangle())
     }
 
-    /// Two people, two phones, one evening (CoupleSetupView).
-    private var coupleRow: some View {
-        Button { showCoupleSetup = true } label: {
-            HStack(spacing: 14) {
-                Image(systemName: "person.2").font(.title3).foregroundStyle(.white.opacity(0.7)).frame(width: 28)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Set up with my partner").font(.headline).foregroundStyle(.white)
-                    Text("Two phones, one evening. Each of you holds a key for the other.")
-                        .font(.caption).foregroundStyle(.white.opacity(0.55))
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer()
-                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.white.opacity(0.3))
-            }
-            .padding(16)
-            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
-        }
-        .buttonStyle(.plain)
-        .parentTapTarget()
-        .padding(.horizontal, 20)
-    }
-
     // MARK: - Sheets
 
     /// Every sheet, alert and cover the home screen can present, in one
@@ -758,16 +734,6 @@ struct EstateHomeView: View {
                 // seal the person was in the middle of. Presented from the
                 // dismissal, not from inside the sheet, for the usual reason.
                 if was, !now, purchase.isUnlocked { runSeal() }
-            }
-            .sheet(isPresented: $showCoupleSetup) {
-                CoupleSetupView(myRoot: myRoot, friendStore: friendStore, estateEngine: estateEngine,
-                                ceremony: ceremony, sync: sync,
-                                onOpenPeople: { showCoupleSetup = false; tab = .people },
-                                onWriteEnvelope: { envelope in showCoupleSetup = false; editing = EnvelopeRef(envelope: envelope, engine: estateEngine) },
-                                onSeal: { showCoupleSetup = false; runSeal() },
-                                onClose: { showCoupleSetup = false })
-                    .environment(\.parentMode, parentMode)
-                    .parentTypeScale()
             }
             .sheet(isPresented: $showPasswords) {
                 PasswordsView(engines: engines,

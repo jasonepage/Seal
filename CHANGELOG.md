@@ -103,6 +103,9 @@ Dates are the day the work landed in the repository. Anything marked
   the whole app locks. (`AppLock.confirmSeal`, `ProfileView`)
 - "Bigger text" is gone; iOS Text Size does the same job. A setting saved by
   an older build is ignored, so nobody is stuck with it. (`ParentMode`)
+- "Set up with my partner" is gone from the Keys tab; it only sent people to
+  People. Couples add each other under People and make each other key
+  holders, and the couple walkthrough now says exactly that.
 - Harbor's eyes are smaller and scale with his size.
 - `tools/run_core_tests.sh` now compiles with `-default-isolation MainActor`,
   the same isolation the app target uses. Before, Swift 6 reported

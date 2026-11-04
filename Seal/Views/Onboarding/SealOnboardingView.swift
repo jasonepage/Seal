@@ -239,7 +239,7 @@ enum OnboardingScript {
                 steps: [
                     "Each of you writes your own letters.",
                     "Each of you holds a key for the other.",
-                    "Seal walks you both through it, step by step.",
+                    "Add each other under People, side by side.",
                 ])]
         case .keyHolder:
             return [OnboardingScreen(
@@ -310,7 +310,7 @@ enum OnboardingScript {
             out.append(OnboardingScreen(
                 id: "\(p).two",
                 title: "Two phones. Each of you holds a key for the other.",
-                body: "Each of you sets up Seal on your own phone. Each of you writes your own envelopes. Each of you hands the other a security key. After you sign up, tap \"Set up with my partner\" and Seal walks you both through it, one step at a time, on both phones.",
+                body: "Each of you sets up Seal on your own phone. Each of you writes your own envelopes. Each of you hands the other a security key. After you sign up, put the phones side by side, add each other under People, and make each other a key holder.",
                 figure: .phones))
         }
 
@@ -357,7 +357,6 @@ enum OnboardingScript {
                 steps: [
                     "On each phone: set up Seal, and add a backup key when it asks.",
                     "Phones side by side: add each other under People.",
-                    "On each phone: tap \"Set up with my partner\" and follow the list.",
                     "On each phone: make your partner a key holder and hand over a key. Then one more key holder each.",
                     "On each phone: write your envelopes, then tap Seal. That is when each of you pays, once.",
                 ]))
