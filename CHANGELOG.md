@@ -13,7 +13,7 @@ Dates are the day the work landed in the repository. Anything marked
   the moment they tap; the owner is told and cannot stop it), or **Right away** (a message
   in a bottle: opens for its recipient the moment it is sealed, on the phone
   and at sealmessenger.com/open, with no key holders). Right away rules seal
-  for free. Not compiled yet. (`ReleasePolicy.Kind`, `EstateKeys.wrapTableDirect`,
+  for free. Builds in the simulator; not yet run end to end on a phone. (`ReleasePolicy.Kind`, `EstateKeys.wrapTableDirect`,
   `EstateEngine.sealAndPublish`, `PolicyView`, `site/open/js`)
 - Harbor, an old and patient seal drawn entirely in SwiftUI. Harbor breathes,
   blinks, listens, protects a sealed envelope and can release one carefully.
@@ -72,6 +72,28 @@ Dates are the day the work landed in the repository. Anything marked
 
 ### Changed
 
+- First run is three short cards: what Seal is for, "Which one are you?",
+  and one card for the path picked. New painted artwork, feathered into the
+  dark background with no box around it. The price screen is gone from the
+  walkthrough; the price is shown at the purchase step. The full guide
+  ("How it works") shows one sentence per card, with a "Details" link only
+  on the warnings, backup key, key holder and recipient cards.
+  (`SealOnboardingView.swift`, `OnboardingCopyTests.swift`)
+- The envelope editor is a list of short cards that open one at a time,
+  each with a one line prompt and a check mark. A new envelope opens on the
+  letter. The date card keeps its caveat under "A wish, not a lock".
+  (`EnvelopeEditorView.swift`)
+- The rule screen is a short wizard: one question per screen, only the
+  questions the chosen kind needs, then a summary and "Save rule". The 7 and
+  14 day silence caution and the rule of one caution are still shown.
+  (`PolicyView.swift`)
+- Plain words where the copy still assumed every envelope opens after death:
+  registration, the Keys tab help, the key holder screens, the role card for
+  key holders and recipients, and the printed key holder page.
+- Harbor's eyes are smaller and scale with his size.
+- `tools/run_core_tests.sh` now compiles with `-default-isolation MainActor`,
+  the same isolation the app target uses. Before, Swift 6 reported
+  `Clocks.current` as unsafe global state, which it never is in the app.
 - Privacy page: the relay paragraph now also says Apple lets the relay delete
   an entry it delivered, as the open page and How it works already did.
 - Plain words for the lines that were still technical: "Revoke device" is

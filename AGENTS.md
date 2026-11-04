@@ -6,8 +6,10 @@ everything. Read in this order.
 ## What Seal is
 
 An iPhone app for sealed envelopes: letters, photos and passwords that open
-only after the writer has been silent for a long time and enough of their
-key holders agree. Recipients and key holders with a security key can also
+by a rule the writer picks. When I go quiet: after a long silence, days of
+warnings and enough key holders agreeing. Break glass: the moment enough key
+holders tap together. Right away: as soon as it is sealed, for its
+recipient only. Recipients and key holders with a security key can also
 use a web page, sealmessenger.com/open.
 
 ## Where things are

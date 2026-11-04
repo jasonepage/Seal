@@ -1,5 +1,74 @@
 # Where Seal stands
 
+## 1.3 FINAL PASS (2026-11-04)
+
+The "UNCOMPILED" notes in the 1.3 sections below are stale: the app builds
+for the simulator as of this morning. Trust the code and the build.
+
+What Jason had before this pass, all uncommitted: the three card first run,
+the new onboarding art (approved, do not replace), the card editor, the rule
+wizard, new registration line, smaller Harbor eyes, simpler Keys and Home
+copy, and the fixed `onboarding.priceSentence` self-test.
+
+What this pass changed (not compiled yet, because it was done without
+Xcode; every change is copy, a removed unused function, or one modifier):
+
+- Rule wizard: the 7 and 14 day silence caution is back on the silence
+  question (it was dropped). The objection help now matches the button
+  labels ("Pause the countdown", "Stop the release"). The scroll content
+  has `.containerRelativeFrame(.horizontal)` again (GOTCHAS, Layout).
+- Editor: the rule card's one line prompt was "Silence 90d · Warnings
+  21d ..." and is now "Opens after 90 quiet days and warnings." The count
+  line says "All added" instead of "Ready to seal" (one letter is already
+  enough to seal). Removed the unused `packingLine`.
+- Onboarding: removed the unused `curveScreen`. The backup key card in the
+  full guide gets the "Details" link too, so "there is no email reset" is
+  one tap away instead of hidden. Its test loop over `.curve` screens was
+  checking nothing; it now checks that `ReleasePolicy.oneKeyCaution` (shown
+  on the rule screen) still says what one key allows (audit H1).
+- "After you are gone" and "the people you leave behind" were still on the
+  key holder screens, the setup card, the key holder role card and the
+  printed key holder page. Now "when your rule allows" and "the people you
+  love", because break glass and right away rules exist.
+- `tools/run_core_tests.sh`: adds `-default-isolation MainActor`. The app
+  target is Swift 5 mode with `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`,
+  so `Clocks.current` is main actor state in the app (GoneCheck.swift says
+  as much). The script compiled in Swift 6 with no default isolation, so
+  the same line read as unsafe global state. Script mismatch, not a release
+  issue. No clock code changed. The flag needs Swift 6.2 (Xcode 26).
+- AGENTS.md: "What Seal is" now names the three kinds of rule.
+
+Checked here: `python3 tools/check_house_rules.py` (232 files, pass),
+`git diff --check` (pass). No web, release or crypto files changed, so the
+web tests were not needed.
+
+Jason still has to do, in order:
+
+1. Build Debug for an iPhone simulator. Expect it to compile; if not, the
+   most likely spot is the `+` line added to the silence `prompt(...)` in
+   PolicyView.
+2. Run it and confirm the Xcode console shows every self-test passing and
+   the app reaches onboarding, not `SelfTestRegistry`.
+3. `sh tools/run_core_tests.sh` in Terminal.
+4. Walk the new user path on the simulator, then on a phone: fresh install,
+   three cards, registration, write a first letter, close and reopen it,
+   each opening kind (quiet, break glass, right away), a photo or a secret,
+   a key holder (kit key and in person), the rule wizard, Seal, and the
+   purchase sheet. Then sign out and sign in to an existing account.
+5. Repeat the cards, the editor and the rule wizard on the smallest
+   simulator (iPhone SE) with Bigger text on.
+6. Build Release (Product, Archive) and look for new warnings.
+
+Not done and worth knowing:
+
+- The new onboarding PNGs are 1024 and 1536 pixels for figures drawn at
+  about 200 points, about 14 MB in all, against about 1.3 MB before. Fine to
+  ship; shrinking them to 512 and 768 would look the same.
+- `OnboardingEnvelopeClosed` is the same picture as `OnboardingEnvelope`.
+- The full guide's key holder cards still describe a quiet rule only.
+- `CURRENT_PROJECT_VERSION` is 4 with `MARKETING_VERSION` 1.3. Check it is
+  higher than any 1.3 build already uploaded.
+
 ## 1.3, KIT FIRST (2026-11-03, UNCOMPILED)
 
 Decision (Jason, 2026-11-03): the goal is money. Gut call: the product to

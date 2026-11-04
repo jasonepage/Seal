@@ -214,7 +214,7 @@ struct PeopleYouWouldDoThisForCard: View {
                 .font(.system(.title3, design: .rounded, weight: .semibold))
                 .foregroundStyle(.white)
                 .fixedSize(horizontal: false, vertical: true)
-            Text("Sealed envelopes for the people you leave behind: the passwords, the letters, the things only you know. Writing your own takes an evening, and this app is already on your phone.")
+            Text("Sealed envelopes for the people you love: the passwords, the letters, the things only you know. Writing your own takes an evening, and this app is already on your phone.")
                 .font(.callout)
                 .foregroundStyle(.white.opacity(0.8))
                 .fixedSize(horizontal: false, vertical: true)

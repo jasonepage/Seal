@@ -54,7 +54,7 @@ struct RegistrationView: View {
                         }
 
                         VStack(alignment: .leading, spacing: 14) {
-                            Text("What should your family call you?")
+                            Text("What should people call you?")
                                 .font(.headline)
                                 .foregroundStyle(.white)
                             TextField("", text: $displayName,
@@ -176,12 +176,12 @@ struct RegistrationView: View {
 
     private var statusLine: String {
         switch ceremony.phase {
-        case .idle: "Sealed envelopes for the people you leave behind."
+        case .idle: "Private letters, opened on your terms."
         case .searching: "Hold your key flat against the top of your phone…"
         case .reading: "Reading your key…"
         case .endorsing: "One more tap, vouching for this phone…"
         case .sealed: "Sealed. Welcome, \(displayName)."
-        case .failed: "Sealed envelopes for the people you leave behind."
+        case .failed: "Private letters, opened on your terms."
         }
     }
 

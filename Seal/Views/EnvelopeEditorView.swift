@@ -26,6 +26,10 @@ import UniformTypeIdentifiers
 //  a payment address exact keep a seed phrase exact.
 
 struct EnvelopeEditorView: View {
+    private enum EditorSection: Hashable {
+        case letter, voice, video, photos, files, steps, secrets, rule, date
+    }
+
     @State var envelope: Envelope
     @Bindable var estateEngine: EstateEngine
     @Bindable var friendStore: FriendStore
@@ -79,6 +83,8 @@ struct EnvelopeEditorView: View {
     /// The letter card opens for writing when tapped, or from the start
     /// when there is no letter yet. Closed, it shows the first lines.
     @State private var writingLetter = false
+    @State private var expandedSection: EditorSection? = .letter
+    @State private var showDateHelp = false
     @State private var player: AVAudioPlayer?
 
     private var recipientName: String {
@@ -98,25 +104,8 @@ struct EnvelopeEditorView: View {
     /// In Karen's order.
     private var filled: [Bool] { [hasLetter, hasVoice, hasVideo, hasPhotos, hasSteps, hasSecrets] }
     private static let dotNames = ["Letter", "Voice", "Video", "Photos", "Steps", "Secrets"]
-    /// Files are the one thing a person cannot be expected to attach; the
-    /// packing line does not count them as missing.
-
-    /// "A letter and 2 secrets. No voice, video, photos or steps yet."
-    private var packingLine: String {
-        var missing: [String] = []
-        if !hasLetter { missing.append("letter") }
-        if !hasVoice { missing.append("voice") }
-        if !hasVideo { missing.append("video") }
-        if !hasPhotos { missing.append("photos") }
-        if !hasSteps { missing.append("steps") }
-        if !hasSecrets { missing.append("secrets") }
-        if missing.isEmpty { return "Everything is here. A letter, your voice, a video, photos, the steps and the secrets." }
-        if missing.count == 6 { return "Empty so far. Start anywhere below." }
-        let have = envelope.contentsSummary
-        let haveLine = have.prefix(1).uppercased() + have.dropFirst() + "."
-        let missingLine = missing.count == 1 ? missing[0] : missing.dropLast().joined(separator: ", ") + " or " + missing[missing.count - 1]
-        return haveLine + " No " + missingLine + " yet."
-    }
+    /// Files are the one thing a person cannot be expected to attach, so the
+    /// count under the dots leaves them out.
 
     var body: some View {
         NavigationStack {
@@ -168,7 +157,10 @@ struct EnvelopeEditorView: View {
                     .foregroundStyle(SealTheme.brass)
                 }
             }
-            .onAppear { writingLetter = !hasLetter }
+            .onAppear {
+                writingLetter = !hasLetter
+                expandedSection = hasLetter ? nil : .letter
+            }
             .task(id: envelope.videoNote?.blobID) { await loadVideoThumbnail() }
             .sheet(isPresented: $showVideo) {
                 VideoRecorderPicker { data, problem in
@@ -340,9 +332,9 @@ struct EnvelopeEditorView: View {
                     .frame(maxWidth: .infinity)
                 }
             }
-            Text(packingLine)
-                .font(.callout).foregroundStyle(all ? SealTheme.brass : .white.opacity(0.7))
-                .fixedSize(horizontal: false, vertical: true)
+            Text(all ? "All added" : "\(filled.filter { $0 }.count) of 6 added")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(all ? SealTheme.brass : .white.opacity(0.55))
         }
         .padding(14)
         .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 14))
@@ -353,24 +345,46 @@ struct EnvelopeEditorView: View {
 
     /// The shell every card uses: an icon, a title, what is in it or the
     /// invitation, and one action on the right.
-    private func card<Content: View>(_ icon: String, _ title: String, filled: Bool,
+    private func card<Content: View>(_ section: EditorSection, _ icon: String, _ title: String,
+                                     prompt: String, filled: Bool,
                                      action: String, onAction: @escaping () -> Void,
                                      @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                Image(systemName: icon)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(filled ? SealTheme.brass : .white.opacity(0.5))
-                    .frame(width: 22)
-                Text(title).font(.headline).foregroundStyle(.white)
-                Spacer()
-                Button(action: onAction) {
-                    Text(action).font(.subheadline.weight(.semibold))
+        let isExpanded = expandedSection == section
+        return VStack(alignment: .leading, spacing: 12) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    expandedSection = isExpanded ? nil : section
                 }
-                .buttonStyle(.bordered).tint(SealTheme.brass)
-                .parentTapTarget(44)
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: icon)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(filled ? SealTheme.brass : .white.opacity(0.5))
+                        .frame(width: 22)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(title).font(.headline).foregroundStyle(.white)
+                        Text(prompt).font(.caption).foregroundStyle(.white.opacity(0.55)).lineLimit(1)
+                    }
+                    Spacer()
+                    Image(systemName: filled ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(filled ? SealTheme.brass : .white.opacity(0.3))
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.caption.weight(.semibold)).foregroundStyle(.white.opacity(0.4))
+                }
             }
-            content()
+            .buttonStyle(.plain)
+            .parentTapTarget(52)
+            if isExpanded {
+                HStack {
+                    Spacer()
+                    Button(action: onAction) {
+                        Text(action).font(.subheadline.weight(.semibold))
+                    }
+                    .buttonStyle(.bordered).tint(SealTheme.brass)
+                    .parentTapTarget(44)
+                }
+                content()
+            }
         }
         .padding(16)
         .background(.white.opacity(filled ? 0.06 : 0.035), in: RoundedRectangle(cornerRadius: 16))
@@ -386,7 +400,8 @@ struct EnvelopeEditorView: View {
     // The letter
 
     private var letterCard: some View {
-        card("text.alignleft", "The letter", filled: hasLetter,
+        card(.letter, "text.alignleft", "Letter",
+             prompt: "Say what you'd say if \(recipientName) were in the room.", filled: hasLetter,
              action: writingLetter ? "Close" : (hasLetter ? "Write more" : "Write"),
              onAction: { withAnimation(.easeInOut(duration: 0.2)) { writingLetter.toggle() } }) {
             if writingLetter {
@@ -425,7 +440,8 @@ struct EnvelopeEditorView: View {
 
     private var stepsCard: some View {
         let steps = envelope.usableFirstSteps
-        return card("list.number", "What to do first", filled: hasSteps,
+        return card(.steps, "list.number", "What to do first",
+                    prompt: "Who to call and where the papers are.", filled: hasSteps,
                     action: hasSteps ? "Edit" : "Add",
                     onAction: { showFirstSteps = true }) {
             if hasSteps {
@@ -448,7 +464,8 @@ struct EnvelopeEditorView: View {
     // The secrets
 
     private var secretsCard: some View {
-        card("lock.fill", "The secrets", filled: hasSecrets,
+        card(.secrets, "lock.fill", "Secrets",
+             prompt: "Passwords, safe combinations, seed phrases.", filled: hasSecrets,
              action: "Add", onAction: { showSecretEditor = true }) {
             if hasSecrets {
                 HStack {
@@ -509,7 +526,8 @@ struct EnvelopeEditorView: View {
     // Photos
 
     private var photosCard: some View {
-        card("photo.on.rectangle", "Photos", filled: hasPhotos,
+        card(.photos, "photo.on.rectangle", "Photos",
+             prompt: "One photo they'll look at twice.", filled: hasPhotos,
              action: "Add", onAction: { showPhotoPicker = true }) {
             if hasPhotos {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -539,7 +557,8 @@ struct EnvelopeEditorView: View {
     // Voice
 
     private var voiceCard: some View {
-        card("waveform", "Your voice", filled: hasVoice,
+        card(.voice, "waveform", "Voice",
+             prompt: "30 seconds. Say their name.", filled: hasVoice,
              action: hasVoice ? "Record again" : "Record", onAction: { showVoice = true }) {
             if let voice = envelope.voiceNote {
                 HStack(spacing: 12) {
@@ -570,7 +589,8 @@ struct EnvelopeEditorView: View {
     // Video
 
     private var videoCard: some View {
-        card("video.fill", "A video", filled: hasVideo,
+        card(.video, "video.fill", "Video",
+             prompt: "60 seconds, front camera.", filled: hasVideo,
              action: hasVideo ? "Record again" : "Record", onAction: { showVideo = true }) {
             if let video = envelope.videoNote {
                 HStack(spacing: 12) {
@@ -641,30 +661,14 @@ struct EnvelopeEditorView: View {
     /// trusts, so it is a wish the phone honours, not a lock).
     private var openOnDateCard: some View {
         let has = envelope.openNoEarlierThan != nil
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                Image(systemName: "calendar.badge.clock")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(has ? SealTheme.brass : .white.opacity(0.5))
-                    .frame(width: 22)
-                Text("Open on a date").font(.headline).foregroundStyle(.white)
-                Spacer()
-                if has {
-                    Button("Clear") { envelope.openNoEarlierThan = nil; pickingDate = false }
-                        .font(.subheadline.weight(.semibold)).foregroundStyle(.white.opacity(0.7))
-                        .parentTapTarget(44)
-                } else {
-                    Button(pickingDate ? "Close" : "Set") {
-                        withAnimation(.easeInOut(duration: 0.2)) { pickingDate.toggle() }
-                    }
-                    .buttonStyle(.bordered).tint(SealTheme.brass)
-                    .parentTapTarget(44)
-                }
-            }
-            if let date = envelope.openNoEarlierThan {
-                Text("\(recipientName)'s phone keeps this envelope closed until \(date.formatted(date: .long, time: .omitted)), even after everything else has opened.")
-                    .font(.callout).foregroundStyle(.white.opacity(0.8))
-                    .fixedSize(horizontal: false, vertical: true)
+        return card(.date, "calendar.badge.clock", "Open on a date",
+                    prompt: has ? envelope.openNoEarlierThan!.formatted(date: .long, time: .omitted) : "Choose a day, if this letter should wait.",
+                    filled: has, action: has ? "Clear" : "Choose date",
+                    onAction: {
+                        if has { envelope.openNoEarlierThan = nil; pickingDate = false }
+                        else { pickingDate = true }
+                    }) {
+            if envelope.openNoEarlierThan != nil {
                 DatePicker("Open on", selection: Binding(
                     get: { envelope.openNoEarlierThan ?? Date() },
                     set: { envelope.openNoEarlierThan = $0 }),
@@ -679,15 +683,16 @@ struct EnvelopeEditorView: View {
                     .datePickerStyle(.graphical)
                     .tint(SealTheme.brass).foregroundStyle(.white)
             } else {
-                invitation("For a letter meant for a birthday years away. \(recipientName) would still only get it after your key holders release everything; on their phone it then waits until the day you choose.")
+                invitation("Pick the earliest day this envelope may open.")
             }
-            Text("What the date does not do: it does not open anything by itself, and it is not a lock. There is no clock everyone can trust, so \(recipientName)'s phone honours the date the way a person honours a wish. Someone determined, with the file and a computer, could read it sooner.")
-                .font(.caption).foregroundStyle(.white.opacity(0.4))
-                .fixedSize(horizontal: false, vertical: true)
+            DisclosureGroup("A wish, not a lock", isExpanded: $showDateHelp) {
+                Text("The date does not open anything by itself. After release, \(recipientName)'s phone waits until that day. Someone with the file and a computer could read it sooner.")
+                    .font(.caption).foregroundStyle(.white.opacity(0.5))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .font(.caption.weight(.semibold))
+            .tint(SealTheme.brass)
         }
-        .padding(16)
-        .background(.white.opacity(has ? 0.06 : 0.035), in: RoundedRectangle(cornerRadius: 16))
-        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(has ? SealTheme.brass.opacity(0.25) : .clear, lineWidth: 1))
     }
 
     // MARK: - Files
@@ -695,7 +700,8 @@ struct EnvelopeEditorView: View {
     static let maxFileBytes = 50 * 1024 * 1024
 
     private var filesCard: some View {
-        card("doc.fill", "Files", filled: hasFiles,
+        card(.files, "doc.fill", "Files",
+             prompt: "Policies, deeds, statements. Up to 50 MB each.", filled: hasFiles,
              action: "Attach", onAction: { showFilePicker = true }) {
             if hasFiles {
                 VStack(spacing: 8) {
@@ -869,7 +875,8 @@ struct EnvelopeEditorView: View {
             }
             return estate.policy.summary(custodianCount: holders.count) + " Keys: " + holders.map(\.displayName).joined(separator: ", ") + "."
         }()
-        return card("clock.badge", several ? "When it opens: \(estateEngine.slot.name)" : "When it opens",
+        return card(.rule, "clock.badge", several ? "When it opens: \(estateEngine.slot.name)" : "When it opens",
+                    prompt: releasePrompt(estate?.policy),
                     filled: !holders.isEmpty, action: "Change", onAction: { showRule = true }) {
             Text(line)
                 .font(.callout).foregroundStyle(.white.opacity(0.8))
@@ -877,6 +884,18 @@ struct EnvelopeEditorView: View {
             if !several {
                 invitation("One rule for everything you write, unless you make another. The bills could open sooner than the letters, say.")
             }
+        }
+    }
+
+    private func releasePrompt(_ policy: ReleasePolicy?) -> String {
+        guard let policy else { return "Choose how this envelope opens." }
+        switch policy.kind {
+        case .rightAway:
+            return "Opens after you seal it."
+        case .breakGlass:
+            return "Key holders agree, then it opens."
+        case .quiet:
+            return "Opens after \(policy.silenceDays) quiet days and warnings."
         }
     }
 

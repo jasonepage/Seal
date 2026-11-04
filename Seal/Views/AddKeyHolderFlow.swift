@@ -155,7 +155,7 @@ struct AddKeyHolderFlow: View {
     private var who: some View {
         column {
             title("Who holds a key?")
-            body("Someone you trust to act with the others after you are gone, who will still be reachable in ten years. Have a key from a Seal kit? You can set it up for them right now, by yourself. Otherwise they need to be next to you with Seal on their phone.")
+            body("Someone you trust to act with the others when your rule allows, who will still be reachable in ten years. Have a key from a Seal kit? You can set it up for them right now, by yourself. Otherwise they need to be next to you with Seal on their phone.")
 
             if !candidates.isEmpty {
                 Text("Already met")

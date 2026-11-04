@@ -76,6 +76,24 @@ private struct HarborWhiskers: Shape {
     }
 }
 
+private struct HarborMouth: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.midX, y: rect.height * 0.42))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX, y: rect.height * 0.50),
+            control: CGPoint(x: rect.width * 0.34, y: rect.height * 0.72)
+        )
+        path.move(to: CGPoint(x: rect.midX, y: rect.height * 0.42))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX, y: rect.height * 0.50),
+            control: CGPoint(x: rect.width * 0.66, y: rect.height * 0.72)
+        )
+        return path
+    }
+}
+
 private struct HarborEnvelope: View {
     var body: some View {
         GeometryReader { geo in
@@ -184,10 +202,8 @@ struct HarborFigure: View {
                         .fill(tint)
                         .frame(width: w * 0.47, height: w * 0.47)
 
-                    HStack(spacing: -w * 0.028) {
-                        Ellipse().fill(silver.opacity(0.88))
-                        Ellipse().fill(silver.opacity(0.88))
-                    }
+                    Ellipse()
+                        .fill(silver.opacity(0.88))
                     .frame(width: w * 0.29, height: h * 0.13)
                     .offset(y: h * 0.055)
 
@@ -198,8 +214,8 @@ struct HarborFigure: View {
                     .offset(y: -h * 0.075)
 
                     HStack(spacing: w * 0.115) {
-                        eye
-                        eye
+                        eye(width: w, height: h)
+                        eye(width: w, height: h)
                     }
                     .offset(y: -h * 0.025)
 
@@ -208,16 +224,10 @@ struct HarborFigure: View {
                         .frame(width: w * 0.060, height: h * 0.035)
                         .offset(y: h * 0.035)
 
-                    Path { path in
-                        path.move(to: CGPoint(x: w * 0.235, y: h * 0.283))
-                        path.addLine(to: CGPoint(x: w * 0.235, y: h * 0.315))
-                        path.addQuadCurve(to: CGPoint(x: w * 0.19, y: h * 0.323),
-                                          control: CGPoint(x: w * 0.215, y: h * 0.332))
-                        path.move(to: CGPoint(x: w * 0.235, y: h * 0.315))
-                        path.addQuadCurve(to: CGPoint(x: w * 0.28, y: h * 0.323),
-                                          control: CGPoint(x: w * 0.255, y: h * 0.332))
-                    }
+                    HarborMouth()
                     .stroke(Color.black.opacity(0.72), style: StrokeStyle(lineWidth: max(1, w * 0.008), lineCap: .round))
+                    .frame(width: w * 0.10, height: h * 0.055)
+                    .offset(y: h * 0.067)
 
                     HStack(spacing: w * 0.245) {
                         HarborWhiskers(mirrored: true)
@@ -274,12 +284,14 @@ struct HarborFigure: View {
         .task(id: state) { await animate() }
     }
 
-    private var eye: some View {
+    private func eye(width: CGFloat, height: CGFloat) -> some View {
         ZStack {
             Capsule().fill(Color(red: 0.77, green: 0.68, blue: 0.54))
-            Circle().fill(Color.black.opacity(0.88)).padding(3)
+            Circle()
+                .fill(Color.black.opacity(0.88))
+                .padding(max(0.8, width * 0.009))
         }
-        .frame(width: 24, height: 12)
+        .frame(width: width * 0.075, height: height * 0.032)
         .scaleEffect(y: eyesClosed ? 0.08 : blink)
     }
 

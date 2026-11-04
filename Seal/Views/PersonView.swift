@@ -189,7 +189,7 @@ struct PersonView: View {
                 .buttonStyle(.bordered).tint(.orange)
                 .parentTapTarget()
             } else {
-                Text("A key holder keeps one of the keys that can open your envelopes after you are gone. Pick people who are likely to still be reachable in ten years.")
+                Text("A key holder keeps one of the keys that can open your envelopes when your rule allows. Pick people who are likely to still be reachable in ten years.")
                     .font(.callout).foregroundStyle(.white.opacity(0.7)).fixedSize(horizontal: false, vertical: true)
                 if !(estateEngine.estate?.opensRightAway ?? false) {
                     Button { estateEngine.addCustodian(person.identity) } label: {

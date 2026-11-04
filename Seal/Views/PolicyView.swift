@@ -17,12 +17,32 @@ struct PolicyView: View {
 
     @State private var policy: ReleasePolicy = ReleasePolicy(threshold: 1)
     @State private var problem: String?
+    @State private var step = 0
 
     private var custodianCount: Int { max(estateEngine.estate?.custodians.count ?? 0, 1) }
     /// The kind is chosen once, before the first seal (PRODUCT.md section 17).
     private var kindLocked: Bool { estateEngine.sealedKind != nil }
     private var kindBinding: Binding<ReleasePolicy.Kind> {
         Binding(get: { policy.kind }, set: { policy = policy.shaped(as: $0) })
+    }
+
+    private enum Question {
+        case kind, silence, threshold, warning, grace, objection, confirmation, review
+    }
+
+    private var questions: [Question] {
+        switch policy.kind {
+        case .quiet:
+            [.kind, .silence, .threshold, .warning, .grace, .objection, .confirmation, .review]
+        case .breakGlass:
+            [.kind, .threshold, .confirmation, .review]
+        case .rightAway:
+            [.kind, .review]
+        }
+    }
+
+    private var currentQuestion: Question {
+        questions[min(step, questions.count - 1)]
     }
 
     /// Under the "how many must agree" stepper. At a rule of one it says
@@ -42,110 +62,179 @@ struct PolicyView: View {
         NavigationStack {
             ZStack {
                 SealTheme.ink.ignoresSafeArea()
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 22) {
-                        Text(policy.summary(custodianCount: estateEngine.estate?.custodians.count ?? 0))
-                            .font(.system(.title3, design: .rounded, weight: .semibold))
-                            .foregroundStyle(SealTheme.brass)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        block("When it opens",
-                              policy.kind.explanation + (kindLocked ? " This rule is sealed, so this is fixed. Make a new rule for another kind." : "")) {
-                            Picker("When it opens", selection: kindBinding) {
-                                ForEach(ReleasePolicy.Kind.allCases, id: \.self) { Text($0.label).tag($0) }
-                            }
-                            .pickerStyle(.segmented)
-                            .disabled(kindLocked)
-                        }
-
-                        if policy.kind == .quiet {
-                            block("How many days you can go quiet",
-                                  "If you do not open Seal for this long, your key holders may start the process. Opening the app once resets it."
-                                  + (policy.silenceDays < 30 ? " " + ReleasePolicy.shortSilenceCaution : "")) {
-                                Picker("Silence", selection: $policy.silenceDays) {
-                                    ForEach(ReleasePolicy.allowedSilenceDays, id: \.self) { Text("\($0)").tag($0) }
-                                }
-                                .pickerStyle(.segmented)
-                            }
-                        }
-
-                        if policy.kind != .rightAway {
-                            block("How many key holders must agree", thresholdFooter) {
-                                Stepper("\(policy.threshold) of \(estateEngine.estate?.custodians.count ?? 0)", value: $policy.threshold, in: 1...custodianCount)
-                                    .foregroundStyle(.white)
-                            }
-
-                            // Break glass has no clock at all: no warnings, no
-                            // grace, nothing for an objection to pause.
-                            if policy.kind == .quiet {
-                                block("How long you are warned",
-                                      "After a claim starts you are warned every day for this long, on every channel Seal has.") {
-                                    Stepper("\(policy.warningDays) days", value: $policy.warningDays, in: 1...90).foregroundStyle(.white)
-                                }
-
-                                block("A quiet period after the warnings",
-                                      "Nothing can be tapped until this has also passed.") {
-                                    Stepper("\(policy.graceDays) days", value: $policy.graceDays, in: 0...90).foregroundStyle(.white)
-                                }
-
-                                block("If a key holder objects",
-                                      policy.objectionBehavior == .pause
-                                        ? "The countdown stops until they withdraw the objection. Nothing else changes."
-                                        : "The claim is dead. A new one has to be started from the beginning.") {
-                                    Picker("Objection", selection: $policy.objectionBehavior) {
-                                        ForEach(ReleasePolicy.ObjectionBehavior.allCases, id: \.self) { Text($0.label).tag($0) }
-                                    }
-                                    .pickerStyle(.segmented)
-                                }
-                            }
-
-                            block("How often key holders confirm their key",
-                                  "Each key holder's phone asks them to tap their key this often, to show they still have it. It is a receipt, not a vote: it can never open anything.") {
-                                Picker("Confirm", selection: $policy.custodyConfirmMonths) {
-                                    ForEach(ReleasePolicy.allowedCustodyConfirmMonths, id: \.self) {
-                                        Text($0 == 12 ? "Every year" : ($0 == 24 ? "Every 2 years" : "Every \($0) months")).tag($0)
-                                    }
-                                }
-                                .pickerStyle(.segmented)
-                            }
-                        }
-
-                        if let problem { Text(problem).font(.callout).foregroundStyle(.orange) }
-
-                        Text("If you change who must agree, your key holders get new key pieces the next time you seal. Your envelopes are not touched.")
-                            .font(.caption).foregroundStyle(.white.opacity(0.45)).fixedSize(horizontal: false, vertical: true)
+                VStack(spacing: 0) {
+                    progress
+                    ScrollView {
+                        question
+                            .padding(20)
+                            .frame(maxWidth: 520)
+                            .frame(maxWidth: .infinity)
+                            .containerRelativeFrame(.horizontal)
                     }
-                    .padding(20)
-                    .frame(maxWidth: 520).frame(maxWidth: .infinity)
-                    .containerRelativeFrame(.horizontal)
+                    controls
                 }
             }
-            .navigationTitle("The rule")
+            .navigationTitle("Your rule")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel", action: onClose).foregroundStyle(SealTheme.brass) }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        do { try estateEngine.setPolicy(policy); onClose() }
-                        catch { problem = error.localizedDescription }
-                    }
-                    .foregroundStyle(SealTheme.brass)
-                }
             }
-            .onAppear { policy = estateEngine.estate?.policy ?? ReleasePolicy(threshold: 1) }
-            .onChange(of: policy.kind) { _, _ in problem = nil }
+            .onAppear {
+                policy = estateEngine.estate?.policy ?? ReleasePolicy(threshold: 1)
+                step = 0
+            }
+            .onChange(of: policy.kind) { _, _ in
+                problem = nil
+                step = min(step, questions.count - 1)
+            }
         }
         .preferredColorScheme(.dark)
     }
 
-    private func block<T: View>(_ title: String, _ explanation: String, @ViewBuilder control: () -> T) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title).font(.headline).foregroundStyle(.white)
-            control().tint(SealTheme.brass)
-            Text(explanation).font(.callout).foregroundStyle(.white.opacity(0.55)).fixedSize(horizontal: false, vertical: true)
+    private var progress: some View {
+        HStack(spacing: 6) {
+            ForEach(questions.indices, id: \.self) { index in
+                Capsule()
+                    .fill(index <= step ? SealTheme.brass : .white.opacity(0.12))
+                    .frame(height: 4)
+            }
         }
-        .padding(16)
-        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .accessibilityLabel("Step \(step + 1) of \(questions.count)")
+    }
+
+    @ViewBuilder
+    private var question: some View {
+        switch currentQuestion {
+        case .kind:
+            prompt("When should this open?", policy.kind.explanation + (kindLocked ? " This choice is fixed after the first seal." : "")) {
+                VStack(spacing: 10) {
+                    ForEach(ReleasePolicy.Kind.allCases, id: \.self) { kind in
+                        choice(kind.label, selected: policy.kind == kind) {
+                            kindBinding.wrappedValue = kind
+                        }
+                        .disabled(kindLocked)
+                    }
+                }
+            }
+        case .silence:
+            prompt("How long can you go quiet?", "Opening Seal once resets the clock."
+                   + (policy.silenceDays < 30 ? " " + ReleasePolicy.shortSilenceCaution : "")) {
+                Picker("Days", selection: $policy.silenceDays) {
+                    ForEach(ReleasePolicy.allowedSilenceDays, id: \.self) { Text("\($0) days").tag($0) }
+                }
+                .pickerStyle(.wheel)
+                .frame(height: 150)
+            }
+        case .threshold:
+            prompt("How many people must agree?", thresholdFooter) {
+                Stepper(value: $policy.threshold, in: 1...custodianCount) {
+                    Text("\(policy.threshold) of \(estateEngine.estate?.custodians.count ?? 0)")
+                        .font(.system(.title2, design: .rounded, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+            }
+        case .warning:
+            prompt("How long should we warn you?", "Seal warns you every day. Opening the app stops the process.") {
+                Stepper("\(policy.warningDays) days", value: $policy.warningDays, in: 1...90)
+                    .font(.title3.bold())
+            }
+        case .grace:
+            prompt("Add a final waiting period?", "Nobody can approve the opening during this time.") {
+                Stepper(policy.graceDays == 0 ? "No extra wait" : "\(policy.graceDays) days",
+                        value: $policy.graceDays, in: 0...90)
+                    .font(.title3.bold())
+            }
+        case .objection:
+            prompt("What if someone objects?", policy.objectionBehavior == .pause
+                   ? "The countdown stops until they withdraw the objection."
+                   : "The claim ends. A key holder must start a new one from the beginning.") {
+                VStack(spacing: 10) {
+                    ForEach(ReleasePolicy.ObjectionBehavior.allCases, id: \.self) { behavior in
+                        choice(behavior.label, selected: policy.objectionBehavior == behavior) {
+                            policy.objectionBehavior = behavior
+                        }
+                    }
+                }
+            }
+        case .confirmation:
+            prompt("How often should keys be checked?", "This only confirms that each key holder still has their key. It cannot open anything.") {
+                Picker("Key check", selection: $policy.custodyConfirmMonths) {
+                    ForEach(ReleasePolicy.allowedCustodyConfirmMonths, id: \.self) {
+                        Text($0 == 12 ? "Every year" : ($0 == 24 ? "Every 2 years" : "Every \($0) months")).tag($0)
+                    }
+                }
+                .pickerStyle(.wheel)
+                .frame(height: 150)
+            }
+        case .review:
+            prompt("Ready to save?", "You can change the timing later. The opening type is fixed after your first seal.") {
+                Text(policy.summary(custodianCount: estateEngine.estate?.custodians.count ?? 0))
+                    .font(.system(.title3, design: .rounded, weight: .semibold))
+                    .foregroundStyle(SealTheme.brass)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+
+        if let problem {
+            Text(problem).font(.callout).foregroundStyle(.orange).padding(.top, 14)
+        }
+    }
+
+    private var controls: some View {
+        HStack(spacing: 12) {
+            if step > 0 {
+                Button("Back") { withAnimation { step -= 1 } }
+                    .buttonStyle(.bordered)
+            }
+            Button(currentQuestion == .review ? "Save rule" : "Continue") {
+                if currentQuestion == .review {
+                    do { try estateEngine.setPolicy(policy); onClose() }
+                    catch { problem = error.localizedDescription }
+                } else {
+                    withAnimation { step = min(step + 1, questions.count - 1) }
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .frame(maxWidth: .infinity)
+        }
+        .tint(SealTheme.brass)
+        .padding(20)
+        .background(.ultraThinMaterial)
+    }
+
+    private func prompt<Content: View>(_ title: String, _ help: String,
+                                       @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 22) {
+            Text(title)
+                .font(.system(.largeTitle, design: .rounded, weight: .bold))
+                .foregroundStyle(.white)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(help)
+                .font(.body)
+                .foregroundStyle(.white.opacity(0.62))
+                .fixedSize(horizontal: false, vertical: true)
+            content().tint(SealTheme.brass)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(20)
+        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 22))
+    }
+
+    private func choice(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack {
+                Text(title).font(.headline)
+                Spacer()
+                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+            }
+            .foregroundStyle(selected ? SealTheme.brass : .white)
+            .padding(16)
+            .background(selected ? SealTheme.brass.opacity(0.12) : .white.opacity(0.04),
+                        in: RoundedRectangle(cornerRadius: 14))
+        }
+        .buttonStyle(.plain)
     }
 }

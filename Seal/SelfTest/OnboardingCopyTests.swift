@@ -13,7 +13,8 @@ import Foundation
 //  never the word "will", and at a threshold of 1 never a sentence that
 //  tells the one key holder their key does nothing. Every check runs the
 //  whole script at thresholds of 1, 2 and 3 and at 1, 2 and 3 key holders,
-//  with real and default numbers, with a price and without one.
+//  with real and default numbers. Price belongs at the purchase decision,
+//  not in the onboarding walkthrough.
 //
 //  Pure: no view is built, no store is asked, no clock, no keychain.
 
@@ -154,21 +155,10 @@ enum OnboardingCopyTests {
         let empty = OnboardingScript.priceSentence("")
         t.equal(empty, without, "an empty price reads like no price")
 
-        for r in [OnboardingRole.sealer, .couple] {
-            let priced = OnboardingScript.screens(for: r, numbers: .defaults, price: fakePrice)
-            t.check(priced.contains { $0.id.hasSuffix(".price") && $0.body.contains(fakePrice) },
-                    "the price screen carries the price", r.rawValue)
-            let unpriced = OnboardingScript.screens(for: r, numbers: .defaults, price: nil)
-            t.check(unpriced.contains { $0.id.hasSuffix(".price") && $0.body.contains("shown before you pay") },
-                    "the price screen reads right without a price", r.rawValue)
-            for s in unpriced {
-                t.check(!s.body.contains(fakePrice), "no price leaks without one", "\(r.rawValue)/\(s.id)")
-            }
-        }
-        for r in [OnboardingRole.keyHolder, .recipient] {
+        for r in OnboardingRole.allCases {
             for s in OnboardingScript.screens(for: r, numbers: .defaults, price: fakePrice) {
-                t.check(!s.body.contains(fakePrice) && !s.body.lowercased().contains("purchase"),
-                        "a key holder or recipient never sees a price", "\(r.rawValue)/\(s.id)")
+                t.check(!s.body.contains(fakePrice),
+                        "onboarding never carries the store price", "\(r.rawValue)/\(s.id)")
             }
         }
     }
@@ -184,14 +174,11 @@ enum OnboardingCopyTests {
                     t.check(!lower.contains("one key alone sees nothing."), "no one key alone sees nothing at a threshold of 1", "\(s.id): \(l)")
                 }
             }
-            for r in [OnboardingRole.sealer, .couple] {
-                for s in OnboardingScript.screens(for: r, numbers: n) where s.id.hasSuffix(".curve") {
-                    t.check(!s.title.hasPrefix("One key alone sees nothing"), "the sealer curve title is honest at a threshold of 1", "\(r.rawValue)/\(s.id)")
-                    // Audit H1: one key is the whole secret, and the owner
-                    // is told what a key holder with a rebuilt app could do.
-                    t.check(s.body.contains("rebuilt the app"), "at a threshold of 1 the sealer is told what one key really allows", "\(r.rawValue)/\(s.id) c\(n.custodianCount)")
-                }
-            }
+            // Audit H1: the rule screen tells the owner what one key really
+            // allows (PolicyView.thresholdFooter). The walkthrough no longer
+            // has a curve screen that repeated it.
+            t.check(ReleasePolicy.oneKeyCaution(custodianCount: n.custodianCount).contains("rebuilt the app"),
+                    "at a threshold of 1 the rule screen says what one key really allows", "c\(n.custodianCount)")
             for s in OnboardingScript.screens(for: .keyHolder, numbers: n) + OnboardingScript.screens(for: .recipient, numbers: n) {
                 for l in lines(s) {
                     t.check(!l.contains("Nothing opens before") && !l.contains("Nobody can open"),

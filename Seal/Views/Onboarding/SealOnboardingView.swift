@@ -79,9 +79,9 @@ enum OnboardingRole: String, CaseIterable, Identifiable {
     var chooserSub: String {
         switch self {
         case .sealer: "I am setting this up for my family."
-        case .couple: "Two phones. Each of us holds a key for the other."
-        case .keyHolder: "Someone asked me to hold a small security key."
-        case .recipient: "I was told an envelope is waiting for me."
+        case .couple: "We are setting it up together."
+        case .keyHolder: "I was given a security key."
+        case .recipient: "An envelope is waiting for me."
         }
     }
 
@@ -110,7 +110,7 @@ struct OnboardingScreen: Identifiable {
         case phones
         case spare
         /// The small pewter mark, for a screen whose point is a sentence
-        /// and not a drawing (the price, the envelopes that wait).
+        /// and not a drawing. No screen uses it in 1.3.
         case quiet
 
         var isSteps: Bool { if case .steps = self { return true }; return false }
@@ -200,31 +200,40 @@ enum OnboardingScript {
         [
             OnboardingScreen(
                 id: "why",
-                title: "Why Seal.",
-                body: "",
-                figure: .mark,
-                steps: [
-                    "No server. Everything is encrypted on your phone, and nothing leaves it.",
-                    "Your envelopes open only after a long silence and days of warnings, never early.",
-                    "The keys are held by people you trust, met in person. Not by us.",
-                    "The code is public, so anyone can check it.",
-                    "One purchase, once. No subscription.",
-                ],
-                numbered: false),
+                title: "Write something worth keeping.",
+                body: "A private letter, photos, your voice, or the things only you know.",
+                figure: .mark),
             shared()[1],
         ]
     }
 
     static func brief(for role: OnboardingRole, numbers n: OnboardingNumbers, price: String? = nil) -> [OnboardingScreen] {
-        let all = screens(for: role, numbers: n, price: price)
-        let keep: Set<String>
         switch role {
-        case .sealer: keep = ["s.now"]
-        case .couple: keep = ["c.now"]
-        case .keyHolder: keep = ["k.nothing", "k.several", "k.keep"]
-        case .recipient: keep = ["r.sealed", "r.job"]
+        case .sealer:
+            return [OnboardingScreen(
+                id: "s.start",
+                title: "Write your first letter.",
+                body: "Pick a person and write one line. You can choose how it opens and add everything else later.",
+                figure: .envelope)]
+        case .couple:
+            return [OnboardingScreen(
+                id: "c.start",
+                title: "Start on both phones.",
+                body: "Each of you writes your own envelope. Seal walks you through exchanging keys later.",
+                figure: .phones)]
+        case .keyHolder:
+            return [OnboardingScreen(
+                id: "k.start",
+                title: "Keep the key safe.",
+                body: "Seal tells you if it ever needs a tap. Until then, there is nothing to do.",
+                figure: .keep)]
+        case .recipient:
+            return [OnboardingScreen(
+                id: "r.start",
+                title: "An envelope is waiting.",
+                body: "Keep Seal on your phone. We tell you when the writer's opening rule is met.",
+                figure: .envelope)]
         }
-        return all.filter { keep.contains($0.id) }
     }
 
     // MARK: Shared
@@ -233,13 +242,13 @@ enum OnboardingScript {
         [
             OnboardingScreen(
                 id: "why",
-                title: "For the things only you know.",
-                body: "The passwords. The seed phrase. Where the papers are. A letter to each of them. You seal them in envelopes now, for the people you leave behind. They stay closed while you are here. Seal opens none of them early. Apple cannot open them, and neither can we.",
+                title: "Private letters, opened on your terms.",
+                body: "Write now. Choose when each envelope may open. Seal cannot read what is inside.",
                 figure: .mark),
             OnboardingScreen(
                 id: "ask",
                 title: "Which one are you?",
-                body: "Seal looks different for each of these. Pick the one that fits, and we show you only what you need.",
+                body: "Pick one. We show only what you need.",
                 figure: .ask),
         ]
     }
@@ -265,8 +274,8 @@ enum OnboardingScript {
 
         out.append(OnboardingScreen(
             id: "\(p).envelope",
-            title: "One envelope for each person.",
-            body: "An envelope holds a letter, a few photos, a voice message, a short video, and the secrets: passwords, where the papers are, the combination. It also holds \"what to do first\": the steps to take, in order. You write one for each person. Only that person can ever read it. If you type a seed phrase into the letter, Seal notices and offers to move it somewhere safer.",
+            title: "Start with one letter.",
+            body: "Pick a person and write one honest line. Add photos, voice, video, files, steps, or secrets later.",
             figure: .envelope))
 
         if couple {
@@ -299,8 +308,6 @@ enum OnboardingScript {
             out.append(keysScreen(prefix: p, n))
         }
 
-        out.append(curveScreen(prefix: p, n))
-
         out.append(OnboardingScreen(
             id: "\(p).holders",
             title: "Key holders are met in person.",
@@ -312,24 +319,6 @@ enum OnboardingScript {
             title: "A backup key, for yourself.",
             body: "Right after you sign up, Seal asks you to add a backup key. Do it then. There is no email reset, on purpose: nobody can take your account by resetting it, not even us. So if you lose your only key, your identity is gone with it. A second security key, or a passkey on a phone you trust, brings it back.",
             figure: .spare))
-
-        out.append(OnboardingScreen(
-            id: "\(p).urgent",
-            title: "A second rule, for what cannot wait.",
-            body: "Some things cannot wait, like the bills and the medical papers. Give those envelopes their own rule, with shorter numbers and its own key holders. Opening them opens none of the letters. Up to three rules, each its own set of keys.",
-            figure: .envelope))
-
-        out.append(OnboardingScreen(
-            id: "\(p).waiting",
-            title: "Envelopes that wait.",
-            body: "You can write to someone who is not on Seal yet. Type their name tonight, and the envelope waits until you meet. For someone far away, you can register a spare security key in their name and send it to them. An envelope can also be held for a date, like a birthday: the reader's phone waits until that day to show it. And if you ever delete your account, Seal asks whether to keep your envelopes for your family or cancel them.",
-            figure: .quiet))
-
-        out.append(OnboardingScreen(
-            id: "\(p).price",
-            title: "What it costs.",
-            body: "\(priceSentence(price)) Nothing is charged until the first time you tap Seal. Writing envelopes and adding people are free. Security keys are bought separately; a YubiKey is one kind. \(Biometry.title) works for everything, so a key is recommended, never required. The other choices are a sticky note in a drawer, or passwords written into legal papers that anyone can read once a court makes them public.",
-            figure: .quiet))
 
         if couple {
             out.append(OnboardingScreen(
@@ -391,25 +380,6 @@ enum OnboardingScript {
             title: "Any \(word(n.threshold)) of your \(word(n.custodianCount)) keys open the envelopes.",
             body: "You choose \(word(n.custodianCount)) people you trust, in person. After all the warnings pass, any \(word(n.threshold)) of them tap. Their phones combine the pieces. \(opens)",
             figure: .keys)
-    }
-
-    /// The arithmetic. At a threshold of 1 the usual title is false, so
-    /// the screen says what the rule is and what the picture shows for a
-    /// rule of two or more.
-    private static func curveScreen(prefix p: String, _ n: OnboardingNumbers) -> OnboardingScreen {
-        if n.oneIsEnough {
-            return OnboardingScreen(
-                id: "\(p).curve",
-                title: "With two keys or more, one key alone sees nothing.",
-                body: "Your rule right now needs only one key, so each key holds the whole secret. \(ReleasePolicy.oneKeyCaution(custodianCount: n.custodianCount)) If you ask for two keys or more, each key holds one point on a hidden line. One point alone could sit on any line at all, so one key holder learns nothing. Two points fix the line, and where it meets the edge is the secret. That is arithmetic, and it holds against us too.",
-                figure: .curve)
-        }
-        let shape = n.threshold <= 2 ? "line" : "curve"
-        return OnboardingScreen(
-            id: "\(p).curve",
-            title: "One key alone sees nothing.",
-            body: "Each key holds one point on a hidden \(shape). One point alone could sit on any \(shape) at all, so one key holder learns nothing, not even a hint. \(word(n.threshold, capital: true)) points fix the \(shape), and where it meets the edge is the secret that opens everything. This is not a rule we made up. It is arithmetic, and it holds against us too.",
-            figure: .curve)
     }
 
     // MARK: The key holder
@@ -494,17 +464,17 @@ enum OnboardingScript {
             OnboardingScreen(
                 id: "r.sealed",
                 title: "Someone wrote you an envelope.",
-                body: "It is sealed. Nobody else can open it. Not Apple, not us, and not anyone holding a key. It opens here, on your phone, only after a long silence from the person who wrote it, and only after their key holders act.",
+                body: "It stays private until its opening rule is met. Seal and Apple cannot read what is inside.",
                 figure: .envelope),
             OnboardingScreen(
                 id: "r.opens",
                 title: "How it opens.",
-                body: "The person who wrote it opens Seal now and then. If they go quiet for \(days(n.silenceDays)), their key holders may start a claim. They are warned for \(days(n.warningDays))\(grace), and if they are alive one tap stops it. After all of that, \(taps), and the envelope opens here. If they held it for a date, like a birthday, your phone waits until that day to show it.",
+                body: "The writer chose the rule. For a quiet rule, silence lasts \(days(n.silenceDays)), warnings last \(days(n.warningDays))\(grace), then \(taps). A date may make it wait longer.",
                 figure: .timeline(.keysCanTap)),
             OnboardingScreen(
                 id: "r.job",
                 title: "Your job is simple.",
-                body: "Keep Seal on your phone. If you get a new phone, sign in on it. You do not need a key, and you do not need to do anything else. When the time comes, the envelope opens on its own, and this app tells you. Until then, nobody, not even the key holders, can see what is inside.",
+                body: "Keep Seal on your phone. Sign in again if you replace it. We tell you when the envelope is ready.",
                 figure: .keep),
         ]
     }
@@ -522,12 +492,11 @@ struct SealOnboardingView: View {
 
     @State private var role: OnboardingRole?
     @State private var index: Int
+    @State private var showExplanation = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    /// Optional on purpose: a preview, or a tree with no store above it,
-    /// must draw the price screen with the "shown before you pay" line
-    /// rather than crash. On the phone SealApp puts the store in the
-    /// environment above ContentView, and every cover inherits it.
+    /// Optional on purpose: previews and tests may not provide the store.
+    /// On the phone SealApp puts it above ContentView.
     @Environment(SealPurchase.self) private var purchase: SealPurchase?
 
     init(numbers: OnboardingNumbers = .defaults,
@@ -553,6 +522,23 @@ struct SealOnboardingView: View {
 
     private var screen: OnboardingScreen {
         screens[min(max(0, index), screens.count - 1)]
+    }
+
+    /// The walkthrough carries one sentence. Everything after it is help,
+    /// not a toll the person must pay before pressing Next.
+    private var bodyParts: (prompt: String, explanation: String?) {
+        let body = screen.body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let end = body.range(of: ". ") else { return (body, nil) }
+        let prompt = String(body[..<end.lowerBound]) + "."
+        let explanation = String(body[end.upperBound...])
+        return (prompt, explanation.isEmpty ? nil : explanation)
+    }
+
+    /// Most onboarding cards need one prompt, not a second layer of copy.
+    /// Keep details only where hiding the safety behavior would be unfair.
+    private var allowsExplanation: Bool {
+        guard !brief else { return false }
+        return ["s.warnings", "c.warnings", "s.backup", "c.backup", "k.nothing", "r.sealed"].contains(screen.id)
     }
 
     private var isAsk: Bool {
@@ -598,11 +584,37 @@ struct SealOnboardingView: View {
                             .fixedSize(horizontal: false, vertical: true)
 
                         if !screen.body.isEmpty {
-                            Text(screen.body)
+                            Text(bodyParts.prompt)
                                 .font(wide ? .body : .callout)
                                 .foregroundStyle(.white.opacity(0.75))
                                 .multilineTextAlignment(.center)
                                 .fixedSize(horizontal: false, vertical: true)
+
+                            if allowsExplanation, let explanation = bodyParts.explanation {
+                                Button {
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        showExplanation.toggle()
+                                    }
+                                } label: {
+                                    Label(showExplanation ? "Less" : "Details",
+                                          systemImage: showExplanation ? "chevron.up" : "questionmark.circle")
+                                        .font(.footnote.weight(.semibold))
+                                        .foregroundStyle(SealTheme.brass)
+                                }
+                                .buttonStyle(.plain)
+                                .parentTapTarget()
+
+                                if showExplanation {
+                                    Text(explanation)
+                                        .font(.footnote)
+                                        .foregroundStyle(.white.opacity(0.58))
+                                        .multilineTextAlignment(.center)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                        .padding(14)
+                                        .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 14))
+                                        .transition(.opacity.combined(with: .move(edge: .top)))
+                                }
+                            }
                         }
 
                         if !screen.steps.isEmpty {
@@ -645,7 +657,8 @@ struct SealOnboardingView: View {
 
     private var topBar: some View {
         HStack {
-            Menu {
+            if !brief {
+                Menu {
                 Section("Start") {
                     ForEach(Array(OnboardingScript.shared().enumerated()), id: \.element.id) { i, s in
                         Button(s.title) { go(role: role, index: i) }
@@ -658,13 +671,14 @@ struct SealOnboardingView: View {
                         }
                     }
                 }
-            } label: {
-                Label("Chapters", systemImage: "list.bullet")
-                    .font(.footnote)
-                    .foregroundStyle(.white.opacity(0.6))
-                    .padding()
+                } label: {
+                    Label("Browse", systemImage: "list.bullet")
+                        .font(.footnote)
+                        .foregroundStyle(.white.opacity(0.6))
+                        .padding()
+                }
+                .accessibilityLabel("Browse the guide.")
             }
-            .accessibilityLabel("Chapters. Jump to any part.")
 
             Spacer()
 
@@ -686,9 +700,14 @@ struct SealOnboardingView: View {
         Image(name)
             .resizable()
             .scaledToFit()
-            .frame(maxWidth: 360)
-            .frame(height: height)
-            .padding(.vertical, 4)
+            .frame(width: height, height: height)
+            // The generated paintings have a vignette. Feather its square
+            // edge into Seal's ink so the subject floats without a card.
+            .mask {
+                RoundedRectangle(cornerRadius: 42, style: .continuous)
+                    .blur(radius: 18)
+                    .padding(8)
+            }
     }
 
     @ViewBuilder
@@ -820,6 +839,7 @@ struct SealOnboardingView: View {
     private func go(role newRole: OnboardingRole?, index newIndex: Int) {
         let change = {
             role = newRole
+            showExplanation = false
             let count = OnboardingScript.sharedCount
                 + (newRole.map { OnboardingScript.screens(for: $0, numbers: numbers).count } ?? 0)
             index = min(max(0, newIndex), count - 1)

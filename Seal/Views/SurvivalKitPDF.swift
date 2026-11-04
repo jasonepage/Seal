@@ -74,7 +74,7 @@ enum SurvivalKit {
             : "First: this key can only open things after a long silence, days of warnings, and enough other key holders tapping too. It cannot be used to read anything on its own. Second: about once a year Seal will ask you to tap the key on your phone to show you still have it. Please do. It tells \(owner) the key is in good hands."
         let sections: [Section] = [
             Section(heading: "What this is", body:
-             "\(owner) wrote sealed envelopes for the people they will leave behind: letters, photos, a voice, and the passwords and papers a family needs. The envelopes are locked on \(owner)'s phone and stored in encrypted form. Seal opens none of them early, for anyone, including you. Apple and the people who made Seal cannot open them at all. This key is one of the keys that can open them after \(owner) is gone. Keep it somewhere you will still find it in ten years. It is useless to a thief and precious to the family."),
+             "\(owner) wrote sealed envelopes for the people they love: letters, photos, a voice, and the passwords and papers a family needs. The envelopes are locked on \(owner)'s phone and stored in encrypted form. Seal opens none of them early, for anyone, including you. Apple and the people who made Seal cannot open them at all. This key is one of the keys that can open them when \(owner)'s rule allows. Keep it somewhere you will still find it in ten years. It is useless to a thief and precious to the family."),
             Section(heading: "What to do when the time comes", body: whenTimeComes),
             Section(heading: "Two things to remember", body: remember),
         ]

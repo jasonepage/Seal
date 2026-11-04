@@ -91,6 +91,7 @@ struct EstateHomeView: View {
     @State private var showPasswords = false
     @State private var showCoupleSetup = false
     @State private var showPaywall = false
+    @State private var showKeyHelp = false
     @Environment(SealPurchase.self) private var purchase
     @State private var explain: ExplainRequest?
     @Environment(\.parentMode) private var parentMode
@@ -626,7 +627,7 @@ struct EstateHomeView: View {
         }
         keyHoldersSection
         coupleRow
-        footer
+        keyHelp
     }
 
     // MARK: - Tab 3: For others
@@ -1109,7 +1110,7 @@ struct EstateHomeView: View {
         case .envelope:
             return "A letter, a few photos, and the secrets. You do not need anybody else to start. Type a name and write tonight."
         case .keyHolders:
-            return "People you trust to act together after you are gone. Have a Seal kit? Set up their keys yourself, tonight. Or add someone who is next to you with their phone."
+            return "People you trust to open your envelopes together when your rule allows. Have a Seal kit? Set up their keys yourself, tonight. Or add someone who is next to you with their phone."
         case .rule:
             if let estate, estate.policy.kind != .quiet {
                 return "Right now: " + estate.policy.summary(custodianCount: estate.custodians.count) + " Tap to change it."
@@ -1411,7 +1412,7 @@ struct EstateHomeView: View {
                     SealMark(size: 44, trust: false, pressOnAppear: true)
                     Text("Sealed envelopes").font(.system(.title2, design: .rounded, weight: .semibold))
                 }
-                Text("Write a few envelopes. Hand keys to people you trust. Set the rule for how they open after you are gone. Seal opens nothing early, and we cannot open anything at all.")
+                Text("Write a few envelopes. Hand keys to people you trust. Choose when and how they open. Seal cannot read or open them for you.")
             case .active?, .cancelled?:
                 // This banner reads the RELEASE state, which only says whether
                 // a claim is running. It used to announce "Your envelopes are
@@ -1967,18 +1968,23 @@ struct EstateHomeView: View {
         .padding(.horizontal, 24)
     }
 
-    private var footer: some View {
-        // At a rule of one the old first sentence, "Nobody can open an
-        // envelope early", was not true of a key holder who rebuilt the app
-        // (audit H1). The rule screen carries the whole story.
-        let oneKey = estate.map { $0.policy.threshold == 1 && !$0.custodians.isEmpty } ?? false
-        var line = "Apple cannot open an envelope, and neither can we. Seal opens nothing early. It takes your key holders' physical keys, after a long silence from you, after weeks of warnings you can stop with one tap."
-        if oneKey { line += " With a rule of one, you trust each key holder fully. The rule screen says why." }
-        return Text(line)
-            .font(.caption2).foregroundStyle(.white.opacity(0.4))
-            .multilineTextAlignment(.center)
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, 32).padding(.top, 8)
+    private var keyHelp: some View {
+        DisclosureGroup(isExpanded: $showKeyHelp) {
+            Text("Each envelope follows the rule you chose. Some open right away. Some open only when enough key holders use their keys. A quiet rule also waits through your silence and warning periods. Apple and Seal cannot open your envelopes.")
+                .font(.callout)
+                .foregroundStyle(.white.opacity(0.62))
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 10)
+        } label: {
+            Label("How keys work", systemImage: "info.circle")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.7))
+        }
+        .tint(SealTheme.brass)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 14))
+        .padding(.horizontal, 20)
     }
 }
 
