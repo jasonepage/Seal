@@ -27,6 +27,10 @@ ALLOWED = {
     "StoreKit", "SwiftUI", "UIKit", "UniformTypeIdentifiers", "UserNotifications",
     "Vision", "VisionKit", "WidgetKit", "os", "OSLog", "Combine", "Charts",
     "PDFKit", "QuickLook", "SafariServices", "StoreKitTest", "XCTest",
+    # Apple's Mac framework, for the Mac-only artwork scripts in tools/
+    # (render_social_cards.swift, render_appstore_assets.swift). Never shipped
+    # in the app.
+    "AppKit",
 }
 
 # Files that would mean a package manager had arrived.
