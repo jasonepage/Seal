@@ -97,6 +97,12 @@ Dates are the day the work landed in the repository. Anything marked
   "Tell someone about Seal", since it only shares the website. "Register a
   key for someone who is not here" is now "Set up a key for someone". The
   invitation text no longer says "for when I'm gone".
+- One Face ID setting instead of two. Seal now always asks for Face ID or
+  the passcode before it shows a password or seed phrase (it used to be a
+  separate switch, off by default); "Require Face ID" only decides whether
+  the whole app locks. (`AppLock.confirmSeal`, `ProfileView`)
+- "Bigger text" is gone; iOS Text Size does the same job. A setting saved by
+  an older build is ignored, so nobody is stuck with it. (`ParentMode`)
 - Harbor's eyes are smaller and scale with his size.
 - `tools/run_core_tests.sh` now compiles with `-default-isolation MainActor`,
   the same isolation the app target uses. Before, Swift 6 reported

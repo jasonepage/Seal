@@ -46,8 +46,6 @@ struct ProfileView: View {
     @State private var revokedHere: Set<Data> = []
     @State private var renaming = false
     @State private var draftName = ""
-    /// Mirrors the keychain flag; loaded in .task so the toggle renders true state.
-    @State private var cardLockOn = false
     @State private var showHowTo = false
     @State private var timestampsOn = false
     @State private var restored = false
@@ -273,45 +271,14 @@ struct ProfileView: View {
             SettingRow(icon: Biometry.symbol, tint: SealTheme.brass,
                        title: "Require \(Biometry.name)",
                        summary: "Lock Seal when you leave it",
+                       detail: "Seal always asks for \(Biometry.name) or your passcode before it shows a password or seed phrase, whether this is on or off. Turned on, it also locks Seal when you leave it.",
                        isOn: .init(
                            get: { appLock.isEnabled },
                            set: { value in Task { await appLock.setEnabled(value) } }),
                        switchTint: SealTheme.brass)
-
-            // What this flag gates TODAY is the two places a secret comes
-            // out in the clear: Show in the envelope editor, and Open my
-            // envelopes after a release. It is not a gate on ordinary use,
-            // and it does not touch sealing. The row used to say "Face ID to
-            // seal a card", copy left over from the messenger, about cards
-            // and sending that this app no longer has.
-            SettingRow(icon: "eye.fill", tint: SealTheme.brass,
-                       title: "\(Biometry.title) to show a secret",
-                       summary: "Check it's you before a secret is shown",
-                       detail: "A password or a seed phrase stays hidden until Seal checks your face or your passcode. This happens when you tap Show on your own envelope, and when you open envelopes written for you. It does not ask on the rest of the app, and it does not ask when you seal.",
-                       isOn: .init(
-                           get: { cardLockOn },
-                           set: { value in Task {
-                               cardLockOn = await AppLock.setCardLockEnabled(value, ownerHash: myRoot.credentialIDHash)
-                           } }),
-                       switchTint: SealTheme.brass)
-                .task { cardLockOn = AppLock.isCardLockEnabled(ownerHash: myRoot.credentialIDHash) }
         }
 
-        // Was "Simplified mode", which used to swap the whole shell. There is
-        // only one shell now, so this switch does exactly one thing and is
-        // named for it. NEVER labelled by who it is for: the person reading it
-        // is holding the phone. Silver, not brass: it changes how Seal looks
-        // and makes no claim about trust (UI.md 1.1).
-        if let parentMode {
-            SettingRow(icon: "textformat.size", tint: SealTheme.silver,
-                       title: "Bigger text",
-                       summary: "Larger type and buttons",
-                       detail: "Everything in Seal gets bigger, on this phone only. Nothing is hidden and nothing stops working. If you have already made text larger in your iPhone settings, this goes one step beyond that rather than starting over.",
-                       isOn: .init(
-                           get: { parentMode.isOn },
-                           set: { parentMode.setEnabled($0) }),
-                       switchTint: SealTheme.silver)
-        }
+        // "Bigger text" was removed in 1.3: iOS Text Size does the same job.
     }
 
     @ViewBuilder

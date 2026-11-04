@@ -44,11 +44,10 @@ final class ParentMode {
         // the keychain, so a demo launch can never leave the setting behind on
         // a real identity (DemoFixtures parks the real identity, but the flag
         // is namespaced by hash and would outlive the demo otherwise).
-        if DemoFixtures.parentDemoRequested {
-            isOn = true
-        } else {
-            isOn = KeychainStore.load("seal.parentmode.\(ownerHash)") != nil
-        }
+        // 1.3: the "Bigger text" switch is gone (iOS Text Size covers it), so
+        // a flag saved by an older build is ignored. Otherwise someone who had
+        // it on could never turn it off again.
+        isOn = DemoFixtures.parentDemoRequested
     }
 
     static func wipe(ownerHash: String) {

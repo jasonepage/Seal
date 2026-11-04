@@ -105,8 +105,12 @@ final class AppLock {
 
     /// Called before an envelope's secrets are shown. True = proceed.
     /// Fail-closed on a failed prompt; demo mode skips, matching the app lock.
+    ///
+    /// 1.3: the "Face ID to show a secret" switch is gone. One Face ID
+    /// setting is left, and secrets always ask, whatever it says. The old
+    /// keychain flag is still read by nothing and still wiped on sign-out.
     static func confirmSeal(ownerHash: String) async -> Bool {
-        guard isCardLockEnabled(ownerHash: ownerHash), !DemoFixtures.isActive else { return true }
+        guard !DemoFixtures.isActive else { return true }
         return await authenticate(reason: "Confirm it's you to show what is inside")
     }
 
