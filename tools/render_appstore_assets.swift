@@ -3,11 +3,6 @@ import Foundation
 
 let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
 let output = root.appendingPathComponent("docs/appstore", isDirectory: true)
-let iconURL = root.appendingPathComponent("site/harbor-home.png")
-
-guard let harbor = NSImage(contentsOf: iconURL) else {
-    fatalError("Could not read \(iconURL.path)")
-}
 
 func drawText(
     _ text: String,
@@ -31,37 +26,30 @@ func drawText(
 func render(
     size: NSSize,
     filename: String,
-    kicker: String,
-    headline: String,
-    detail: String,
+    artwork: String,
     contentX: CGFloat,
     contentY: CGFloat,
     contentWidth: CGFloat,
-    headlineSize: CGFloat,
-    harborRect: NSRect
+    headlineSize: CGFloat
 ) throws {
+    let artworkURL = output.appendingPathComponent(artwork)
+    guard let base = NSImage(contentsOf: artworkURL) else {
+        fatalError("Could not read \(artworkURL.path)")
+    }
     let canvas = NSImage(size: size)
     canvas.lockFocusFlipped(true)
     let bounds = NSRect(origin: .zero, size: size)
-    NSGradient(colors: [
-        NSColor(calibratedRed: 0.025, green: 0.028, blue: 0.035, alpha: 1),
-        NSColor(calibratedRed: 0.17, green: 0.13, blue: 0.08, alpha: 1)
-    ])?.draw(in: bounds, angle: 0)
+    base.draw(in: bounds, from: .zero, operation: .copy, fraction: 1, respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high])
 
     let gold = NSColor(calibratedRed: 0.90, green: 0.68, blue: 0.28, alpha: 1)
     let ivory = NSColor(calibratedRed: 0.98, green: 0.96, blue: 0.91, alpha: 1)
-    let muted = NSColor(calibratedRed: 0.73, green: 0.70, blue: 0.64, alpha: 1)
 
-    drawText("SEAL", in: NSRect(x: contentX, y: contentY, width: contentWidth, height: 90), font: .boldSystemFont(ofSize: 54), color: ivory, letterSpacing: 9)
-    drawText(kicker, in: NSRect(x: contentX, y: contentY + 130, width: contentWidth, height: 100), font: .boldSystemFont(ofSize: 54), color: gold, letterSpacing: 5)
-    drawText(headline, in: NSRect(x: contentX, y: contentY + 245, width: contentWidth, height: headlineSize * 2.7), font: NSFont(name: "Georgia-Bold", size: headlineSize) ?? .boldSystemFont(ofSize: headlineSize), color: ivory, lineSpacing: 5)
-    drawText(detail, in: NSRect(x: contentX, y: contentY + 245 + headlineSize * 2.45, width: contentWidth, height: 220), font: .systemFont(ofSize: 55, weight: .medium), color: muted, lineSpacing: 12)
+    drawText("SEAL", in: NSRect(x: contentX, y: contentY, width: contentWidth, height: 90), font: .boldSystemFont(ofSize: 52), color: gold, letterSpacing: 10)
+    drawText("Pass down\nsecret letters", in: NSRect(x: contentX, y: contentY + 126, width: contentWidth, height: headlineSize * 2.8), font: NSFont(name: "Georgia-Bold", size: headlineSize) ?? .boldSystemFont(ofSize: headlineSize), color: ivory, lineSpacing: 4)
 
-    let rule = NSBezierPath(roundedRect: NSRect(x: contentX, y: contentY + 245 + headlineSize * 2.45 + 230, width: 210, height: 13), xRadius: 7, yRadius: 7)
+    let rule = NSBezierPath(roundedRect: NSRect(x: contentX, y: contentY + 126 + headlineSize * 2.45 + 52, width: 200, height: 12), xRadius: 6, yRadius: 6)
     gold.setFill()
     rule.fill()
-
-    harbor.draw(in: harborRect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high])
     canvas.unlockFocus()
 
     guard let tiff = canvas.tiffRepresentation,
@@ -79,14 +67,11 @@ func render(
 try render(
     size: NSSize(width: 3840, height: 1646),
     filename: "Seal-header-3840x1646.png",
-    kicker: "LETTERS KEPT UNTIL IT IS TIME",
-    headline: "Leave what matters.\nSeal the rest.",
-    detail: "Letters, photos and passwords for the people you love.",
+    artwork: "Seal-header-art-v2.png",
     contentX: 840,
-    contentY: 250,
-    contentWidth: 1880,
-    headlineSize: 180,
-    harborRect: NSRect(x: 2750, y: 245, width: 1040, height: 1040)
+    contentY: 505,
+    contentWidth: 1740,
+    headlineSize: 188
 )
 
 // Search Results can also carry controls and tight crops on its left edge.
@@ -94,12 +79,9 @@ try render(
 try render(
     size: NSSize(width: 3840, height: 2560),
     filename: "Seal-search-results-3840x2560.png",
-    kicker: "PRIVATE UNTIL IT IS TIME",
-    headline: "A letter that\nknows when to wait.",
-    detail: "End-to-end encrypted. Opened only with the people and keys you chose.",
+    artwork: "Seal-search-art-v2.png",
     contentX: 760,
-    contentY: 1080,
-    contentWidth: 2760,
-    headlineSize: 210,
-    harborRect: NSRect(x: 2320, y: 100, width: 1260, height: 1260)
+    contentY: 1450,
+    contentWidth: 2280,
+    headlineSize: 220
 )
