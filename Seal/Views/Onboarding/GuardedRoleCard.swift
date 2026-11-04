@@ -77,6 +77,16 @@ struct GuardedRoleCard<Details: View>: View {
 
     /// Where things stand, in plain words, for this role.
     private var status: String {
+        switch (numbers.kind, state) {
+        case (.rightAway, .released?):
+            return guarded.isRecipient ? "\(name) sealed this to open right away. Yours is waiting in Details." : "Opens right away for the people it was written to."
+        case (.breakGlass, .active?):
+            return guarded.isCustodian
+                ? "Break glass. If it is ever needed, you and the other key holders can open it together from Details, at once."
+                : "Break glass. It opens when enough key holders tap their keys together."
+        default:
+            break
+        }
         switch state {
         case .none:
             return "Waiting for \(name) to seal."
@@ -284,7 +294,11 @@ struct HandoverDoneView: View {
                             bullet("You cannot open anything with this key, and neither can anyone else holding one. It takes \(numbers.threshold) of \(ownerName)'s \(numbers.custodianCount) key holders, acting together.")
                         }
                         bullet("Keep Seal on this phone, and sign in again if you get a new one. That is the whole job, and it may be years before anyone needs you.")
-                        bullet("If \(ownerName) goes quiet for \(numbers.silenceDays) days, this app tells you. Until then there is nothing to do.")
+                        if numbers.kind == .breakGlass {
+                            bullet("This is a break glass rule. If it is ever needed, you and the other key holders can open it together on any day, at once. \(ownerName) is told after.")
+                        } else {
+                            bullet("If \(ownerName) goes quiet for \(numbers.silenceDays) days, this app tells you. Until then there is nothing to do.")
+                        }
                     }
                     .padding(18)
                     .frame(maxWidth: .infinity, alignment: .leading)

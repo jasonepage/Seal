@@ -64,7 +64,23 @@ export function policyWith(threshold, from = {}) {
     graceDays: from.graceDays ?? 14,
     threshold,
     objectionBehavior: from.objectionBehavior ?? "pause",
+    kind: from.kind ?? "quiet",
   };
+}
+
+/** ReleasePolicy.Kind of a snapshot's policy. Null (an older rule) is quiet. */
+export const kindOf = (s) => s?.policy?.kind ?? "quiet";
+
+/**
+ * ReleasePolicy.Kind.shown: what the page says for a rule's kind (1.3). The
+ * machine is unchanged and still gates every button. A resting break glass
+ * rule reads "overdue" from the day it is sealed and is shown as active; a
+ * right away rule is open for the person it was written to.
+ */
+export function shown(stateName, kind) {
+  if (kind === "breakGlass") return stateName === "overdue" ? "active" : stateName;
+  if (kind === "rightAway") return "released";
+  return stateName;
 }
 const silence = (p) => p.silenceDays * DAY;
 const warning = (p) => p.warningDays * DAY;
@@ -312,6 +328,13 @@ const silenceAnchor = (s) => s.lastHeartbeatAt ?? s.estateCreatedAt;
 export function voidReason(s) {
   const claim = s.claim;
   if (!claim) return "notVoid";
+  // Break glass (1.3, PRODUCT.md section 17): nothing the owner sends voids
+  // its claim, and with no silence it cannot open too early. A key holder's
+  // veto still counts. Exactly ReleaseMachine.voidReason.
+  if ((s.policy.kind ?? "quiet") === "breakGlass") {
+    if (s.policy.objectionBehavior === "veto" && s.objections.some((o) => o.at >= claim.openedAt)) return "vetoed";
+    return "notVoid";
+  }
   if (s.lastHeartbeatAt !== null && s.lastHeartbeatAt >= claim.openedAt) return "heartbeatAfterClaim";
   if (s.cancellations.some((c) => c >= claim.openedAt)) return "cancelledByOwner";
   if (s.policy.objectionBehavior === "veto" && s.objections.some((o) => o.at >= claim.openedAt)) return "vetoed";

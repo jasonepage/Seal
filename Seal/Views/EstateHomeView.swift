@@ -570,6 +570,11 @@ struct EstateHomeView: View {
         let ready = notReady == nil && !DemoFixtures.isActive
         let reason: String = {
             guard let notReady else { return "Only on this phone until you do." }
+            if notReady.estate?.opensRightAway == true {
+                return engines.rules.count > 1
+                    ? "Write an envelope to someone for \(notReady.slot.name) first."
+                    : "Write an envelope to someone first."
+            }
             return engines.rules.count > 1
                 ? "Add a key holder for \(notReady.slot.name) on the Keys tab first."
                 : "Add a key holder on the Keys tab first."
@@ -695,7 +700,7 @@ struct EstateHomeView: View {
                         d.keepEnvelopes
                             ? "\(name) deleted their Seal account and kept these for their family."
                             : "\(name) deleted their Seal account and cancelled these."
-                     } ?? Self.stateLine(state, guarded: g))
+                     } ?? Self.stateLine(state, guarded: g, kind: kindOf(g)))
                     .font(.caption).foregroundStyle(needsYou ? SealTheme.brass : .white.opacity(0.5))
                     .lineLimit(2).fixedSize(horizontal: false, vertical: true)
             }
@@ -879,7 +884,7 @@ struct EstateHomeView: View {
                 isPresented: Binding(get: { pendingKeyHolder != nil }, set: { if !$0 { pendingKeyHolder = nil } }),
                 titleVisibility: .visible
             ) {
-                ForEach(engines.all, id: \.storeHash) { engine in
+                ForEach(engines.all.filter { !($0.estate?.opensRightAway ?? false) }, id: \.storeHash) { engine in
                     Button(engine.slot.name) {
                         if let friend = pendingKeyHolder { engine.addCustodian(friend.identity) }
                         pendingKeyHolder = nil
@@ -1056,7 +1061,7 @@ struct EstateHomeView: View {
         guard let estate else { return false }
         switch step {
         case .envelope: return !estate.envelopes.isEmpty
-        case .keyHolders: return !estate.custodians.isEmpty
+        case .keyHolders: return !estate.custodians.isEmpty || !estate.policy.kind.needsKeyHolders
         case .rule: return estate.isReadyToSeal
         case .seal: return estate.epochPublished
         }
@@ -1084,6 +1089,9 @@ struct EstateHomeView: View {
         case .keyHolders:
             return "People you trust to act together after you are gone. Have a Seal kit? Set up their keys yourself, tonight. Or add someone who is next to you with their phone."
         case .rule:
+            if let estate, estate.policy.kind != .quiet {
+                return "Right now: " + estate.policy.summary(custodianCount: estate.custodians.count) + " Tap to change it."
+            }
             if let estate, !estate.custodians.isEmpty {
                 let p = estate.policy
                 return "Right now: " + (estate.custodians.count == 1
@@ -1109,7 +1117,15 @@ struct EstateHomeView: View {
             // Nothing to seal until there are key holders and a valid rule,
             // and the row above says so. Send them there rather than firing
             // a seal that throws.
-            if estate?.isReadyToSeal == true { runSeal() } else { showGuidedKeyHolder = true }
+            if estate?.isReadyToSeal == true {
+                runSeal()
+            } else if estate?.opensRightAway == true {
+                // A right away rule needs an envelope, never a key holder.
+                pickerMode = .blank
+                showRecipientPicker = true
+            } else {
+                showGuidedKeyHolder = true
+            }
         }
     }
 
@@ -1417,7 +1433,14 @@ struct EstateHomeView: View {
                         : last.formatted(.relative(presentation: .named))
                     // One sentence. The whole rule, with these numbers, is
                     // behind "Watch it happen" and on the Keys tab.
-                    Text("You checked in \(when). Opening Seal is the check-in. After \(policy.silenceDays) quiet days a key holder can start the process, and opening Seal at any point stops it.")
+                    switch policy.kind {
+                    case .quiet:
+                        Text("You checked in \(when). Opening Seal is the check-in. After \(policy.silenceDays) quiet days a key holder can start the process, and opening Seal at any point stops it.")
+                    case .breakGlass:
+                        Text("This is a break glass rule. It opens the moment enough of your key holders tap their keys together, on any day. You are told after.")
+                    case .rightAway:
+                        Text("These open right away for the people you wrote to, with their own keys.")
+                    }
                 }
                 // The explainer was reachable only from a key holder's or a
                 // recipient's card, so the one person who set the whole thing
@@ -1445,18 +1468,24 @@ struct EstateHomeView: View {
                 Label("A key holder has started a claim.", systemImage: "exclamationmark.triangle.fill")
                     .font(.system(.title3, design: .rounded, weight: .semibold))
                     .foregroundStyle(.orange)
-                Text("If that is not what you want, tap the button. It stops everything. You do not need your key for this.")
-                Button {
-                    Task {
-                        do { try await engine.cancelClaim() } catch { sealError = SyncEngine.friendly(error) }
+                if engine.estate?.policy.kind == .breakGlass {
+                    // Break glass (PRODUCT.md section 17): the owner chose a
+                    // rule nothing stops, so there is no button to offer.
+                    Text("This is your break glass rule. It opens as soon as enough key holders tap their keys. Nothing you do stops it, as you chose. If you did not expect this, call them.")
+                } else {
+                    Text("If that is not what you want, tap the button. It stops everything. You do not need your key for this.")
+                    Button {
+                        Task {
+                            do { try await engine.cancelClaim() } catch { sealError = SyncEngine.friendly(error) }
+                        }
+                    } label: {
+                        Text("I am here. Stop it.")
+                            .font(.system(.headline, design: .rounded))
+                            .frame(maxWidth: .infinity).padding(.vertical, 8)
                     }
-                } label: {
-                    Text("I am here. Stop it.")
-                        .font(.system(.headline, design: .rounded))
-                        .frame(maxWidth: .infinity).padding(.vertical, 8)
+                    .buttonStyle(.borderedProminent).tint(.orange)
+                    .parentTapTarget(60)
                 }
-                .buttonStyle(.borderedProminent).tint(.orange)
-                .parentTapTarget(60)
             case .released?:
                 Label("The envelopes have been released.", systemImage: "envelope.open.fill")
                     .font(.system(.title3, design: .rounded, weight: .semibold))
@@ -1644,7 +1673,14 @@ struct EstateHomeView: View {
     /// cannot seal at all.
     private func runSeal() {
         guard !sealing, !DemoFixtures.isActive else { return }
-        guard purchase.isUnlocked else {
+        // Right away rules (message in a bottle) seal for free: the bottle is
+        // the demo and the way in, and the unlock stays on the rules that
+        // need key holders (PRODUCT.md section 17, decided 2026-11-03).
+        let pendingKinds = engines.all
+            .filter { ($0.estate?.hasUnsealedChanges ?? false) || !$0.custodiansWithNewPhones.isEmpty }
+            .map { $0.estate?.policy.kind ?? .quiet }
+        let onlyBottles = !pendingKinds.isEmpty && pendingKinds.allSatisfy { $0 == .rightAway }
+        guard purchase.isUnlocked || onlyBottles else {
             // The launch check may still be in flight on a fast tap. Finish
             // it before deciding, so a paid person never sees the sheet.
             if purchase.isChecking {
@@ -1869,8 +1905,21 @@ struct EstateHomeView: View {
             .padding(.top, 10)
     }
 
-    static func stateLine(_ state: ReleaseState?, guarded: GuardedEstate) -> String {
-        switch state {
+    static func stateLine(_ state: ReleaseState?, guarded: GuardedEstate, kind: ReleasePolicy.Kind = .quiet) -> String {
+        // 1.3 kinds (PRODUCT.md section 17). EstateEngine.shown already
+        // turned a resting break glass rule into .active and a right away
+        // rule into .released.
+        switch (kind, state) {
+        case (.rightAway, .released?):
+            return guarded.isRecipient ? "Opens right away. Yours is waiting." : "Opens right away for the people it was written to."
+        case (.breakGlass, .active?):
+            return guarded.isCustodian
+                ? "Break glass. If it is ever needed, you and the other key holders can open it together, at once."
+                : "Break glass. It opens when enough key holders tap their keys together."
+        default:
+            break
+        }
+        return switch state {
         case .none: "Waiting for the owner to seal."
         case .active?: guarded.isCustodian ? "All quiet. You hold one of the keys. Nothing to do." : "All quiet. Nothing to do."
         case .overdue?: "The owner has been silent past their limit."
@@ -1886,6 +1935,11 @@ struct EstateHomeView: View {
 
     private func stateLine(_ state: ReleaseState?, guarded: GuardedEstate) -> String {
         Self.stateLine(state, guarded: guarded)
+    }
+
+    /// The kind of a rule somebody else sealed, from the owner's own signed rule.
+    private func kindOf(_ g: GuardedEstate) -> ReleasePolicy.Kind {
+        lettersEngine.guardedSnapshots[g.estateID]?.policy.kind ?? .quiet
     }
 
     // MARK: - Furniture

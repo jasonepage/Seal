@@ -22,7 +22,7 @@ import { p256 } from "@noble/curves/nist.js";
 import { fromHex, toHex, fromB64, fromUtf8, sha256, same } from "../../site/open/js/bytes.js";
 import {
   estateAAD, parseBundle, encodeBundle, loadPrivateBundle, hybridOpenAny,
-  unlockSponsored, openTableRaw, parseTableWrap, openContent, hkdf, aesOpen,
+  unlockSponsored, openTableRaw, openTableDirectRaw, opensRightAway, parseTableWrap, openContent, hkdf, aesOpen,
 } from "../../site/open/js/crypto.js";
 import { ml_kem768 } from "../../site/open/vendor/noble-mlkem.js";
 
@@ -139,6 +139,19 @@ async function run(v) {
     check(pt && toHex(pt) === e.content.plaintext, "the envelope content opens with the key from my table");
   }
   check(mineCount === 1, "exactly one table is mine");
+
+  // Right away (PRODUCT.md section 17). Optional, so a set exported before
+  // 1.3 still checks; every export from 1.3 on has it.
+  if (e.rightAwayTable) {
+    const b = e.rightAwayTable;
+    const wrap = parseTableWrap(fromUtf8(fromB64(b.wrapBase64)));
+    check(opensRightAway(wrap), "the right away table says so");
+    const r = await openTableDirectRaw(wrap, e.estateID, u.kem).catch(() => null);
+    check(r && toHex(r.tableKey) === b.tableKey, "right away: my table key, with no Estate Key");
+    check(r && same(r.plain, fromB64(b.tablePlainBase64)), "right away: my table, byte for byte");
+    const released = await openTableRaw(wrap, e.estateID, fromHex(e.estateKey), u.kem).catch(() => null);
+    check(released === null, "right away: never opens as a release table");
+  }
 }
 
 const file = process.argv[2];

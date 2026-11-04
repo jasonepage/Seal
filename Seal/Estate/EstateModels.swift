@@ -343,14 +343,23 @@ struct Estate: Codable, Hashable {
         current.keys.filter { published[$0] != current[$0] }.sorted()
     }
 
+    /// A right away rule (PRODUCT.md section 17) needs no key holders and
+    /// has no epoch: it is ready as soon as it holds an envelope for a real
+    /// person.
     var isReadyToSeal: Bool {
-        !custodians.isEmpty && (try? policy.validate(custodianCount: custodians.count)) != nil
+        if policy.kind == .rightAway { return !addressedEnvelopes.isEmpty }
+        return !custodians.isEmpty && (try? policy.validate(custodianCount: custodians.count)) != nil
     }
 
+    var opensRightAway: Bool { policy.kind == .rightAway }
+
     /// Custodians or threshold changed since the last published epoch, or
-    /// nothing has been published yet.
+    /// nothing has been published yet. Never for a right away rule, which
+    /// has no Estate Key and no shares; for it `epochPublished` only means
+    /// "sealed at least once" (EstateEngine.sealAndPublish).
     var needsNewEpoch: Bool {
-        !epochPublished
+        if policy.kind == .rightAway { return false }
+        return !epochPublished
             || publishedCustodianHashes != custodians.map(\.rootHash)
             || publishedThreshold != policy.threshold
     }

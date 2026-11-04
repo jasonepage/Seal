@@ -64,13 +64,19 @@ enum SurvivalKit {
         } else {
             howMany = "It takes \(policy.threshold) of \(custodianCount) key holders together. Yours is one of them\(others > 0 ? ", and \(others == 1 ? "one other person holds" : "\(others) other people hold") a key too" : "")."
         }
+        // A break glass rule has no quiet time (PRODUCT.md section 17), so the
+        // printed page must not tell anyone to wait for one.
+        let whenTimeComes = policy.kind == .breakGlass
+            ? "Open Seal on your phone. This is a break glass rule: if it is ever needed, any key holder can start a claim on any day, and there is no waiting. Key holders tap their keys on their own phones. \(howMany) Whoever started the claim combines the keys, and the envelopes open at once on the phones of the people they were written for. \(owner) is told, but cannot stop it. You will not see what is in them. That is by design."
+            : "Open Seal on your phone. It will tell you what it knows and what you can do. If \(owner) has not opened Seal for \(policy.silenceDays) days, you may start a claim. \(owner) is then warned every day for \(policy.warningDays) days, and can stop everything by opening the app once. After that comes a quiet period of \(policy.graceDays) days. Then key holders tap their keys on their own phones. \(howMany) Whoever started the claim combines the keys, and the envelopes open on the phones of the people they were written for. You will not see what is in them. That is by design."
+        let remember = policy.kind == .breakGlass
+            ? "First: this key opens nothing on its own. It takes enough key holders tapping together. Second: about once a year Seal will ask you to tap the key on your phone to show you still have it. Please do. It tells \(owner) the key is in good hands."
+            : "First: this key can only open things after a long silence, days of warnings, and enough other key holders tapping too. It cannot be used to read anything on its own. Second: about once a year Seal will ask you to tap the key on your phone to show you still have it. Please do. It tells \(owner) the key is in good hands."
         let sections: [Section] = [
             Section(heading: "What this is", body:
              "\(owner) wrote sealed envelopes for the people they will leave behind: letters, photos, a voice, and the passwords and papers a family needs. The envelopes are locked on \(owner)'s phone and stored in encrypted form. Seal opens none of them early, for anyone, including you. Apple and the people who made Seal cannot open them at all. This key is one of the keys that can open them after \(owner) is gone. Keep it somewhere you will still find it in ten years. It is useless to a thief and precious to the family."),
-            Section(heading: "What to do when the time comes", body:
-             "Open Seal on your phone. It will tell you what it knows and what you can do. If \(owner) has not opened Seal for \(policy.silenceDays) days, you may start a claim. \(owner) is then warned every day for \(policy.warningDays) days, and can stop everything by opening the app once. After that comes a quiet period of \(policy.graceDays) days. Then key holders tap their keys on their own phones. \(howMany) Whoever started the claim combines the keys, and the envelopes open on the phones of the people they were written for. You will not see what is in them. That is by design."),
-            Section(heading: "Two things to remember", body:
-             "First: this key can only open things after a long silence, days of warnings, and enough other key holders tapping too. It cannot be used to read anything on its own. Second: about once a year Seal will ask you to tap the key on your phone to show you still have it. Please do. It tells \(owner) the key is in good hands."),
+            Section(heading: "What to do when the time comes", body: whenTimeComes),
+            Section(heading: "Two things to remember", body: remember),
         ]
         let date = printedOn.formatted(date: .long, time: .omitted)
         return Content(

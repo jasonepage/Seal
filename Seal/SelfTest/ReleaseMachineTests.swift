@@ -298,6 +298,7 @@ enum ReleaseMachineTests {
         t.throwsError("zero warning days") { try p.validate(custodianCount: 1) }
         p.warningDays = 1; p.graceDays = 0
         t.noThrow("zero grace is allowed") { try p.validate(custodianCount: 1) }
+        try kinds(t)
     }
 
     // MARK: the whole thing, fast
@@ -377,5 +378,66 @@ enum ReleaseMachineTests {
         noThreshold.policy.threshold = 0
         noThreshold.authorizations = []
         t.check(!ReleaseMachine.releaseEarned(noThreshold, at: opens.addingTimeInterval(day)), "a rule of zero still needs one tap")
+    }
+
+    /// 1.3 (PRODUCT.md section 17): the short silences, break glass and
+    /// right away. The machine is unchanged; these pin what the rule allows
+    /// and that a quiet rule's bytes are what they were.
+    static func kinds(_ t: SelfTest.Context) throws {
+        var q = ReleasePolicy(threshold: 2)
+        q.silenceDays = 7
+        t.noThrow("7 days is an allowed silence") { try q.validate(custodianCount: 3) }
+        q.silenceDays = 14
+        t.noThrow("14 days is an allowed silence") { try q.validate(custodianCount: 3) }
+        q.silenceDays = 0
+        t.throwsError("a quiet rule cannot have no silence") { try q.validate(custodianCount: 3) }
+
+        let sorted = JSONEncoder()
+        sorted.outputFormatting = [.sortedKeys]
+        let quietBytes = try sorted.encode(ReleasePolicy(threshold: 2))
+        t.check(!String(decoding: quietBytes, as: UTF8.self).contains("kind"), "a quiet rule encodes without a kind")
+        let decodedOld = try JSONDecoder().decode(ReleasePolicy.self, from: quietBytes)
+        t.equal(decodedOld.kind, .quiet, "a rule with no kind reads as quiet")
+
+        let glass = ReleasePolicy(threshold: 2).shaped(as: .breakGlass)
+        t.equal(glass.silenceDays + glass.warningDays + glass.graceDays, 0, "break glass has no silence, warnings or grace")
+        t.noThrow("break glass validates with key holders") { try glass.validate(custodianCount: 3) }
+        var warnedGlass = glass; warnedGlass.warningDays = 2
+        t.throwsError("break glass has no warnings") { try warnedGlass.validate(custodianCount: 3) }
+        var silentGlass = glass; silentGlass.silenceDays = 30
+        t.throwsError("break glass cannot have a silence") { try silentGlass.validate(custodianCount: 3) }
+        let glassBack = try JSONDecoder().decode(ReleasePolicy.self, from: try sorted.encode(glass))
+        t.equal(glassBack, glass, "break glass round trips with its kind")
+
+        // Break glass in the machine (instant, decided 2026-11-03): at rest it
+        // is shown as all quiet; a claim is open for taps at once; two taps
+        // authorize it the same minute; nothing the owner sends voids it.
+        let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+        var s = ReleaseSnapshot(policy: glass, estateCreatedAt: t0, lastHeartbeatAt: t0)
+        t.equal(ReleasePolicy.Kind.breakGlass.shown(ReleaseMachine.state(s, now: t0.addingTimeInterval(3600)), owner: false), .active,
+                "a resting break glass rule is shown as all quiet")
+        t.check(ReleaseMachine.custodianCanClaim(s, now: t0.addingTimeInterval(60)), "a key holder can start break glass at once")
+        let opened = t0.addingTimeInterval(3600)
+        s.claim = .init(id: "c", epoch: 1, claimantHash: "k1", openedAt: opened)
+        t.equal(ReleaseMachine.state(s, now: opened.addingTimeInterval(1)), .claimOpen, "a break glass claim is open for taps at once")
+        s.authorizations = [.init(custodianHash: "k1", at: opened.addingTimeInterval(30)),
+                            .init(custodianHash: "k2", at: opened.addingTimeInterval(90))]
+        t.equal(ReleaseMachine.state(s, now: opened.addingTimeInterval(120)), .authorized, "two taps authorize it the same minute")
+        t.check(ReleaseMachine.releaseEarned(s, at: opened.addingTimeInterval(120)), "a break glass release is earned the same minute")
+        var oneTap = s; oneTap.authorizations = [s.authorizations[0]]
+        t.check(!ReleaseMachine.releaseEarned(oneTap, at: opened.addingTimeInterval(120)), "one tap alone does not open break glass")
+        var ownerActed = s
+        ownerActed.lastHeartbeatAt = opened.addingTimeInterval(60)
+        ownerActed.cancellations = [opened.addingTimeInterval(60)]
+        t.equal(ReleaseMachine.voidReason(ownerActed), .notVoid, "neither a check-in nor a cancellation voids break glass")
+        t.check(!ReleaseMachine.ownerCanCancel(ownerActed, now: opened.addingTimeInterval(61)), "the owner is never offered a cancel on break glass")
+        // The same check-in still stops a quiet rule's claim.
+        var quietClaim = ownerActed; quietClaim.policy = ReleasePolicy(threshold: 2)
+        t.equal(ReleaseMachine.voidReason(quietClaim), .heartbeatAfterClaim, "a check-in still stops a quiet rule")
+
+        let bottle = ReleasePolicy(threshold: 1).shaped(as: .rightAway)
+        t.noThrow("right away needs no key holders") { try bottle.validate(custodianCount: 0) }
+        t.equal(ReleasePolicy.Kind.rightAway.shown(.active, owner: false), .released, "a right away rule is open for its recipient")
+        t.equal(ReleasePolicy.Kind.rightAway.shown(.overdue, owner: true), .active, "a right away rule is simply sealed for its owner")
     }
 }

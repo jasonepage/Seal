@@ -308,8 +308,9 @@ struct AddKeyHolderFlow: View {
             body("After you have gone quiet for a long time and every warning has run, \(friend.displayName)'s key is one of the keys that opens your envelopes. Until then it does nothing. You can change your mind on the Keys tab any time.")
         } actions: {
             Button("Yes, \(friend.displayName) holds a key") {
-                estateEngine.addCustodian(friend)
-                move(.handover(friend))
+                // A right away rule takes no key holders (PRODUCT.md section 17);
+                // never go on to a handover that recorded nothing.
+                if estateEngine.addCustodian(friend) { move(.handover(friend)) } else { move(.who) }
             }
             .buttonStyle(SealPrimaryButtonStyle())
             .parentTapTarget(60)

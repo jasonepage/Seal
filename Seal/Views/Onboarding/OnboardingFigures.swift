@@ -45,6 +45,9 @@ struct OnboardingNumbers: Hashable {
     /// rule when there is one; the policy default otherwise. Never typed
     /// into copy.
     var custodyConfirmMonths: Int = ReleasePolicy.defaultCustodyConfirmMonths
+    /// The rule's kind (1.3, PRODUCT.md section 17), so copy that speaks of
+    /// "quiet for N days" is not shown for a rule that has no quiet time.
+    var kind: ReleasePolicy.Kind = .quiet
 
     static let defaults = OnboardingNumbers()
 
@@ -68,6 +71,7 @@ struct OnboardingNumbers: Hashable {
                   graceDays: policy.graceDays, threshold: policy.threshold,
                   custodianCount: custodianCount, exact: true,
                   custodyConfirmMonths: policy.custodyConfirmMonths)
+        kind = policy.kind
     }
 
     /// An estate this phone guards. The snapshot carries the policy the
@@ -85,6 +89,7 @@ struct OnboardingNumbers: Hashable {
                   custodianCount: count,
                   exact: epoch != nil,
                   custodyConfirmMonths: policy?.custodyConfirmMonths ?? ReleasePolicy.defaultCustodyConfirmMonths)
+        kind = policy?.kind ?? .quiet
     }
 
     var totalDays: Int { silenceDays + warningDays + graceDays }

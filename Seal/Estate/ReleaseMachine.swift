@@ -129,6 +129,19 @@ enum ReleaseMachine {
 
     static func voidReason(_ s: ReleaseSnapshot) -> ClaimVoidReason {
         guard let claim = s.claim else { return .notVoid }
+        // BREAK GLASS (1.3, PRODUCT.md section 17). The owner chose a rule
+        // with no way to say no: enough keys tapped together open it on any
+        // day. So neither a check-in nor a cancellation voids its claim, and
+        // with no silence a claim can never open too early. A key holder's
+        // objection still counts, because that is another key holder, not
+        // the owner. Every other rule is exactly as before.
+        if s.policy.kind == .breakGlass {
+            if s.policy.objectionBehavior == .veto,
+               let veto = s.objections.first(where: { $0.at >= claim.openedAt }) {
+                return .vetoed(by: veto.custodianHash)
+            }
+            return .notVoid
+        }
         if let hb = s.lastHeartbeatAt, hb >= claim.openedAt { return .heartbeatAfterClaim }
         if s.cancellations.contains(where: { $0 >= claim.openedAt }) { return .cancelledByOwner }
         if s.policy.objectionBehavior == .veto,
@@ -279,8 +292,10 @@ enum ReleaseMachine {
 
     // MARK: - What each party may do now
 
+    /// Never for break glass: nothing the owner sends stops it, so the
+    /// phone must not post a cancellation that reads as if it did.
     static func ownerCanCancel(_ s: ReleaseSnapshot, now: Date) -> Bool {
-        state(s, now: now).claimIsLive
+        s.policy.kind != .breakGlass && state(s, now: now).claimIsLive
     }
 
     static func custodianCanClaim(_ s: ReleaseSnapshot, now: Date) -> Bool {

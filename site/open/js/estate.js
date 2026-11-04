@@ -22,10 +22,10 @@
 
 import { utf8, fromUtf8, sha256, same } from "./bytes.js";
 import { CloudKit, bytesField, stringField, modifiedAt } from "./cloudkit.js";
-import { hybridOpenAny, openTableAsRecipient, parseTableWrap, openContent } from "./crypto.js";
+import { hybridOpenAny, openTableAsRecipient, openTableDirect, opensRightAway, parseTableWrap, openContent } from "./crypto.js";
 import { parseEvent, admitted, newest } from "./estatelog.js";
 import { identityFromRecord } from "./identity.js";
-import { pageTimes, snapshot, state, timeline, policyWith, openingAllowed } from "./release.js";
+import { pageTimes, snapshot, state, timeline, policyWith, openingAllowed, kindOf, shown } from "./release.js";
 import { estateInvite, keyTable, envelopePayload, decodeJSONBytes, tryDecode, obj, arr, hybridEnvelopeStrict } from "./schema.js";
 
 /** Swift's Date.distantPast, in seconds since 1970. The phone's estateCreatedAt for a guarded estate. */
@@ -202,7 +202,9 @@ export async function judgeEstate(ck, invite, now) {
   const policy = policyWith(epoch ? epoch.threshold : 1);
   const snap = await snapshot(events, ownerHash, policy, DISTANT_PAST, times);
   out.snapshot = snap;
-  out.state = state(snap, now);
+  out.kind = kindOf(snap);
+  out.machineState = state(snap, now);
+  out.state = shown(out.machineState, out.kind);
   out.timeline = timeline(snap, now);
   return out;
 }
@@ -215,14 +217,22 @@ export async function judgeEstate(ck, invite, now) {
 export async function openEstate(ck, judged, kems, now) {
   const { estateID, ownerHash, snapshot: s, events } = judged;
   if (!judged.openingAllowed) throw new Error("These envelopes were cancelled when their writer deleted their Seal account. They can never be opened.");
-  if (!s || s.releasedAt === null || s.releasedAt > now || !s.releaseEventID) throw new Error("These envelopes are still sealed.");
-  const released = events.find((e) => e.id === s.releaseEventID && e.kind === "released")?.body;
-  if (!released) throw new Error("These envelopes are still sealed.");
-  // The key against the owner's own signed commitment, before a single table is tried.
-  const keyHash = await sha256(released.estateKey);
-  const matches = events.some((e) => e.kind === "epochPublished" && e.actorHash === ownerHash && e.body
-    && e.body.epoch === released.epoch && same(e.body.estateKeyCommitment, keyHash));
-  if (!matches) throw new Error("The published key does not match what the writer sealed. Nothing was opened.");
+  // A right away rule (PRODUCT.md section 17) opens with no release, but only
+  // when the owner's own signed rule says so AND the table is a direct one.
+  // A direct table under a quiet rule is never opened, as on the phone.
+  const rightAway = !!s && kindOf(s) === "rightAway";
+  let releasedKey = null;
+  if (!rightAway) {
+    if (!s || s.releasedAt === null || s.releasedAt > now || !s.releaseEventID) throw new Error("These envelopes are still sealed.");
+    const released = events.find((e) => e.id === s.releaseEventID && e.kind === "released")?.body;
+    if (!released) throw new Error("These envelopes are still sealed.");
+    // The key against the owner's own signed commitment, before a single table is tried.
+    const keyHash = await sha256(released.estateKey);
+    const matches = events.some((e) => e.kind === "epochPublished" && e.actorHash === ownerHash && e.body
+      && e.body.epoch === released.epoch && same(e.body.estateKeyCommitment, keyHash));
+    if (!matches) throw new Error("The published key does not match what the writer sealed. Nothing was opened.");
+    releasedKey = released.estateKey;
+  }
 
   const opened = [];
   for (const tableID of judged.vault?.tableIDs ?? []) {
@@ -231,9 +241,15 @@ export async function openEstate(ck, judged, kems, now) {
     if (!bytes) continue;
     let wrap;
     try { wrap = parseTableWrap(fromUtf8(bytes)); } catch { continue; }
+    const direct = opensRightAway(wrap);
+    if (direct !== rightAway) continue;
     let table = null;
     for (const kem of kems) {
-      try { table = tryDecode(keyTable, await openTableAsRecipient(wrap, estateID, released.estateKey, kem)); } catch { /* not mine */ }
+      try {
+        table = tryDecode(keyTable, direct
+          ? await openTableDirect(wrap, estateID, kem)
+          : await openTableAsRecipient(wrap, estateID, releasedKey, kem));
+      } catch { /* not mine */ }
       if (table) break;
     }
     if (!table) continue;

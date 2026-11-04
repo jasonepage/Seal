@@ -191,11 +191,13 @@ struct PersonView: View {
             } else {
                 Text("A key holder keeps one of the keys that can open your envelopes after you are gone. Pick people who are likely to still be reachable in ten years.")
                     .font(.callout).foregroundStyle(.white.opacity(0.7)).fixedSize(horizontal: false, vertical: true)
-                Button { estateEngine.addCustodian(person.identity) } label: {
-                    Text("Make \(person.identity.displayName) a key holder").frame(maxWidth: .infinity)
+                if !(estateEngine.estate?.opensRightAway ?? false) {
+                    Button { estateEngine.addCustodian(person.identity) } label: {
+                        Text("Make \(person.identity.displayName) a key holder").frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent).tint(SealTheme.brass)
+                    .parentTapTarget()
                 }
-                .buttonStyle(.borderedProminent).tint(SealTheme.brass)
-                .parentTapTarget()
             }
         }
         .padding(16)

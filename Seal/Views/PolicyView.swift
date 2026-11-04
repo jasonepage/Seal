@@ -19,6 +19,11 @@ struct PolicyView: View {
     @State private var problem: String?
 
     private var custodianCount: Int { max(estateEngine.estate?.custodians.count ?? 0, 1) }
+    /// The kind is chosen once, before the first seal (PRODUCT.md section 17).
+    private var kindLocked: Bool { estateEngine.sealedKind != nil }
+    private var kindBinding: Binding<ReleasePolicy.Kind> {
+        Binding(get: { policy.kind }, set: { policy = policy.shaped(as: $0) })
+    }
 
     /// Under the "how many must agree" stepper. At a rule of one it says
     /// plainly what one key holder could do (audit H1).
@@ -44,47 +49,65 @@ struct PolicyView: View {
                             .foregroundStyle(SealTheme.brass)
                             .fixedSize(horizontal: false, vertical: true)
 
-                        block("How long you can go quiet",
-                              "If you do not open Seal for this long, your key holders may start the process. Opening the app once resets it.") {
-                            Picker("Silence", selection: $policy.silenceDays) {
-                                ForEach(ReleasePolicy.allowedSilenceDays, id: \.self) { Text("\($0) days").tag($0) }
+                        block("When it opens",
+                              policy.kind.explanation + (kindLocked ? " This rule is sealed, so this is fixed. Make a new rule for another kind." : "")) {
+                            Picker("When it opens", selection: kindBinding) {
+                                ForEach(ReleasePolicy.Kind.allCases, id: \.self) { Text($0.label).tag($0) }
                             }
                             .pickerStyle(.segmented)
+                            .disabled(kindLocked)
                         }
 
-                        block("How many key holders must agree", thresholdFooter) {
-                            Stepper("\(policy.threshold) of \(estateEngine.estate?.custodians.count ?? 0)", value: $policy.threshold, in: 1...custodianCount)
-                                .foregroundStyle(.white)
-                        }
-
-                        block("How long you are warned",
-                              "After a claim starts you are warned every day for this long, on every channel Seal has.") {
-                            Stepper("\(policy.warningDays) days", value: $policy.warningDays, in: 1...90).foregroundStyle(.white)
-                        }
-
-                        block("A quiet period after the warnings",
-                              "Nothing can be tapped until this has also passed.") {
-                            Stepper("\(policy.graceDays) days", value: $policy.graceDays, in: 0...90).foregroundStyle(.white)
-                        }
-
-                        block("If a key holder objects",
-                              policy.objectionBehavior == .pause
-                                ? "The countdown stops until they withdraw the objection. Nothing else changes."
-                                : "The claim is dead. A new one has to be started from the beginning.") {
-                            Picker("Objection", selection: $policy.objectionBehavior) {
-                                ForEach(ReleasePolicy.ObjectionBehavior.allCases, id: \.self) { Text($0.label).tag($0) }
+                        if policy.kind == .quiet {
+                            block("How many days you can go quiet",
+                                  "If you do not open Seal for this long, your key holders may start the process. Opening the app once resets it."
+                                  + (policy.silenceDays < 30 ? " " + ReleasePolicy.shortSilenceCaution : "")) {
+                                Picker("Silence", selection: $policy.silenceDays) {
+                                    ForEach(ReleasePolicy.allowedSilenceDays, id: \.self) { Text("\($0)").tag($0) }
+                                }
+                                .pickerStyle(.segmented)
                             }
-                            .pickerStyle(.segmented)
                         }
 
-                        block("How often key holders confirm their key",
-                              "Each key holder's phone asks them to tap their key this often, to show they still have it. It is a receipt, not a vote: it can never open anything.") {
-                            Picker("Confirm", selection: $policy.custodyConfirmMonths) {
-                                ForEach(ReleasePolicy.allowedCustodyConfirmMonths, id: \.self) {
-                                    Text($0 == 12 ? "Every year" : ($0 == 24 ? "Every 2 years" : "Every \($0) months")).tag($0)
+                        if policy.kind != .rightAway {
+                            block("How many key holders must agree", thresholdFooter) {
+                                Stepper("\(policy.threshold) of \(estateEngine.estate?.custodians.count ?? 0)", value: $policy.threshold, in: 1...custodianCount)
+                                    .foregroundStyle(.white)
+                            }
+
+                            // Break glass has no clock at all: no warnings, no
+                            // grace, nothing for an objection to pause.
+                            if policy.kind == .quiet {
+                                block("How long you are warned",
+                                      "After a claim starts you are warned every day for this long, on every channel Seal has.") {
+                                    Stepper("\(policy.warningDays) days", value: $policy.warningDays, in: 1...90).foregroundStyle(.white)
+                                }
+
+                                block("A quiet period after the warnings",
+                                      "Nothing can be tapped until this has also passed.") {
+                                    Stepper("\(policy.graceDays) days", value: $policy.graceDays, in: 0...90).foregroundStyle(.white)
+                                }
+
+                                block("If a key holder objects",
+                                      policy.objectionBehavior == .pause
+                                        ? "The countdown stops until they withdraw the objection. Nothing else changes."
+                                        : "The claim is dead. A new one has to be started from the beginning.") {
+                                    Picker("Objection", selection: $policy.objectionBehavior) {
+                                        ForEach(ReleasePolicy.ObjectionBehavior.allCases, id: \.self) { Text($0.label).tag($0) }
+                                    }
+                                    .pickerStyle(.segmented)
                                 }
                             }
-                            .pickerStyle(.segmented)
+
+                            block("How often key holders confirm their key",
+                                  "Each key holder's phone asks them to tap their key this often, to show they still have it. It is a receipt, not a vote: it can never open anything.") {
+                                Picker("Confirm", selection: $policy.custodyConfirmMonths) {
+                                    ForEach(ReleasePolicy.allowedCustodyConfirmMonths, id: \.self) {
+                                        Text($0 == 12 ? "Every year" : ($0 == 24 ? "Every 2 years" : "Every \($0) months")).tag($0)
+                                    }
+                                }
+                                .pickerStyle(.segmented)
+                            }
                         }
 
                         if let problem { Text(problem).font(.callout).foregroundStyle(.orange) }
@@ -111,6 +134,7 @@ struct PolicyView: View {
                 }
             }
             .onAppear { policy = estateEngine.estate?.policy ?? ReleasePolicy(threshold: 1) }
+            .onChange(of: policy.kind) { _, _ in problem = nil }
         }
         .preferredColorScheme(.dark)
     }

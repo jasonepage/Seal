@@ -102,6 +102,15 @@ struct RecipientTableWrap: Codable, Hashable, Identifiable {
     let epoch: UInt64
     /// The Key Table, encrypted under the Key Table Key.
     let ciphertext: Data
+    /// RIGHT AWAY ONLY (PRODUCT.md section 17, 1.3). The Key Table Key
+    /// wrapped straight to the recipient's devices, no Estate Key in
+    /// between, so the table opens the moment it is published. A right
+    /// away table has this and an empty `releaseWraps`; every other table
+    /// has nil here, which encodes as no key at all, so its bytes are what
+    /// they always were. A table never has both.
+    var directWraps: [HybridWrap.Envelope]? = nil
+
+    var opensRightAway: Bool { !(directWraps ?? []).isEmpty }
 }
 
 // MARK: - Epoch key material
@@ -155,6 +164,7 @@ enum EstateKeyHierarchy {
     private static let purposeTableKeyOwner = "tablekey.owner"
     private static let purposeTableKeyInner = "tablekey.inner"
     private static let purposeTableKeyRelease = "tablekey.release"
+    private static let purposeTableKeyDirect = "tablekey.direct"
 
     // MARK: Epoch
 
@@ -299,6 +309,65 @@ enum EstateKeyHierarchy {
                                      epoch: newEpoch, estateKey: newEstateKey, recipientBundles: recipientBundles)
         return RecipientTableWrap(tableID: wrap.tableID, ownerWraps: wrap.ownerWraps,
                                   releaseWraps: wraps, epoch: newEpoch, ciphertext: wrap.ciphertext)
+    }
+
+    /// A right away table (PRODUCT.md section 17): the same table and the
+    /// same owner wraps, and the Table Key wrapped straight to the
+    /// recipient's devices instead of under the Estate Key. Epoch 0 in every
+    /// AAD, because nothing here changes with an epoch.
+    static func wrapTableDirect(_ table: KeyTable,
+                                tableID: String,
+                                tableKey: Data,
+                                estateID: String,
+                                ownerBundles: [Data],
+                                recipientBundles: [Data]) throws -> RecipientTableWrap {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let plaintext = try encoder.encode(table)
+        let ciphertext = try EstateCrypto.seal(
+            plaintext, key: tableKey,
+            aad: EstateCrypto.aad(estateID: estateID, epoch: 0, purpose: "\(purposeTable).\(tableID)"))
+        guard let ownerWraps = try? HybridWrap.wrapToAll(
+            tableKey, to: ownerBundles,
+            aad: EstateCrypto.aad(estateID: estateID, epoch: 0, purpose: "\(purposeTableKeyOwner).\(tableID)"))
+        else { throw EstateKeyError.noOwnerDevices }
+        let direct = try directWraps(tableID: tableID, tableKey: tableKey, estateID: estateID, recipientBundles: recipientBundles)
+        return RecipientTableWrap(tableID: tableID, ownerWraps: ownerWraps, releaseWraps: [],
+                                  epoch: 0, ciphertext: ciphertext, directWraps: direct)
+    }
+
+    /// The part of a right away table that changes when the recipient adds
+    /// a device. Never empty: wrapping to nobody would lock them out.
+    static func directWraps(tableID: String, tableKey: Data, estateID: String,
+                            recipientBundles: [Data]) throws -> [HybridWrap.Envelope] {
+        guard let wraps = try? HybridWrap.wrapToAll(
+            tableKey, to: recipientBundles,
+            aad: EstateCrypto.aad(estateID: estateID, epoch: 0, purpose: "\(purposeTableKeyDirect).\(tableID)")),
+              !wraps.isEmpty
+        else { throw EstateKeyError.noCustodianDevices("recipient") }
+        return wraps
+    }
+
+    /// A right away table for the recipient's new device: only the direct
+    /// wraps are made again; the table and the owner wraps stay exactly as
+    /// published.
+    static func rewrapDirect(_ wrap: RecipientTableWrap, tableKey: Data, estateID: String,
+                             recipientBundles: [Data]) throws -> RecipientTableWrap {
+        let direct = try directWraps(tableID: wrap.tableID, tableKey: tableKey, estateID: estateID, recipientBundles: recipientBundles)
+        return RecipientTableWrap(tableID: wrap.tableID, ownerWraps: wrap.ownerWraps, releaseWraps: [],
+                                  epoch: 0, ciphertext: wrap.ciphertext, directWraps: direct)
+    }
+
+    /// A recipient opens a right away table with their own key alone.
+    /// Throws `tableNotForMe` on any table that is not right away or not
+    /// theirs, which is the normal case while trial-opening.
+    static func openTableKeyDirect(_ wrap: RecipientTableWrap, estateID: String, mine: KEMPrivateBundle) throws -> Data {
+        guard let direct = wrap.directWraps, !direct.isEmpty, wrap.releaseWraps.isEmpty,
+              let key = try? HybridWrap.openAny(
+                direct, with: mine,
+                aad: EstateCrypto.aad(estateID: estateID, epoch: 0, purpose: "\(purposeTableKeyDirect).\(wrap.tableID)"))
+        else { throw EstateKeyError.tableNotForMe }
+        return key
     }
 
     static func openTableKeyAsOwner(_ wrap: RecipientTableWrap, estateID: String, mine: KEMPrivateBundle) throws -> Data {

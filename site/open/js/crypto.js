@@ -216,6 +216,25 @@ export async function openTableAsRecipient(wrap, estateID, estateKey, mine) {
   return JSON.parse(fromUtf8((await openTableRaw(wrap, estateID, estateKey, mine)).plain));
 }
 
+/** True for a right away table (PRODUCT.md section 17): direct wraps and no release wraps. */
+export const opensRightAway = (wrap) => Array.isArray(wrap.directWraps) && wrap.directWraps.length > 0 && wrap.releaseWraps.length === 0;
+
+/**
+ * EstateKeyHierarchy.openTableKeyDirect, then openTable: a right away
+ * table opens with the recipient's own key and nothing else. Epoch 0 in
+ * every AAD. Throws when it is not right away or not mine.
+ */
+export async function openTableDirectRaw(wrap, estateID, mine) {
+  if (!opensRightAway(wrap)) throw new Error("not a right away table");
+  const tableKey = await hybridOpenAny(wrap.directWraps, mine, estateAAD(estateID, 0, `tablekey.direct.${wrap.tableID}`));
+  const plain = await aesOpen(tableKey, fromB64(wrap.ciphertext), estateAAD(estateID, 0, `table.${wrap.tableID}`));
+  return { tableKey, plain };
+}
+
+export async function openTableDirect(wrap, estateID, mine) {
+  return JSON.parse(fromUtf8((await openTableDirectRaw(wrap, estateID, mine)).plain));
+}
+
 /**
  * A RecipientTableWrap from its JSON text. The epoch is a JSON number that
  * may in principle exceed 2^53, so it is read from the text itself and

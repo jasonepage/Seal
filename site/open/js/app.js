@@ -343,6 +343,13 @@ async function refresh() {
 function stateLine(j, now) {
   if (j.problem === "owner") return "The writer's record could not be checked, so nothing here is opened.";
   if (!j.openingAllowed) return "The writer cancelled these envelopes when they deleted their Seal account. They can never be opened.";
+  // 1.3 kinds (PRODUCT.md section 17); j.state is already ReleasePolicy.Kind.shown.
+  if (j.kind === "rightAway" && j.state === "released") return "Sealed to open right away, for the person it was written to.";
+  if (j.kind === "breakGlass" && j.state === "active") {
+    return j.roles?.has("custodian")
+      ? "Break glass. If it is ever needed, you and the other key holders can open it together, at once."
+      : "Break glass. It opens when enough key holders tap their keys together.";
+  }
   switch (j.state) {
     case "released": return "Released.";
     case "warning":
@@ -375,6 +382,7 @@ function holderActions(j, now) {
 
 const ASK = {
   claim: { line: "This starts the release. The writer is warned every day for weeks, and one check-in from them stops it. Only do this if you believe they are gone.", field: "Why are you starting it? (everyone in the record can read this)", go: "Start the claim" },
+  claimGlass: { line: "This starts a break glass release. There is no waiting: it opens the moment enough key holders tap their keys, and the writer cannot stop it. Only do this if it is really needed.", field: "Why are you starting it? (everyone in the record can read this)", go: "Start the claim" },
   object: { line: "This puts the release on hold while your objection stands.", field: "A note (everyone in the record can read this)", go: "Object" },
   withdraw: { line: "This takes back your objection. The countdown goes on.", go: "Withdraw it" },
   tap: { line: "Your key, tapped here, is one of the keys that opens the envelopes. You will tap it once more to sign.", go: "Tap my key" },
@@ -387,7 +395,7 @@ function actionButton(j, action, label, primary = false) {
 }
 
 function askFirst(j, action) {
-  const a = ASK[action];
+  const a = action === "claim" && j.kind === "breakGlass" ? ASK.claimGlass : ASK[action];
   const input = a.field ? h("textarea", { rows: 3, maxlength: 500, "aria-label": a.field }) : null;
   show(
     h("h2", {}, `From ${j.ownerName || "someone"}`),
@@ -527,10 +535,14 @@ async function envelopes(ck, me, kems, j, now) {
   working("Opening your envelopes…");
   const opened = await openEstate(ck, j, kems, now);
   if (!opened.length) {
-    problem("The release is real, but no envelope here opens with your key. If you were given a new key, the writer may need to seal again.");
+    problem(j.kind === "rightAway"
+      ? "No envelope here opens with your key. If you were given a new key, the writer may need to seal again."
+      : "The release is real, but no envelope here opens with your key. If you were given a new key, the writer may need to seal again.");
     return;
   }
-  const nodes = [h("p", { class: "lede" }, `From ${j.ownerName || "someone"}, released ${dateLine(j.snapshot.releasedAt)}.`)];
+  const nodes = [h("p", { class: "lede" }, j.kind === "rightAway"
+    ? `From ${j.ownerName || "someone"}, sealed to open right away.`
+    : `From ${j.ownerName || "someone"}, released ${dateLine(j.snapshot.releasedAt)}.`)];
   for (const { entry, payload } of opened) {
     const held = payload.openNoEarlierThanEpoch !== null && now < payload.openNoEarlierThanEpoch;
     const parts = [h("h2", {}, payload.title || "An envelope")];

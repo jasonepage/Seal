@@ -858,7 +858,13 @@ struct EnvelopeEditorView: View {
         let several = (engines?.rules.count ?? 1) > 1
         let line: String = {
             guard let estate else { return "No rule yet." }
-            if holders.isEmpty {
+            if estate.policy.kind == .rightAway {
+                return estate.policy.summary(custodianCount: 0) + " " + ReleasePolicy.Kind.rightAway.editorLine
+            }
+            if holders.isEmpty, estate.policy.kind == .breakGlass {
+                return "Break glass. Nobody holds a key for this rule yet."
+            }
+            if holders.isEmpty, estate.policy.kind == .quiet {
                 return "After \(estate.policy.silenceDays) days of silence, \(estate.policy.warningDays) days of warnings and \(estate.policy.graceDays) days of grace. Nobody holds a key for this rule yet."
             }
             return estate.policy.summary(custodianCount: holders.count) + " Keys: " + holders.map(\.displayName).joined(separator: ", ") + "."

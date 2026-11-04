@@ -184,7 +184,7 @@ struct RuleSheet: View {
             }
 
             if let estate {
-                Text(holders.isEmpty
+                Text(holders.isEmpty && estate.policy.kind == .quiet
                      ? "After \(estate.policy.silenceDays) days of silence, \(estate.policy.warningDays) days of warnings and \(estate.policy.graceDays) days of grace. No key holders yet."
                      : estate.policy.summary(custodianCount: holders.count))
                     .font(.callout).foregroundStyle(.white.opacity(0.8))
@@ -241,13 +241,19 @@ struct RuleSheet: View {
     /// the printed page) is on their page under Keys.
     private func holderToggles(_ engine: EstateEngine) -> some View {
         let holders = Set((engine.estate?.custodians ?? []).map(\.rootHash))
+        // A right away rule has no key holders (PRODUCT.md section 17).
+        let rightAway = engine.estate?.opensRightAway ?? false
         return VStack(alignment: .leading, spacing: 8) {
-            if candidates.isEmpty {
+            if rightAway {
+                Text("This rule opens right away for the people you wrote to, so it has no key holders.")
+                    .font(.callout).foregroundStyle(.white.opacity(0.6))
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if candidates.isEmpty {
                 Text("You have not added anybody in person yet. Open People, meet them, and come back here.")
                     .font(.callout).foregroundStyle(.white.opacity(0.6))
                     .fixedSize(horizontal: false, vertical: true)
             }
-            ForEach(candidates) { friend in
+            ForEach(rightAway ? [] : candidates) { friend in
                 let hash = friend.identity.credentialIDHash
                 let on = holders.contains(hash)
                 Button {

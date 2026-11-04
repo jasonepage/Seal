@@ -7,6 +7,14 @@ Dates are the day the work landed in the repository. Anything marked
 
 ### Added
 
+- A rule now says when it opens (PRODUCT.md section 17): **When I go quiet**
+  (as before, now with 7 and 14 day silences for people who need a short
+  fuse), **Break glass** (instant: any M key holders together, on any day, open it
+  the moment they tap; the owner is told and cannot stop it), or **Right away** (a message
+  in a bottle: opens for its recipient the moment it is sealed, on the phone
+  and at sealmessenger.com/open, with no key holders). Right away rules seal
+  for free. Not compiled yet. (`ReleasePolicy.Kind`, `EstateKeys.wrapTableDirect`,
+  `EstateEngine.sealAndPublish`, `PolicyView`, `site/open/js`)
 - Harbor, an old and patient seal drawn entirely in SwiftUI. Harbor breathes,
   blinks, listens, protects a sealed envelope and can release one carefully.
   Reduce Motion always gets a complete still pose, and each animation settles

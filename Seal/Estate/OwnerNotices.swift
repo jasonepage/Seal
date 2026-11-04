@@ -167,7 +167,10 @@ enum OwnerNotices {
     /// check-in itself.
     static func schedule(engine: EstateEngine, ownerHash: String) async {
         guard !DemoFixtures.isActive else { return }
-        guard let estate = engine.estate, estate.epochPublished,
+        // Only a quiet rule has a silence to remind anyone about. Break glass
+        // has none, and a right away rule never releases (PRODUCT.md
+        // section 17); their check-in lines would be false.
+        guard let estate = engine.estate, estate.epochPublished, estate.policy.kind == .quiet,
               let snapshot = engine.ownerSnapshot else { return }
 
         let anchor = snapshot.silenceAnchor
@@ -302,6 +305,21 @@ enum OwnerNotices {
         let now = engine.now
         let tapsFrom = ReleaseMachine.timeline(snapshot, now: now)?.claimOpensAt
         let base = "\(checkInIdentifierPrefix)claim.\(estate.id).\(claim.id)"
+        // Break glass (PRODUCT.md section 17): there is nothing to stop and no
+        // countdown, so one plain line and no daily ones.
+        if snapshot.policy.kind == .breakGlass {
+            let line = "A key holder started your break glass rule. It opens as soon as enough of them tap their keys."
+            let record = ClaimRecord(claimID: claim.id, identifiers: ["\(base).now"])
+            if let data = try? JSONEncoder().encode(record) { KeychainStore.save(data, for: claimKey(ownerHash)) }
+            let settings = await center.notificationSettings()
+            guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else { return }
+            let content = UNMutableNotificationContent()
+            content.title = "Seal"
+            content.body = line
+            content.sound = .default
+            try? await center.add(UNNotificationRequest(identifier: "\(base).now", content: content, trigger: nil))
+            return
+        }
         var items: [(id: String, body: String, fireIn: TimeInterval?)] = [("\(base).now", claimStartedLine, nil)]
         if let tapsFrom {
             for day in 1...claimDailyCap {

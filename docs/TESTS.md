@@ -8,7 +8,7 @@ is no test host for a passkey. They run on every DEBUG launch. A
 failure blacks the screen on purpose and names the suite. The debug
 Time Travel screen runs them again on demand.
 
-**99 tests in 21 suites.**
+**100 tests in 21 suites.**
 
 ## AttachedFileTests
 
@@ -46,6 +46,7 @@ Time Travel screen runs them again on demand.
 - `estatekeys.tables`
 - `estatekeys.rotation`
 - `estatekeys.newDevice`
+- `estatekeys.rightAway`
 
 ## EstateLogTests
 

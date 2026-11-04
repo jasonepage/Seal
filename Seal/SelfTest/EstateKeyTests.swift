@@ -21,7 +21,68 @@ enum EstateKeyTests {
         .init(name: "estatekeys.tables") { try tables($0) },
         .init(name: "estatekeys.rotation") { try rotation($0) },
         .init(name: "estatekeys.newDevice") { try newDevice($0) },
+        .init(name: "estatekeys.rightAway") { try rightAway($0) },
     ] }
+
+    /// PRODUCT.md section 17: a right away table opens for its recipient
+    /// with their own key and nothing else; a release table still needs the
+    /// Estate Key; nobody else opens either; a quiet table's bytes do not
+    /// change; a new device is covered without touching the table.
+    static func rightAway(_ t: SelfTest.Context) throws {
+        let estateID = UUID().uuidString
+        let owner = hybridDevice()
+        let brother = hybridDevice()
+        let stranger = hybridDevice()
+        let newPhone = legacyDevice()
+        let table = KeyTable(recipientHash: "brother", entries: [
+            KeyTableEntry(envelopeID: "e1", contentKey: EstateCrypto.randomKey(), title: "The house", revealOrder: 0, blobIDs: ["b1"])
+        ])
+        let tableKey = EstateCrypto.randomKey()
+        let tableID = UUID().uuidString
+        let bottle = try EstateKeyHierarchy.wrapTableDirect(table, tableID: tableID, tableKey: tableKey, estateID: estateID,
+                                                            ownerBundles: [owner.publicBundle.encoded],
+                                                            recipientBundles: [brother.publicBundle.encoded])
+        t.check(bottle.opensRightAway, "a right away table says so")
+        t.check(bottle.releaseWraps.isEmpty && bottle.epoch == 0, "a right away table has no release wraps and no epoch")
+        let opened = try EstateKeyHierarchy.openTableKeyDirect(bottle, estateID: estateID, mine: brother)
+        t.equal(try EstateKeyHierarchy.openTable(bottle, estateID: estateID, tableKey: opened), table, "the recipient opens it with their own key, no release")
+        let ownerKey = try EstateKeyHierarchy.openTableKeyAsOwner(bottle, estateID: estateID, mine: owner)
+        t.equal(ownerKey, tableKey, "the owner still opens it")
+        t.throwsError("a stranger cannot open a right away table") {
+            _ = try EstateKeyHierarchy.openTableKeyDirect(bottle, estateID: estateID, mine: stranger)
+        }
+        t.throwsError("a right away table is bound to its estate") {
+            _ = try EstateKeyHierarchy.openTableKeyDirect(bottle, estateID: UUID().uuidString, mine: brother)
+        }
+        // The same table moved under another id does not open.
+        let moved = RecipientTableWrap(tableID: UUID().uuidString, ownerWraps: bottle.ownerWraps, releaseWraps: [],
+                                       epoch: 0, ciphertext: bottle.ciphertext, directWraps: bottle.directWraps)
+        t.throwsError("a right away wrap is bound to its table id") {
+            _ = try EstateKeyHierarchy.openTableKeyDirect(moved, estateID: estateID, mine: brother)
+        }
+        // A quiet table never opens the direct way, and encodes exactly as before.
+        let quiet = try EstateKeyHierarchy.wrapTable(table, tableID: tableID, tableKey: tableKey, estateID: estateID,
+                                                     epoch: 1, estateKey: EstateCrypto.randomKey(),
+                                                     ownerBundles: [owner.publicBundle.encoded],
+                                                     recipientBundles: [brother.publicBundle.encoded])
+        t.check(!quiet.opensRightAway, "a quiet table is not right away")
+        t.throwsError("a quiet table never opens without the release") {
+            _ = try EstateKeyHierarchy.openTableKeyDirect(quiet, estateID: estateID, mine: brother)
+        }
+        let quietJSON = String(decoding: try JSONEncoder().encode(quiet), as: UTF8.self)
+        t.check(!quietJSON.contains("directWraps"), "a quiet table's published bytes have no directWraps key")
+        t.throwsError("a right away table never opens as a release table") {
+            _ = try EstateKeyHierarchy.openTableKeyAsRecipient(bottle, estateID: estateID, estateKey: EstateCrypto.randomKey(), mine: brother)
+        }
+        // A new phone: only the direct wraps change.
+        let covered = try EstateKeyHierarchy.rewrapDirect(bottle, tableKey: tableKey, estateID: estateID,
+                                                          recipientBundles: [brother.publicBundle.encoded, newPhone.publicBundle.encoded])
+        t.equal(covered.ciphertext, bottle.ciphertext, "a new device leaves the table ciphertext alone")
+        t.equal(try EstateKeyHierarchy.openTableKeyDirect(covered, estateID: estateID, mine: newPhone), tableKey, "the new device opens it")
+        // Round trip through JSON, the way it is published.
+        let decoded = try JSONDecoder().decode(RecipientTableWrap.self, from: try JSONEncoder().encode(bottle))
+        t.equal(try EstateKeyHierarchy.openTableKeyDirect(decoded, estateID: estateID, mine: brother), tableKey, "a published right away table round trips")
+    }
 
     /// A device with both KEM halves, like a phone that signed in after the
     /// hybrid bundle landed.

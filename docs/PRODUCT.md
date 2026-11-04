@@ -88,6 +88,12 @@ secrets, with a byte-exact copy button.
 - **The record outlives us.** Each custodian can export a capsule; a script
   with no Seal in it checks every signature and every token.
 
+- **Rules of another kind (1.3, section 17).** Everything above is the
+  quiet rule. A break glass rule opens the moment M key holders tap
+  together, on any day, and the owner cannot stop it. A right away rule
+  opens for its recipient as soon as it is sealed, with no key holders.
+  The owner picks the kind once, before the rule's first seal.
+
 ## 8. What is not promised, precisely
 
 - **That the owner is dead.** Silence is silence. The warnings exist because
@@ -840,3 +846,135 @@ what the family will see that sat in a menu most people never open.
 - A practice run for key holders (a pretend release), so the first time is
   not the real day. It must not teach anything the real one does not do.
 - Spanish. Crypto, estate and recovery words need a careful human review.
+
+## 17. When a rule opens: quiet, break glass, right away (added to 1.3, 2026-11-03)
+
+**Built 2026-11-03, not compiled yet. Decided the same day: it ships in 1.3,
+a right away rule needs no key holders, right away rules seal for free, and
+break glass is instant (Jason chose it over a short wait the owner could
+refuse).**
+
+### The failure this exists for
+
+Nobody can demo dying. At a table, at a talk, or with a planner showing a
+client, the only Seal moment anyone could see was a sealed envelope that
+does nothing for years. And two real needs did not fit a 30 day minimum: a
+family or a business that needs a password in an emergency while the owner
+is alive but cannot be reached, and a reporter or a traveler who needs a
+short fuse.
+
+### What it is
+
+One rule is one box of keys (RuleBook.swift), so the choice belongs to the
+rule, never to a single envelope. The rule screen has a new first question,
+**When it opens**, with three answers. It is chosen once, before the rule's
+first seal; after that the owner makes a new rule for another kind (at most
+three rules, as before).
+
+1. **When I go quiet.** The rule as it always was. The silence choices are
+   now 7, 14, 30, 90, 180 and 365 days. Under 30 the rule screen says that a
+   hospital stay or a lost phone can start a claim too. A new second rule
+   still starts at 30.
+2. **Break glass.** Instant. No silence, no warnings, no grace. Any key
+   holder may start a claim on any day, it is open for taps at once, and it
+   opens the moment M keys are tapped. Nothing the owner does stops it: not
+   a check-in, not the cancel button, which break glass does not show. The
+   owner is told when a claim starts. Real case: the family's crypto
+   recovery words, or a company's master passwords. No one sibling or
+   employee can open it; any two together can, the same minute.
+3. **Right away.** A message in a bottle. No key holders and no release.
+   The moment it is sealed, its recipient opens it on their iPhone or at
+   sealmessenger.com/open with their own key or passkey. Real case: a house
+   sitter's key that opens the alarm code and the Wi-Fi, or a kit handed
+   over at a table that opens a letter in front of the person.
+
+The recipient of a right away envelope is still somebody the owner set up:
+a Seal account met in person, or a sponsored key from a kit. It is not a
+public link.
+
+### The promise, and the lines that change
+
+Section 7 holds for a quiet rule word for word. For the two new kinds:
+
+- Right away: "Right away means the person holding this key can open it as
+  soon as you seal it." The editor shows that line. A key holder still
+  learns nothing, because a right away rule has none.
+- Break glass: "stopping is easy, starting is hard" does not hold. Starting
+  is hard only in people: M physical keys. There is no stopping, by the
+  owner's choice. Another key holder's veto, when the rule is set to veto,
+  still counts. Section 7 says so for this kind.
+
+Not promised: anonymity. The envelope is encrypted and needs no account,
+but the owner's phone writes it through their iCloud account, and Apple and
+Cloudflare see network addresses like any app or site. Seal must not be
+described as an anonymous tip line.
+
+### How it is built
+
+- `ReleasePolicy.kind`: `quiet`, `breakGlass` or `rightAway`. Missing means
+  quiet, and a quiet rule encodes with no `kind` key, so every rule sealed
+  before 1.3, and every older phone reading it, is byte for byte unchanged.
+  An unknown kind fails the body on the phone and on the page alike.
+- Break glass is the release machine with silence, warnings and grace all
+  zero, and one change, made the same in ReleaseMachine.voidReason and
+  release.js voidReason: for this kind, a heartbeat or a cancellation after
+  the claim does not void it, and no claim opens too early. A key holder's
+  veto still does. `ownerCanCancel` is false for it, so a check-in never
+  posts a cancellation. The machine reads a resting break glass rule as
+  overdue from the day it is sealed, so the screens show it through
+  `ReleasePolicy.Kind.shown` (and `shown` in release.js) as all quiet, key
+  holders post no daily silence observations, the owner gets no check-in
+  reminders, and the claim line to the owner says it cannot be stopped.
+- Right away tables: `RecipientTableWrap.directWraps`, the Table Key wrapped
+  straight to the recipient's devices (hybrid X25519 plus ML-KEM-768), AAD
+  purpose `tablekey.direct.<tableID>`, epoch 0, and empty `releaseWraps`.
+  The owner wraps and the table ciphertext are the same as any table.
+- Sealing a right away rule skips the epoch and the key holder check; no
+  Estate Key exists. `epochPublished` is set by the first seal and then only
+  means "sealed". A new device for the recipient re-wraps only the direct
+  wraps, the same way release wraps are re-wrapped.
+- Opening, on the phone and the page, needs both: the owner's own signed
+  rule says right away, AND the table is a direct one listed in the owner's
+  vault. A direct table under a quiet rule is never opened, and a release
+  table under a right away rule is never opened the direct way.
+- Money: a seal that only has right away rules waiting skips the paywall.
+  The $29.99 unlock stays on the rules with key holders.
+
+### Tests
+
+- Swift: `estatekeys.rightAway` (opens for its recipient alone, not for a
+  stranger, not in another estate or under another table id, a quiet table
+  never opens directly and has no `directWraps` key, a new device is
+  covered without touching the table) and `release.policy` (7 and 14 days,
+  break glass shape and round trip, open for taps at once, two taps earn
+  the release the same minute, one does not, the owner's check-in and
+  cancel do not void it while a quiet rule's still do, the shown states). Both run on every DEBUG launch; the
+  second also in `tools/run_core_tests.sh`.
+- Web: `tools/webtests/bottle.test.mjs` (23 checks), in `run.sh`.
+- Vectors: `tools/vectors/main.swift` now exports a right away table and
+  `check.mjs` opens it byte for byte when present. **Run
+  `sh tools/export_vectors.sh` on a Mac and commit the new set**, so the
+  check covers it.
+
+### What it must not do
+
+- Change the kind of a rule after its first seal.
+- Open a quiet envelope without the full release, or a right away envelope
+  for anybody but its recipient.
+- Call itself anonymous.
+- Post a daily silence observation or a check-in reminder for a rule that
+  has no silence.
+
+### Left for later
+
+- Website copy. The site still describes only the quiet rule.
+- A right away rule shows its owner the usual home card; a home line made
+  for bottles ("sent to Ana, opens now") would be clearer.
+- Mixed versions. A key holder or recipient on 1.2 does not know break
+  glass: their phone reads it as overdue every day, and it still lets an
+  owner's check-in void a claim, so it refuses to tap or open what 1.3
+  phones accept. That fails closed, but it splits the group. Everyone on a
+  break glass rule needs 1.3, and the rule screen should say so before it
+  ships.
+- A break glass claim never expires. One left half done stays open for
+  taps until enough keys arrive.

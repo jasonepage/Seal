@@ -185,11 +185,22 @@ final class EstateEngine {
     var now: Date { clock.now }
 
     var ownerState: ReleaseState? {
-        ownerSnapshot.map { ReleaseMachine.state($0, now: clock.now) }
+        ownerSnapshot.map { Self.shown(ReleaseMachine.state($0, now: clock.now), kind: $0.policy.kind, owner: true) }
     }
 
     func state(of estateID: String) -> ReleaseState? {
-        guardedSnapshots[estateID].map { ReleaseMachine.state($0, now: clock.now) }
+        guardedSnapshots[estateID].map { Self.shown(ReleaseMachine.state($0, now: clock.now), kind: $0.policy.kind, owner: false) }
+    }
+
+    /// WHAT A SCREEN SAYS FOR A RULE'S KIND (1.3, PRODUCT.md section 17).
+    /// The release machine is unchanged and still gates every button; this
+    /// only keeps the words honest. A break glass rule has no quiet time, so
+    /// the machine reads it as overdue the moment it is sealed: that is its
+    /// resting state, not news, and it is shown as all quiet. A right away
+    /// rule has nothing to release: for the person it was written to it is
+    /// open, and for the owner it is simply sealed.
+    static func shown(_ state: ReleaseState, kind: ReleasePolicy.Kind, owner: Bool) -> ReleaseState {
+        kind.shown(state, owner: owner)
     }
 
     func timeline(of estateID: String) -> ReleaseTimeline? {
@@ -298,7 +309,7 @@ final class EstateEngine {
         if slot.startsShort {
             // The short rule. The shortest silence the machine allows, one
             // week of warnings, no grace. The owner can change it.
-            fresh.policy.silenceDays = ReleasePolicy.allowedSilenceDays.min() ?? 30
+            fresh.policy.silenceDays = ReleasePolicy.shortRuleSilenceDays
             fresh.policy.warningDays = 7
             fresh.policy.graceDays = 0
         }
@@ -308,9 +319,13 @@ final class EstateEngine {
         return fresh
     }
 
-    func addCustodian(_ friend: RootIdentity, receiptID: String? = nil) {
+    /// False only for a right away rule, which has no key holders
+    /// (PRODUCT.md section 17); callers that go on to a handover check it.
+    @discardableResult
+    func addCustodian(_ friend: RootIdentity, receiptID: String? = nil) -> Bool {
         var e = createEstateIfNeeded()
-        guard !e.custodians.contains(where: { $0.rootHash == friend.credentialIDHash }) else { return }
+        guard !e.opensRightAway else { return false }
+        guard !e.custodians.contains(where: { $0.rootHash == friend.credentialIDHash }) else { return true }
         e.custodians.append(Custodian(rootHash: friend.credentialIDHash, displayName: friend.displayName,
                                       addedAt: clock.now, handoverReceiptID: receiptID))
         if e.policy.threshold > e.custodians.count { e.policy.threshold = e.custodians.count }
@@ -331,6 +346,7 @@ final class EstateEngine {
             e.policy.threshold = 2
         }
         estate = e; saveEstate(); recomputeAll()
+        return true
     }
 
     func setHandoverReceipt(_ receiptID: String, for custodianHash: String) {
@@ -346,8 +362,26 @@ final class EstateEngine {
         estate = e; saveEstate(); recomputeAll()
     }
 
+    /// The kind this rule's record already announced, or nil while nothing
+    /// has been published. Once anything is out, the kind is fixed
+    /// (PRODUCT.md section 17). A rule sealed before `publishedPolicy`
+    /// existed has published events but no copy, and it is quiet.
+    var sealedKind: ReleasePolicy.Kind? {
+        guard let e = estate, e.epochPublished || !ownerEvents.isEmpty else { return nil }
+        return e.publishedPolicy?.kind ?? .quiet
+    }
+
     func setPolicy(_ policy: ReleasePolicy) throws {
         var e = createEstateIfNeeded()
+        // The kind is chosen once, before the first seal (PRODUCT.md
+        // section 17). Changing it later would turn a box people already
+        // hold a part of into something else.
+        if let sealedKind, sealedKind != policy.kind {
+            throw EngineError.notAllowed("This rule was sealed as \"\(sealedKind.label)\". Make a new rule for the other kind.")
+        }
+        if policy.kind == .rightAway, !e.custodians.isEmpty {
+            throw EngineError.notAllowed("A right away rule has no key holders. Remove them from this rule first, or make a new rule.")
+        }
         try policy.validate(custodianCount: max(e.custodians.count, 1))
         e.policy = policy
         estate = e; saveEstate(); recomputeAll()
@@ -576,6 +610,13 @@ final class EstateEngine {
             throw EngineError.notAllowed("The key for this set was published without a proper release, so nothing more can be sealed into it. Start a new set.")
         }
         guard let mine = identity.kemPrivateBundle else { throw EngineError.noDeviceKey }
+        // The kind is fixed by the first seal (PRODUCT.md section 17): a box
+        // of keys never turns from one kind into another under people who
+        // already hold a part of it. setPolicy refuses this too.
+        if let sealedKind, sealedKind != e.policy.kind {
+            throw EngineError.notAllowed("This rule was sealed as \"\(sealedKind.label)\". Make a new rule for the other kind.")
+        }
+        let rightAway = e.opensRightAway
         try e.policy.validate(custodianCount: e.custodians.count)
         isWorking = true
         defer { isWorking = false }
@@ -593,73 +634,78 @@ final class EstateEngine {
             estate = e; saveEstate()
         }
 
-        // 1. The epoch.
-        let estateKey: Data
-        // A key holder on a new phone is the same person with a share they
-        // cannot open, so it forces a fresh epoch exactly as a new person
-        // would. The check is by directory record, not by the stale list, so
-        // it is done again here rather than trusting what refreshOwner saw.
-        // The material this estate says it published must actually be
-        // there. It is not when the estate was sealed against the OTHER
-        // CloudKit environment (an Xcode build talks to Development, a
-        // TestFlight build to Production, and the keychain is shared, see
-        // GOTCHAS "Environments"), or when a blob went missing. Either way
-        // the owner still holds the working copy, so the honest repair is a
-        // fresh epoch, not an error the person cannot act on. A network
-        // failure still throws from fetchEstateBlob and is not mistaken
-        // for a missing blob.
-        var publishedMaterial: EpochKeyMaterial?
-        if !e.needsNewEpoch {
-            if let data = try await sync.fetchEstateBlob(name: EstateNames.epochBlob(e.id, e.epoch)),
-               let material = try? JSONDecoder().decode(EpochKeyMaterial.self, from: data) {
-                publishedMaterial = material
-            } else {
-                Self.log.error("seal: epoch \(e.epoch, privacy: .public) material is missing from this environment; rotating")
-            }
-        }
-        if e.needsNewEpoch || !custodiansWithNewPhones.isEmpty || publishedMaterial == nil {
-            var custodians: [EstateKeyHierarchy.Custodian] = []
-            var custodianKeys: [Data] = []
-            var devices: [String: [String]] = [:]
-            for c in e.custodians {
-                let bundles = try await kemBundles(of: c.rootHash, named: c.displayName)
-                custodians.append(.init(hash: c.rootHash, kemBundles: bundles))
-                custodianKeys.append(try await lookup(c.rootHash, named: c.displayName).0.publicKey)
-                devices[c.rootHash] = Estate.deviceDigests(bundles)
-            }
-            let newKey = EstateCrypto.randomKey()
-            let epoch = e.epoch + 1
-            let material = try EstateKeyHierarchy.makeEpoch(estateID: e.id, epoch: epoch, estateKey: newKey,
-                                                            ownerBundles: ownerBundles, custodians: custodians,
-                                                            threshold: e.policy.threshold)
-            let materialData = try EstateEvent.encodeBody(material)
-            try await sync.saveEstateBlob(materialData, name: EstateNames.epochBlob(e.id, epoch))
-            let body = try EstateEvent.encodeBody(EpochBody(
-                epoch: epoch, threshold: e.policy.threshold,
-                custodianHashes: e.custodians.map(\.rootHash),
-                custodianPublicKeys: custodianKeys,
-                shareCommitments: material.custodianShares.map(\.commitment),
-                estateKeyCommitment: material.estateKeyCommitment,
-                materialDigest: Data(SHA256.hash(data: materialData))))
-            let event = try sign(.epochPublished, estateID: e.id, payload: body, previous: previous)
-            try await publish(event, into: e.id, mine: true)
-            previous = event.digest
-            // Every table's release wrap must move to the new epoch, so mark
-            // everything unsealed BEFORE recording the epoch as published: a
-            // failure between the two must leave the next run re-wrapping.
-            for i in e.envelopes.indices { e.envelopes[i].sealed = false }
-            e.epoch = epoch
-            e.epochPublished = true
-            e.publishedCustodianHashes = e.custodians.map(\.rootHash)
-            e.publishedThreshold = e.policy.threshold
-            e.publishedCustodianDevices = devices
-            custodiansWithNewPhones = []
-            estate = e; saveEstate()
-            estateKey = newKey
-        } else if let material = publishedMaterial {
-            estateKey = try EstateKeyHierarchy.openEstateKeyAsOwner(material, mine: mine)
+        // 1. The epoch. A right away rule has none: no Estate Key, no
+        //    shares, nobody to release anything (PRODUCT.md section 17).
+        let estateKey: Data?
+        if rightAway {
+            estateKey = nil
         } else {
-            throw EngineError.notReady("The published key material for this estate could not be fetched.")
+            // A key holder on a new phone is the same person with a share they
+            // cannot open, so it forces a fresh epoch exactly as a new person
+            // would. The check is by directory record, not by the stale list, so
+            // it is done again here rather than trusting what refreshOwner saw.
+            // The material this estate says it published must actually be
+            // there. It is not when the estate was sealed against the OTHER
+            // CloudKit environment (an Xcode build talks to Development, a
+            // TestFlight build to Production, and the keychain is shared, see
+            // GOTCHAS "Environments"), or when a blob went missing. Either way
+            // the owner still holds the working copy, so the honest repair is a
+            // fresh epoch, not an error the person cannot act on. A network
+            // failure still throws from fetchEstateBlob and is not mistaken
+            // for a missing blob.
+            var publishedMaterial: EpochKeyMaterial?
+            if !e.needsNewEpoch {
+                if let data = try await sync.fetchEstateBlob(name: EstateNames.epochBlob(e.id, e.epoch)),
+                   let material = try? JSONDecoder().decode(EpochKeyMaterial.self, from: data) {
+                    publishedMaterial = material
+                } else {
+                    Self.log.error("seal: epoch \(e.epoch, privacy: .public) material is missing from this environment; rotating")
+                }
+            }
+            if e.needsNewEpoch || !custodiansWithNewPhones.isEmpty || publishedMaterial == nil {
+                var custodians: [EstateKeyHierarchy.Custodian] = []
+                var custodianKeys: [Data] = []
+                var devices: [String: [String]] = [:]
+                for c in e.custodians {
+                    let bundles = try await kemBundles(of: c.rootHash, named: c.displayName)
+                    custodians.append(.init(hash: c.rootHash, kemBundles: bundles))
+                    custodianKeys.append(try await lookup(c.rootHash, named: c.displayName).0.publicKey)
+                    devices[c.rootHash] = Estate.deviceDigests(bundles)
+                }
+                let newKey = EstateCrypto.randomKey()
+                let epoch = e.epoch + 1
+                let material = try EstateKeyHierarchy.makeEpoch(estateID: e.id, epoch: epoch, estateKey: newKey,
+                                                                ownerBundles: ownerBundles, custodians: custodians,
+                                                                threshold: e.policy.threshold)
+                let materialData = try EstateEvent.encodeBody(material)
+                try await sync.saveEstateBlob(materialData, name: EstateNames.epochBlob(e.id, epoch))
+                let body = try EstateEvent.encodeBody(EpochBody(
+                    epoch: epoch, threshold: e.policy.threshold,
+                    custodianHashes: e.custodians.map(\.rootHash),
+                    custodianPublicKeys: custodianKeys,
+                    shareCommitments: material.custodianShares.map(\.commitment),
+                    estateKeyCommitment: material.estateKeyCommitment,
+                    materialDigest: Data(SHA256.hash(data: materialData))))
+                let event = try sign(.epochPublished, estateID: e.id, payload: body, previous: previous)
+                try await publish(event, into: e.id, mine: true)
+                previous = event.digest
+                // Every table's release wrap must move to the new epoch, so mark
+                // everything unsealed BEFORE recording the epoch as published: a
+                // failure between the two must leave the next run re-wrapping.
+                for i in e.envelopes.indices { e.envelopes[i].sealed = false }
+                e.epoch = epoch
+                e.epochPublished = true
+                e.publishedCustodianHashes = e.custodians.map(\.rootHash)
+                e.publishedThreshold = e.policy.threshold
+                e.publishedCustodianDevices = devices
+                custodiansWithNewPhones = []
+                estate = e; saveEstate()
+                estateKey = newKey
+            } else if let material = publishedMaterial {
+                estateKey = try EstateKeyHierarchy.openEstateKeyAsOwner(material, mine: mine)
+            } else {
+                throw EngineError.notReady("The published key material for this estate could not be fetched.")
+            }
         }
 
         // 1b. The rule, whenever it changed since it was last announced. The
@@ -702,10 +748,18 @@ final class EstateEngine {
             let recipientBundles = try await kemBundles(
                 of: recipientHash,
                 named: e.recipients.first { $0.rootHash == recipientHash }?.displayName)
-            let wrap = try EstateKeyHierarchy.wrapTable(e.keyTable(for: recipientHash), tableID: record.tableID,
+            let wrap: RecipientTableWrap
+            if let estateKey {
+                wrap = try EstateKeyHierarchy.wrapTable(e.keyTable(for: recipientHash), tableID: record.tableID,
                                                         tableKey: record.tableKey, estateID: e.id, epoch: e.epoch,
                                                         estateKey: estateKey, ownerBundles: ownerBundles,
                                                         recipientBundles: recipientBundles)
+            } else {
+                // Right away: the Table Key straight to the recipient.
+                wrap = try EstateKeyHierarchy.wrapTableDirect(e.keyTable(for: recipientHash), tableID: record.tableID,
+                                                              tableKey: record.tableKey, estateID: e.id,
+                                                              ownerBundles: ownerBundles, recipientBundles: recipientBundles)
+            }
             try await sync.saveEstateBlob(try EstateEvent.encodeBody(wrap), name: EstateNames.tableBlob(e.id, record.tableID))
             tableIDs.append(record.tableID)
             // The devices this table now opens on, so a later refresh can
@@ -722,6 +776,9 @@ final class EstateEngine {
         try await publish(vaultEvent, into: e.id, mine: true)
         e.publishedTableIDs = tableIDs.sorted()
         e.tablesStale = false
+        // For a right away rule this is the only thing that marks it sealed,
+        // and every screen that asks "has this been sealed" reads it.
+        if rightAway { e.epochPublished = true }
         estate = e; saveEstate()
 
         // 5. Invites, and a heartbeat so the clock starts from now.
@@ -890,6 +947,43 @@ final class EstateEngine {
                                                 current: currentBundles.mapValues { Estate.deviceDigests($0) })
         guard !due.isEmpty else { return }
 
+        // A right away rule has no Estate Key: only the direct wraps are
+        // made again, to the devices the directory vouches for now, and the
+        // table and the owner wraps stay as published (PRODUCT.md section 17).
+        if e.opensRightAway {
+            var covered = 0
+            for recipientHash in due {
+                guard let record = e.tableKeys[recipientHash], let bundles = currentBundles[recipientHash] else { continue }
+                do {
+                    guard let data = try await sync.fetchEstateBlob(name: EstateNames.tableBlob(e.id, record.tableID)),
+                          let wrap = try? JSONDecoder().decode(RecipientTableWrap.self, from: data),
+                          wrap.tableID == record.tableID, wrap.opensRightAway,
+                          let ownerKey = try? EstateKeyHierarchy.openTableKeyAsOwner(wrap, estateID: e.id, mine: mine),
+                          ownerKey == record.tableKey else {
+                        Self.log.error("recipient wraps: a right away table did not match this phone's copy; left for the next seal")
+                        continue
+                    }
+                    let updated = try EstateKeyHierarchy.rewrapDirect(wrap, tableKey: record.tableKey, estateID: e.id,
+                                                                      recipientBundles: bundles)
+                    guard !isWorking, let live = estate, live.id == e.id,
+                          live.tableKeys[recipientHash]?.tableID == record.tableID else { return }
+                    try await sync.saveEstateBlob(try EstateEvent.encodeBody(updated),
+                                                  name: EstateNames.tableBlob(e.id, record.tableID))
+                    guard var latest = estate, latest.id == e.id else { return }
+                    latest.publishedRecipientDevices[recipientHash] = Estate.deviceDigests(bundles)
+                    estate = latest
+                    saveEstate()
+                    covered += 1
+                } catch {
+                    Self.log.error("recipient wraps: \(error.localizedDescription, privacy: .public)")
+                }
+            }
+            if covered > 0 {
+                Self.log.info("recipient wraps: \(covered, privacy: .public) right away table(s) now open on every device their recipient has endorsed")
+            }
+            return
+        }
+
         do {
             // The Estate Key of the published epoch, opened with this phone's
             // own key. Missing material is the seal's problem to repair (it
@@ -945,7 +1039,9 @@ final class EstateEngine {
     /// engine this way.
     private func shareCheckIn() {
         // The widget shows the default rule, the long one.
-        guard slot.isDefault, let e = estate, let snapshot = ownerSnapshot else { return }
+        // Only when that rule has a silence to count down (1.3): a default
+        // rule turned into break glass or right away leaves the widget alone.
+        guard slot.isDefault, let e = estate, e.policy.kind == .quiet, let snapshot = ownerSnapshot else { return }
         CheckInShared.record(lastCheckIn: snapshot.silenceAnchor, silenceDays: e.policy.silenceDays)
     }
 
@@ -1114,7 +1210,10 @@ final class EstateEngine {
     /// once a day. Evidence, not a decision.
     private func observeSilenceIfDue(guardedIndex i: Int) async {
         let g = guarded[i]
-        guard g.isCustodian, let snapshot = guardedSnapshots[g.estateID],
+        // Only a quiet rule has a silence worth observing. Break glass is
+        // "overdue" from the day it is sealed, and saying so every day would
+        // be noise signed into the record.
+        guard g.isCustodian, let snapshot = guardedSnapshots[g.estateID], snapshot.policy.kind == .quiet,
               ReleaseMachine.state(snapshot, now: clock.now) == .overdue else { return }
         if let last = g.lastObservationAt, clock.now.timeIntervalSince(last) < 86_400 { return }
         do {
@@ -1367,27 +1466,38 @@ final class EstateEngine {
 
     /// After release: the published Estate Key plus my own KEM key open my
     /// table, and only mine. Media is fetched on demand by `openMedia`.
+    ///
+    /// A RIGHT AWAY RULE (PRODUCT.md section 17) opens with no release: the
+    /// owner's own signed rule says so, and the table's Table Key is wrapped
+    /// straight to my devices. Both must hold. A direct table in a quiet
+    /// rule is never opened, so a quiet rule cannot open early even if a
+    /// table were made wrongly.
     func openEnvelopes(estateID: String) async throws -> [OpenedEnvelope] {
         let (g, s) = try guardedEstate(estateID)
         let bundles = identity.kemPrivateBundles
         guard !bundles.isEmpty else { throw EngineError.noDeviceKey }
-        // Exactly the release the feed judged (audit C1 and N2), never
-        // simply the newest `released` event in the log.
+        let rightAway = s.policy.kind == .rightAway
         let log = guardedEvents[estateID] ?? []
-        guard let releasedAt = s.releasedAt, releasedAt <= clock.now,
-              let releaseID = s.releaseEventID,
-              let released = log.first(where: { $0.id == releaseID && $0.kind == .released })?.body(ReleasedBody.self)
-        else { throw EngineError.notReleased }
-        // Check the key against the owner's own signed commitment before a
-        // single table is tried. The feed already did; this is the last line,
-        // and it fails loudly rather than skipping tables in silence.
-        let keyHash = Data(SHA256.hash(data: released.estateKey))
-        guard log.contains(where: { event in
-            guard event.kind == .epochPublished, event.actorHash == g.ownerHash,
-                  let statement = event.body(EpochBody.self) else { return false }
-            return statement.epoch == released.epoch && statement.estateKeyCommitment == keyHash
-        }) else {
-            throw EngineError.notReady("The published key does not match what the owner sealed. Nothing was opened.")
+        var releasedKey: Data?
+        if !rightAway {
+            // Exactly the release the feed judged (audit C1 and N2), never
+            // simply the newest `released` event in the log.
+            guard let releasedAt = s.releasedAt, releasedAt <= clock.now,
+                  let releaseID = s.releaseEventID,
+                  let released = log.first(where: { $0.id == releaseID && $0.kind == .released })?.body(ReleasedBody.self)
+            else { throw EngineError.notReleased }
+            // Check the key against the owner's own signed commitment before a
+            // single table is tried. The feed already did; this is the last line,
+            // and it fails loudly rather than skipping tables in silence.
+            let keyHash = Data(SHA256.hash(data: released.estateKey))
+            guard log.contains(where: { event in
+                guard event.kind == .epochPublished, event.actorHash == g.ownerHash,
+                      let statement = event.body(EpochBody.self) else { return false }
+                return statement.epoch == released.epoch && statement.estateKeyCommitment == keyHash
+            }) else {
+                throw EngineError.notReady("The published key does not match what the owner sealed. Nothing was opened.")
+            }
+            releasedKey = released.estateKey
         }
         var out: [OpenedEnvelope] = []
         for tableID in g.vault?.tableIDs ?? [] {
@@ -1395,10 +1505,20 @@ final class EstateEngine {
                   let wrap = try? JSONDecoder().decode(RecipientTableWrap.self, from: data) else { continue }
             // Try this phone's bundle, then the sponsored virtual device's.
             // A table that opens with neither is not mine, by design.
-            guard let tableKey = bundles.lazy.compactMap({ mine in
-                try? EstateKeyHierarchy.openTableKeyAsRecipient(wrap, estateID: estateID,
-                                                                estateKey: released.estateKey, mine: mine)
-            }).first else { continue }
+            let found: Data?
+            if rightAway {
+                found = wrap.opensRightAway
+                    ? bundles.lazy.compactMap({ try? EstateKeyHierarchy.openTableKeyDirect(wrap, estateID: estateID, mine: $0) }).first
+                    : nil
+            } else if let releasedKey, !wrap.opensRightAway {
+                found = bundles.lazy.compactMap({ mine in
+                    try? EstateKeyHierarchy.openTableKeyAsRecipient(wrap, estateID: estateID,
+                                                                    estateKey: releasedKey, mine: mine)
+                }).first
+            } else {
+                found = nil
+            }
+            guard let tableKey = found else { continue }
             let table = try EstateKeyHierarchy.openTable(wrap, estateID: estateID, tableKey: tableKey)
             for entry in table.entries.sorted(by: { $0.revealOrder < $1.revealOrder }) {
                 guard let payloadID = entry.blobIDs.first,

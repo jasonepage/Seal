@@ -57,6 +57,9 @@ export const releasePolicy = obj({
   threshold: int,
   objectionBehavior: oneOf("pause", "veto"),
   custodyConfirmMonths: opt(int),
+  // Added 1.3 (PRODUCT.md section 17). Missing means quiet. An unknown kind
+  // fails the body, as Swift's decodeIfPresent of an unknown case does.
+  kind: opt(oneOf("quiet", "breakGlass", "rightAway")),
 });
 
 export const hybridEnvelope = obj({

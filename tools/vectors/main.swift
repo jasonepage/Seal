@@ -223,6 +223,17 @@ do {
         fail("content round trip")
     }
 
+    // A right away table (PRODUCT.md section 17): the same table, the Table
+    // Key wrapped straight to the sponsored recipient, no Estate Key.
+    let bottleID = UUID().uuidString
+    let bottleKey = EstateCrypto.randomKey()
+    let bottleWrap = try EstateKeyHierarchy.wrapTableDirect(table, tableID: bottleID, tableKey: bottleKey, estateID: estateID,
+                                                            ownerBundles: [owner.publicBundle.encoded],
+                                                            recipientBundles: [sponsoredKEM.publicBundle.encoded])
+    guard try EstateKeyHierarchy.openTableKeyDirect(bottleWrap, estateID: estateID, mine: sponsoredKEM) == bottleKey else {
+        fail("right away table round trip")
+    }
+
     root["estate"] = [
         "estateID": estateID,
         "epoch": String(epoch),
@@ -238,6 +249,8 @@ do {
              "tableKey": hex(tk), "tablePlainBase64": try stored(table, sorted: true)] as [String: Any],
             ["tableID": otherWrap.tableID, "isMine": false, "wrapBase64": try stored(otherWrap)] as [String: Any],
         ] as [[String: Any]],
+        "rightAwayTable": ["tableID": bottleID, "wrapBase64": try stored(bottleWrap), "tableKey": hex(bottleKey),
+                           "tablePlainBase64": try stored(table, sorted: true)] as [String: Any],
         "content": ["blobID": payloadBlobID, "blob": hex(payloadBlob), "plaintext": hex(payloadPlain),
                     "note": "The plaintext here is a stand-in. The real payload schema (Envelope.Payload) is in set 2."] as [String: Any],
     ] as [String: Any]

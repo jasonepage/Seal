@@ -39,6 +39,8 @@ struct GuardedEstateView: View {
     /// Set once the owner deleted their account (DepartureRules.swift).
     private var departure: DepartureRules.Departure? { estateEngine.departure(of: guarded.estateID) }
     private var cancelled: Bool { departure?.keepEnvelopes == false }
+    /// From the owner's own signed rule (1.3, PRODUCT.md section 17).
+    private var kind: ReleasePolicy.Kind { snapshot?.policy.kind ?? .quiet }
 
     var body: some View {
         ZStack {
@@ -91,7 +93,7 @@ struct GuardedEstateView: View {
 
     private var stateCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(EstateHomeView.stateLine(state, guarded: live))
+            Text(EstateHomeView.stateLine(state, guarded: live, kind: kind))
                 .font(.system(.title3, design: .rounded, weight: .semibold))
                 .foregroundStyle(tint)
             if let s = snapshot {
@@ -103,7 +105,7 @@ struct GuardedEstateView: View {
                 if let t = timeline {
                     countdown(t)
                 }
-                if let next = ReleaseMachine.nextTransition(s, now: estateEngine.now), state != .active {
+                if let next = ReleaseMachine.nextTransition(s, now: estateEngine.now), state != .active, kind != .rightAway {
                     Text("Next step \(next.formatted(date: .abbreviated, time: .shortened)).")
                         .foregroundStyle(.white.opacity(0.55))
                 }
@@ -306,7 +308,9 @@ struct GuardedEstateView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Written for you").font(.headline).foregroundStyle(.white)
             if state == .released {
-                Text("The envelopes have been released. Open them here. They open in the order \(live.ownerName) chose.")
+                Text(kind == .rightAway
+                     ? "\(live.ownerName) sealed this to open right away, for you. Open it here."
+                     : "The envelopes have been released. Open them here. They open in the order \(live.ownerName) chose.")
                     .font(.callout).foregroundStyle(.white.opacity(0.7)).fixedSize(horizontal: false, vertical: true)
                 Button {
                     Task {
@@ -416,7 +420,9 @@ struct GuardedEstateView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Start a claim on \(live.ownerName)'s envelopes")
                         .font(.system(.title3, design: .rounded, weight: .semibold)).foregroundStyle(.white)
-                    Text("Do this only if you believe \(live.ownerName) has died or cannot ever come back. They get a warning every day. Every other key holder is told today. If \(live.ownerName) opens Seal once, the claim ends and everyone sees that you started it.")
+                    Text(kind == .breakGlass
+                         ? "This is a break glass rule. Do this only if it is really needed. There is no waiting: the other key holders are told today, and it opens the moment enough of you tap your keys. \(live.ownerName) cannot stop it, and everyone sees that you started it."
+                         : "Do this only if you believe \(live.ownerName) has died or cannot ever come back. They get a warning every day. Every other key holder is told today. If \(live.ownerName) opens Seal once, the claim ends and everyone sees that you started it.")
                         .font(.callout).foregroundStyle(.white.opacity(0.75)).fixedSize(horizontal: false, vertical: true)
                     TextField("Why (kept in the record)", text: $claimReason)
                         .padding(14).background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 14)).foregroundStyle(.white)
