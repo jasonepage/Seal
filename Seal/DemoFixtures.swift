@@ -219,7 +219,7 @@ enum DemoFixtures {
 }
 
 /// FR-23: demo sessions are visually watermarked. Non-interactive, and it is
-/// placed in a reserved strip along the bottom edge (ContentView), never over
+/// placed in a reserved strip along the top edge (ContentView), never over
 /// the toolbar, so it hides no button.
 struct DemoWatermark: View {
     var body: some View {

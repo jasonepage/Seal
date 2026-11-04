@@ -124,7 +124,9 @@ struct ContentView: View {
         // them. It lives in its own strip at the bottom now. safeAreaInset
         // RESERVES that strip, so the watermark can never cover a control,
         // and an empty content view when the watermark is off adds nothing.
-        .safeAreaInset(edge: .bottom) {
+        // 1.3: the iOS 26 tab bar floats over the bottom inset, so the badge
+        // sat on the Keys tab. It reserves a strip at the top instead.
+        .safeAreaInset(edge: .top) {
             if DemoFixtures.showWatermark { DemoWatermark() }
         }
     }
