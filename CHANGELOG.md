@@ -110,6 +110,11 @@ Dates are the day the work landed in the repository. Anything marked
   sealmessenger.com/give for people who need a Seal kit. The key screen no
   longer says the key opens nothing "before your key holders release
   everything", which is not true of a Right away rule.
+- A profile photo: tap your ring on the You screen to pick one. It shows
+  there and on the home screen button, stays on this phone only (keychain,
+  this device only, wiped on sign-out), and is never uploaded. It is redrawn
+  as a small square, which also drops the photo's location data.
+  (`Seal/Identity/ProfilePhoto.swift`, `IdentityRing`, `ProfileView`)
 - Harbor's eyes are smaller and scale with his size.
 - `tools/run_core_tests.sh` now compiles with `-default-isolation MainActor`,
   the same isolation the app target uses. Before, Swift 6 reported

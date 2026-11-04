@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import SwiftUI
+import PhotosUI
 import CloudKit
 import os
 
@@ -47,6 +48,7 @@ struct ProfileView: View {
     @State private var renaming = false
     @State private var draftName = ""
     @State private var showHowTo = false
+    @State private var photoItem: PhotosPickerItem?
     @State private var timestampsOn = false
     @State private var restored = false
     @State private var showPaywall = false
@@ -62,8 +64,36 @@ struct ProfileView: View {
                 SealTheme.ink.ignoresSafeArea()
                 ScrollView {
                 VStack(spacing: 20) {
-                    IdentityRing(displayName: currentName, tier: myRoot.tier, size: 96)
-                        .padding(.top, 32)
+                    // Tap the ring to choose a picture. It stays on this
+                    // phone (ProfilePhoto).
+                    PhotosPicker(selection: $photoItem, matching: .images) {
+                        IdentityRing(displayName: currentName, tier: myRoot.tier, size: 96,
+                                     photo: ProfilePhoto.shared.image)
+                            .overlay(alignment: .bottomTrailing) {
+                                Image(systemName: "camera.fill")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(SealTheme.ink)
+                                    .padding(7)
+                                    .background(SealTheme.brass, in: Circle())
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(ProfilePhoto.shared.image == nil ? "Add a photo" : "Change your photo")
+                    .padding(.top, 32)
+                    .onChange(of: photoItem) { _, item in
+                        guard let item else { return }
+                        Task {
+                            if let data = try? await item.loadTransferable(type: Data.self) {
+                                ProfilePhoto.shared.set(data)
+                            }
+                            photoItem = nil
+                        }
+                    }
+                    if ProfilePhoto.shared.image != nil {
+                        Button("Remove photo") { ProfilePhoto.shared.remove() }
+                            .font(.footnote)
+                            .foregroundStyle(.white.opacity(0.5))
+                    }
                     Button {
                         draftName = currentName
                         renaming = true

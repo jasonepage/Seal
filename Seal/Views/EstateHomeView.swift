@@ -229,7 +229,8 @@ struct EstateHomeView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button(action: onOpenProfile) {
-                        IdentityRing(displayName: myRoot.displayName, tier: myRoot.tier, size: 32)
+                        IdentityRing(displayName: myRoot.displayName, tier: myRoot.tier, size: 32,
+                                     photo: ProfilePhoto.shared.image)
                     }
                     .accessibilityLabel("Profile")
                     #if DEBUG
@@ -318,7 +319,8 @@ struct EstateHomeView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button(action: onOpenProfile) {
-                        IdentityRing(displayName: myRoot.displayName, tier: myRoot.tier, size: 32)
+                        IdentityRing(displayName: myRoot.displayName, tier: myRoot.tier, size: 32,
+                                     photo: ProfilePhoto.shared.image)
                     }
                     .accessibilityLabel("Profile")
                     #if DEBUG

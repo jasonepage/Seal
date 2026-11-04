@@ -53,6 +53,14 @@ Xcode; every change is copy, a removed unused function, or one modifier):
   blurred rounded square, because the square still showed on the
   simulator.
 
+- Profile photo (Jason asked for it the same day): `ProfilePhoto.shared`,
+  keychain `seal.avatar.<hash>`, loaded in `ContentView.setupEngines`,
+  wiped in `wipeLocalAndEngines`. Local only, so no privacy page or App
+  Store label change. Showing it to recipients needs a new sealed payload
+  field plus the web reader (`site/open/js`) and vectors, so it is not done.
+  Likeliest compile spot: the `PhotosPicker` and its `.onChange` in
+  ProfileView.
+
 Checked here: `python3 tools/check_house_rules.py` (232 files, pass),
 `git diff --check` (pass). No web, release or crypto files changed, so the
 web tests were not needed.

@@ -27,6 +27,9 @@ struct IdentityRing: View {
     /// toolbar) or an already-filtered in-person list (the forge log, the
     /// introduce picker).
     var linked: Bool = false
+    /// The owner's own picture (ProfilePhoto). Only the call sites that draw
+    /// the local user pass it; a friend never has one.
+    var photo: UIImage? = nil
 
     private var ringColor: Color { tier == .verified ? SealTheme.brass : SealTheme.silver }
 
@@ -34,9 +37,17 @@ struct IdentityRing: View {
         ZStack {
             Circle()
                 .fill(Color.white.opacity(0.06))
-            Text(String(displayName.prefix(1)).uppercased())
-                .font(.system(size: size * 0.42, weight: .semibold, design: .rounded))
-                .foregroundStyle(.white.opacity(0.9))
+            if let photo {
+                Image(uiImage: photo)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: size, height: size)
+                    .clipShape(Circle())
+            } else {
+                Text(String(displayName.prefix(1)).uppercased())
+                    .font(.system(size: size * 0.42, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.9))
+            }
             if linked {
                 Circle()
                     .strokeBorder(SealTheme.silver,
