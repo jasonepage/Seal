@@ -421,6 +421,29 @@ struct ProfileView: View {
         .padding(.horizontal, 24)
         .parentTapTarget()
 
+        // Moved here from People in 1.3. It only shares a link to the
+        // website, so it should not compete with Scan on the People screen.
+        ShareLink(item: FriendsView.inviteURL,
+                  subject: Text("Seal"),
+                  message: Text(FriendsView.inviteMessage)) {
+            HStack(spacing: 12) {
+                Image(systemName: "square.and.arrow.up")
+                    .foregroundStyle(SealTheme.silver)
+                Text("Tell someone about Seal")
+                    .foregroundStyle(.white.opacity(0.9))
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.3))
+            }
+            .font(.callout)
+            .padding(16)
+            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 24)
+        .parentTapTarget()
+
         // The purchase, reachable on purpose and not only from the seal
         // button. Somebody whose estate sealed before there was a price
         // never meets the paywall, and somebody who wants to pay ahead of

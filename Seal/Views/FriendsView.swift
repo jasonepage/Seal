@@ -49,10 +49,11 @@ struct FriendsView: View {
     /// Store URL: sealmessenger.com is already the WebAuthn relying party and
     /// already serves the landing page, so an invitation sent today still works
     /// after the distribution channel changes underneath it.
-    private static let inviteURL = URL(string: "https://sealmessenger.com")!
-    private static let inviteMessage = """
-        I'm putting my passwords and a few letters in sealed envelopes for when I'm \
-        gone, and I'd like you to hold one of the keys. Seal only works between \
+    /// Used by "Tell someone about Seal" on the You screen (ProfileView).
+    static let inviteURL = URL(string: "https://sealmessenger.com")!
+    static let inviteMessage = """
+        I'm keeping a few private letters and passwords sealed in an app called \
+        Seal, and I'd like you to hold one of the keys. It only works between \
         people who set it up face to face, so grab it and we'll take two minutes \
         next time we're together. sealmessenger.com
         """
@@ -195,26 +196,14 @@ struct FriendsView: View {
                     .tint(SealTheme.brass)
                     .parentTapTarget()
 
-                    // The growth loop, and the only thing here that works when the
-                    // other person has nothing installed. Not brass: sending an
-                    // invitation proves nothing and taps nobody's key.
-                    ShareLink(item: Self.inviteURL,
-                              subject: Text("Seal"),
-                              message: Text(Self.inviteMessage)) {
-                        Label("Invite someone who doesn't have Seal", systemImage: "square.and.arrow.up")
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 6)
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(.white)
-                    .parentTapTarget()
-
+                    // The invite link moved to the You screen in 1.3: it only
+                    // shares the website, so it does not belong beside Scan.
 
                     // For the daughter on Android in another state
                     // (SponsoredKeyView). Not brass: a key is about to be
                     // tapped, but not in front of the person it is for.
                     Button { showSponsored = true } label: {
-                        Label("Register a key for someone who is not here", systemImage: "key.viewfinder")
+                        Label("Set up a key for someone", systemImage: "key.viewfinder")
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 6)
                     }

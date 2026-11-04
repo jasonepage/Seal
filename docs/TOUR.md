@@ -171,7 +171,7 @@ Runs when: the People tab appears for the first time.
 |---|---|---|
 | 1 | "Your seal. Have them scan this." (the square code) | "Adding someone is done in person. They point their phone at this." |
 | 2 | "Scan their seal" | "Or you point yours at theirs. Either way, both of you end up in each other's People." |
-| 3 | "Register a key for someone who is not here" | "For someone far away or without an iPhone. You set up a spare key in their name and send it to them." |
+| 3 | "Set up a key for someone" | "For someone far away or without an iPhone. You set up a spare key in their name and send it to them." |
 
 ### 5.5 A person's screen, first time you make someone a key holder
 

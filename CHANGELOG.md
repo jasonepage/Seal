@@ -93,6 +93,10 @@ Dates are the day the work landed in the repository. Anything marked
 - Plain words where the copy still assumed every envelope opens after death:
   registration, the Keys tab help, the key holder screens, the role card for
   key holders and recipients, and the printed key holder page.
+- People: "Invite someone who doesn't have Seal" moved to the You screen as
+  "Tell someone about Seal", since it only shares the website. "Register a
+  key for someone who is not here" is now "Set up a key for someone". The
+  invitation text no longer says "for when I'm gone".
 - Harbor's eyes are smaller and scale with his size.
 - `tools/run_core_tests.sh` now compiles with `-default-isolation MainActor`,
   the same isolation the app target uses. Before, Swift 6 reported
