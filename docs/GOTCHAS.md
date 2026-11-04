@@ -166,8 +166,8 @@ once and is not now. The em dashes inside user-visible strings are gone too
 
 ## Demo mode
 
-- Type `SEALDEMO` as your name on the registration screen and tap **Set up with
-  Face ID**, or type it and tap Sign in. Either drops into a fully local demo
+- Type `SEALDEMO` as your name on the registration screen and tap **Continue with
+  Face ID**, or type it and tap "Already use Seal? Sign in". Either drops into a fully local demo
   account with no key, no Face ID and no network. Session-scoped: force quit to
   leave. The App Review notes name that button by its exact label, so renaming
   it means updating them.
