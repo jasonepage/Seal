@@ -194,6 +194,10 @@ struct AddKeyHolderFlow: View {
             Text("No phone needed for them. Type their name, tap the key twice, and give it to them later with the printed page.")
                 .font(.footnote).foregroundStyle(.white.opacity(0.45))
                 .fixedSize(horizontal: false, vertical: true)
+            // A physical product sold on the website (App Review 3.1.3(e)).
+            Link("No kit yet? Get one", destination: URL(string: "https://sealmessenger.com/give")!)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(SealTheme.brass)
             Button {
                 move(.scanning)
             } label: {

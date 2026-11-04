@@ -90,12 +90,17 @@ struct SponsoredKeyView: View {
                 Text("Whoever holds this key and its PIN is \(name.isEmpty ? "them" : name). Set a PIN on the key before you start. Give it the way you would give a house key.")
                     .font(.callout).foregroundStyle(.white.opacity(0.85))
                     .fixedSize(horizontal: false, vertical: true)
-                Text("The key cannot open anything by itself. Seal opens nothing before your key holders release everything. If the key is lost, hand them a new one and seal again while you are alive.")
+                Text("This key opens only what you wrote for \(name.isEmpty ? "them" : name), and only when your rule allows it. If the key is lost, set up a new one and seal again.")
                     .font(.callout).foregroundStyle(.white.opacity(0.65))
                     .fixedSize(horizontal: false, vertical: true)
                 Text("It needs a key that can carry a secret (a current YubiKey 5 can). Seal checks on the first tap and refuses a key that cannot, before anything is saved.")
                     .font(.caption).foregroundStyle(.white.opacity(0.45))
                     .fixedSize(horizontal: false, vertical: true)
+                // A physical product sold on the website, so a plain link is
+                // allowed here (App Review 3.1.3(e)).
+                Link("Need a key? Get a Seal kit", destination: URL(string: "https://sealmessenger.com/give")!)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(SealTheme.brass)
             }
             .padding(16)
             .background(SealTheme.brass.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))

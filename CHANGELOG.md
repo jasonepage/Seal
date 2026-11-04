@@ -106,6 +106,10 @@ Dates are the day the work landed in the repository. Anything marked
 - "Set up with my partner" is gone from the Keys tab; it only sent people to
   People. Couples add each other under People and make each other key
   holders, and the couple walkthrough now says exactly that.
+- "Set up a key for someone" and "Add a key holder" link to
+  sealmessenger.com/give for people who need a Seal kit. The key screen no
+  longer says the key opens nothing "before your key holders release
+  everything", which is not true of a Right away rule.
 - Harbor's eyes are smaller and scale with his size.
 - `tools/run_core_tests.sh` now compiles with `-default-isolation MainActor`,
   the same isolation the app target uses. Before, Swift 6 reported
