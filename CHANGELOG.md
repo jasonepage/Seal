@@ -83,8 +83,10 @@ Dates are the day the work landed in the repository. Anything marked
   each with a one line prompt and a check mark. A new envelope opens on the
   letter. The date card keeps its caveat under "A wish, not a lock".
   (`EnvelopeEditorView.swift`)
-- The rule screen is a short wizard: one question per screen, only the
-  questions the chosen kind needs, then a summary and "Save rule". The 7 and
+- The rule screen is a short wizard: one question per screen, then a
+  summary and "Save rule". A quiet rule asks only how long you can go quiet
+  and how many key holders must agree; warnings, the extra wait, objections
+  and the key check keep their defaults unless you tap "More options". The 7 and
   14 day silence caution and the rule of one caution are still shown.
   (`PolicyView.swift`)
 - Plain words where the copy still assumed every envelope opens after death:

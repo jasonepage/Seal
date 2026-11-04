@@ -38,6 +38,14 @@ Xcode; every change is copy, a removed unused function, or one modifier):
   issue. No clock code changed. The flag needs Swift 6.2 (Xcode 26).
 - AGENTS.md: "What Seal is" now names the three kinds of rule.
 
+- Rule wizard, later the same day (Jason: too complicated for lay people):
+  a quiet rule now asks 3 things (kind, how long quiet, how many agree)
+  and break glass 2, then the summary. Warnings, grace, objection and key
+  check keep their defaults and appear only after "More options" on the
+  summary (`showMore`). No model or release change. The default kind stays
+  "When I go quiet": Right away is free, so making it the default would
+  send most new users past the purchase.
+
 Checked here: `python3 tools/check_house_rules.py` (232 files, pass),
 `git diff --check` (pass). No web, release or crypto files changed, so the
 web tests were not needed.

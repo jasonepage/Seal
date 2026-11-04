@@ -18,6 +18,10 @@ struct PolicyView: View {
     @State private var policy: ReleasePolicy = ReleasePolicy(threshold: 1)
     @State private var problem: String?
     @State private var step = 0
+    /// Most people answer only the first few questions. The rest keep safe
+    /// defaults (21 days of warnings, 14 more, pause on an objection, a key
+    /// check every year) and show only after "More options" on the last step.
+    @State private var showMore = false
 
     private var custodianCount: Int { max(estateEngine.estate?.custodians.count ?? 0, 1) }
     /// The kind is chosen once, before the first seal (PRODUCT.md section 17).
@@ -33,9 +37,11 @@ struct PolicyView: View {
     private var questions: [Question] {
         switch policy.kind {
         case .quiet:
-            [.kind, .silence, .threshold, .warning, .grace, .objection, .confirmation, .review]
+            showMore
+                ? [.kind, .silence, .threshold, .warning, .grace, .objection, .confirmation, .review]
+                : [.kind, .silence, .threshold, .review]
         case .breakGlass:
-            [.kind, .threshold, .confirmation, .review]
+            showMore ? [.kind, .threshold, .confirmation, .review] : [.kind, .threshold, .review]
         case .rightAway:
             [.kind, .review]
         }
@@ -83,6 +89,7 @@ struct PolicyView: View {
             .onAppear {
                 policy = estateEngine.estate?.policy ?? ReleasePolicy(threshold: 1)
                 step = 0
+                showMore = false
             }
             .onChange(of: policy.kind) { _, _ in
                 problem = nil
@@ -175,6 +182,17 @@ struct PolicyView: View {
                     .font(.system(.title3, design: .rounded, weight: .semibold))
                     .foregroundStyle(SealTheme.brass)
                     .fixedSize(horizontal: false, vertical: true)
+                if !showMore && policy.kind != .rightAway {
+                    Button("More options") {
+                        withAnimation {
+                            showMore = true
+                            let first: Question = policy.kind == .quiet ? .warning : .confirmation
+                            step = questions.firstIndex(of: first) ?? step
+                        }
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .buttonStyle(.bordered)
+                }
             }
         }
 
