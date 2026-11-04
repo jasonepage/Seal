@@ -46,6 +46,13 @@ Xcode; every change is copy, a removed unused function, or one modifier):
   "When I go quiet": Right away is free, so making it the default would
   send most new users past the purchase.
 
+- First run, later again (Jason: the first card "said nothing"): the
+  card now explains Seal in three dots, and each role card is three plain
+  steps. Cards show their whole body again; only the six "Details" cards
+  are cut to one sentence. The art mask is a round fade instead of a
+  blurred rounded square, because the square still showed on the
+  simulator.
+
 Checked here: `python3 tools/check_house_rules.py` (232 files, pass),
 `git diff --check` (pass). No web, release or crypto files changed, so the
 web tests were not needed.

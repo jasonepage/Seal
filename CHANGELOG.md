@@ -72,12 +72,13 @@ Dates are the day the work landed in the repository. Anything marked
 
 ### Changed
 
-- First run is three short cards: what Seal is for, "Which one are you?",
-  and one card for the path picked. New painted artwork, feathered into the
-  dark background with no box around it. The price screen is gone from the
-  walkthrough; the price is shown at the purchase step. The full guide
-  ("How it works") shows one sentence per card, with a "Details" link only
-  on the warnings, backup key, key holder and recipient cards.
+- First run is three short cards: what Seal is (write it, choose when it
+  opens, only the person you wrote to can read it), "Which one are you?",
+  and three plain steps for the path picked. New painted artwork, faded
+  into the dark background with a round mask so no box shows. The price
+  screen is gone from the walkthrough; the price is shown at the purchase
+  step. In the full guide ("How it works"), the warnings, backup key, key
+  holder and recipient cards keep their fine print behind "Details".
   (`SealOnboardingView.swift`, `OnboardingCopyTests.swift`)
 - The envelope editor is a list of short cards that open one at a time,
   each with a one line prompt and a check mark. A new envelope opens on the

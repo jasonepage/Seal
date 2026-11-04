@@ -198,41 +198,73 @@ enum OnboardingScript {
     /// do tonight. Everything else stays reachable from "How it works."
     static func briefShared() -> [OnboardingScreen] {
         [
-            OnboardingScreen(
-                id: "why",
-                title: "Write something worth keeping.",
-                body: "A private letter, photos, your voice, or the things only you know.",
-                figure: .mark),
+            whyScreen,
             shared()[1],
         ]
     }
+
+    /// The first thing anybody reads. It has to say what Seal is in plain
+    /// words: you write something, you pick when it opens, nobody else reads it.
+    static var whyScreen: OnboardingScreen { OnboardingScreen(
+        id: "why",
+        title: "Private letters, opened on your terms.",
+        body: "Write something private today. Seal keeps it locked until the moment you choose.",
+        figure: .mark,
+        steps: [
+            "Write a letter. Add photos, your voice, or passwords.",
+            "Choose when it opens: right away, when people you trust agree, or if you stop checking in.",
+            "Only the person you wrote to can read it. Not us, and not Apple.",
+        ],
+        numbered: false) }
 
     static func brief(for role: OnboardingRole, numbers n: OnboardingNumbers, price: String? = nil) -> [OnboardingScreen] {
         switch role {
         case .sealer:
             return [OnboardingScreen(
                 id: "s.start",
-                title: "Write your first letter.",
-                body: "Pick a person and write one line. You can choose how it opens and add everything else later.",
-                figure: .envelope)]
+                title: "Your first letter takes a minute.",
+                body: "",
+                figure: .envelope,
+                steps: [
+                    "Pick a person and write a few lines.",
+                    "Choose when it may open.",
+                    "Tap Seal. You can add more any time.",
+                ])]
         case .couple:
             return [OnboardingScreen(
                 id: "c.start",
-                title: "Start on both phones.",
-                body: "Each of you writes your own envelope. Seal walks you through exchanging keys later.",
-                figure: .phones)]
+                title: "Set it up together.",
+                body: "",
+                figure: .phones,
+                steps: [
+                    "Each of you writes your own letters.",
+                    "Each of you holds a key for the other.",
+                    "Seal walks you both through it, step by step.",
+                ])]
         case .keyHolder:
             return [OnboardingScreen(
                 id: "k.start",
-                title: "Keep the key safe.",
-                body: "Seal tells you if it ever needs a tap. Until then, there is nothing to do.",
-                figure: .keep)]
+                title: "Someone trusts you with a key.",
+                body: "",
+                figure: .keep,
+                steps: [
+                    "Keep it somewhere safe, like a drawer you never clean out.",
+                    "Seal tells you if it is ever needed. Until then, there is nothing to do.",
+                    "Holding a key does not let you read their letters.",
+                ],
+                numbered: false)]
         case .recipient:
             return [OnboardingScreen(
                 id: "r.start",
-                title: "An envelope is waiting.",
-                body: "Keep Seal on your phone. We tell you when the writer's opening rule is met.",
-                figure: .envelope)]
+                title: "Someone wrote you a letter.",
+                body: "",
+                figure: .envelope,
+                steps: [
+                    "It stays sealed until the writer's rule says it may open.",
+                    "Keep Seal on your phone. We tell you when it is ready.",
+                    "Only you can read it.",
+                ],
+                numbered: false)]
         }
     }
 
@@ -240,11 +272,7 @@ enum OnboardingScript {
 
     static func shared() -> [OnboardingScreen] {
         [
-            OnboardingScreen(
-                id: "why",
-                title: "Private letters, opened on your terms.",
-                body: "Write now. Choose when each envelope may open. Seal cannot read what is inside.",
-                figure: .mark),
+            whyScreen,
             OnboardingScreen(
                 id: "ask",
                 title: "Which one are you?",
@@ -528,7 +556,9 @@ struct SealOnboardingView: View {
     /// not a toll the person must pay before pressing Next.
     private var bodyParts: (prompt: String, explanation: String?) {
         let body = screen.body.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let end = body.range(of: ". ") else { return (body, nil) }
+        // Only the cards with a Details link are cut short. Every other card
+        // shows its whole body; a lone first sentence explained nothing.
+        guard allowsExplanation, let end = body.range(of: ". ") else { return (body, nil) }
         let prompt = String(body[..<end.lowerBound]) + "."
         let explanation = String(body[end.upperBound...])
         return (prompt, explanation.isEmpty ? nil : explanation)
@@ -701,12 +731,13 @@ struct SealOnboardingView: View {
             .resizable()
             .scaledToFit()
             .frame(width: height, height: height)
-            // The generated paintings have a vignette. Feather its square
-            // edge into Seal's ink so the subject floats without a card.
+            // The paintings have a warm glow that runs to their square edge.
+            // A round fade that is fully clear by the edge leaves no box.
             .mask {
-                RoundedRectangle(cornerRadius: 42, style: .continuous)
-                    .blur(radius: 18)
-                    .padding(8)
+                RadialGradient(stops: [.init(color: .black, location: 0),
+                                       .init(color: .black, location: 0.62),
+                                       .init(color: .clear, location: 1)],
+                               center: .center, startRadius: 0, endRadius: height / 2)
             }
     }
 
