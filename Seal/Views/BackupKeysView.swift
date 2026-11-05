@@ -224,6 +224,8 @@ struct BackupKeysSection: View {
         guard !DemoFixtures.isActive else { return }
         do {
             backups = try await sync.fetchBackupCredentials(credentialIDHash: myRoot.credentialIDHash)
+            // So the You screen and Harbor know at once (IdentityManager).
+            ceremony.identity.adoptBackups(backups)
             loadError = nil
         } catch {
             // Don't claim there are no backup keys when we simply couldn't

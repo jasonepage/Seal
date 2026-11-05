@@ -164,6 +164,17 @@ final class IdentityManager {
         // TODO(SyncEngine): publish Identity record to CloudKit public DB (FR-4)
     }
 
+    /// The backup keys the directory lists right now, already verified and
+    /// revocation-filtered by `fetchIdentity`. In memory only, as FR-3 asks:
+    /// the keychain copy never stores them. 1.3: before this nothing put them
+    /// back after a launch or after adding one, so "Protect your account" and
+    /// Harbor's "add a backup key" never went away.
+    func adoptBackups(_ backups: [BackupCredential]) {
+        guard var root = rootIdentity else { return }
+        root.backupCredentials = backups.isEmpty ? nil : backups
+        rootIdentity = root
+    }
+
     /// Change the display name after registration and persist it. The name is
     /// metadata only, it's NOT part of any signature, the endorsement
     /// commitment, or the credential hash, so renaming never affects

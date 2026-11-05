@@ -143,6 +143,12 @@ struct HomeView: View {
                                     people: friendStore.friends.map(\.identity.credentialIDHash),
                                     sync: sync)
         }
+        // The backup keys the directory lists, so "Protect your account" and
+        // Harbor's backup step go away once there is one (1.3). Read only.
+        if !DemoFixtures.isActive,
+           let backups = try? await sync.fetchBackupCredentials(credentialIDHash: myRoot.credentialIDHash) {
+            identity.adoptBackups(backups)
+        }
         answerCheckInRequest()
         // The heartbeat just moved, so the owner's own reminders are measured
         // again from now (OwnerNotices). Nothing is posted here; three

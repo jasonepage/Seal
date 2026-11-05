@@ -166,6 +166,11 @@ Dates are the day the work landed in the repository. Anything marked
   (`Seal/Identity/PersonPhotos.swift`)
 - "Make Dad a key holder?" no longer says the key opens things only after
   a long silence; it says "when this rule allows", true of Break glass too.
+- "Protect your account" and Harbor's "add a backup key" now go away once a
+  backup key exists. The phone never stores backup keys (FR-3), and nothing
+  read them back after a launch or after adding one, so the prompt stayed
+  forever. Every refresh and the backup key page now read them from the
+  directory into memory. (`IdentityManager.adoptBackups`)
 - Harbor's eyes are smaller and scale with his size.
 - `tools/run_core_tests.sh` now compiles with `-default-isolation MainActor`,
   the same isolation the app target uses. Before, Swift 6 reported
