@@ -153,6 +153,12 @@ Dates are the day the work landed in the repository. Anything marked
 - The seal bar no longer shows a dimmed Seal button when a rule has no key
   holder. It says "Break glass needs a key holder first." and its button is
   "Add key holder", which opens the guided flow for that rule.
+- A person's page looks across all three rules: their envelopes on any
+  rule (each tagged with its rule), their key holder status, and taking
+  them off removes them from every rule. Recording a key handover counts
+  for every rule they hold a key for, since it is one physical key, so
+  Harbor no longer asks to record a handover that was already recorded.
+  (`PersonView.swift`, `EstateEngines.KeyHolderRow`)
 - Harbor's eyes are smaller and scale with his size.
 - `tools/run_core_tests.sh` now compiles with `-default-isolation MainActor`,
   the same isolation the app target uses. Before, Swift 6 reported

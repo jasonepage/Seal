@@ -38,9 +38,16 @@ struct PersonView: View {
     @Environment(\.parentMode) private var parentMode
 
     private var hash: String { person.identity.credentialIDHash }
-    private var custodian: Custodian? { estateEngine.estate?.custodians.first { $0.rootHash == hash } }
-    private var isRecipient: Bool { estateEngine.estate?.recipients.contains { $0.rootHash == hash } ?? false }
-    private var envelopes: [Envelope] { estateEngine.estate?.envelopes(for: hash) ?? [] }
+    // Across every rule (1.3: there are always three). One person holds one
+    // physical key, so a handover recorded on any rule counts.
+    private var custodian: Custodian? {
+        let all = engines.compactMap { $0.estate?.custodians.first { $0.rootHash == hash } }
+        return all.first { $0.handoverReceiptID != nil } ?? all.first
+    }
+    private var isRecipient: Bool {
+        engines.contains { $0.estate?.recipients.contains { $0.rootHash == hash } ?? false }
+    }
+    private var envelopes: [Envelope] { engines.flatMap { $0.estate?.envelopes(for: hash) ?? [] } }
     /// Read live from the store, not from `person`, which is a copy taken
     /// when the row was tapped.
     private var goneAt: Date? { friendStore.goneDate(hash) }
@@ -183,7 +190,7 @@ struct PersonView: View {
                         .font(.caption).foregroundStyle(.white.opacity(0.45)).fixedSize(horizontal: false, vertical: true)
                     if let kitError { Text(kitError).font(.caption).foregroundStyle(.orange) }
                 }
-                Button(role: .destructive) { estateEngine.removeCustodian(hash) } label: {
+                Button(role: .destructive) { for engine in engines { engine.removeCustodian(hash) } } label: {
                     Text("Take \(person.identity.displayName) off your key holders").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered).tint(.orange)
@@ -268,15 +275,15 @@ struct PersonView: View {
                 // Position in the list, not the stored revealOrder: that
                 // number starts at zero and can have gaps after a delete or
                 // a reorder, and "opens 0th" was on a real screen.
-                ForEach(Array(envelopes.enumerated()), id: \.element.id) { position, e in
+                ForEach(envelopes, id: \.id) { e in
                     HStack {
                         Image(systemName: e.sealed ? "envelope.fill" : "envelope.badge").foregroundStyle(SealTheme.brass)
                         Text(e.title).foregroundStyle(.white)
                         Spacer()
-                        Text("opens \(ordinal(position + 1))").font(.caption).foregroundStyle(.white.opacity(0.4))
+                        Text(ruleLabel(for: e)).font(.caption).foregroundStyle(.white.opacity(0.4))
                     }
                 }
-                Text("They open on \(person.identity.displayName)'s phone, in this order, only after release. Nobody else, including the key holders, learns these exist.")
+                Text("Each one opens on \(person.identity.displayName)'s phone when its rule allows. Nobody else, including the key holders, learns these exist.")
                     .font(.caption).foregroundStyle(.white.opacity(0.45)).fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -294,6 +301,12 @@ struct PersonView: View {
         case 5: "fifth"
         default: "\(n)th"
         }
+    }
+
+    /// The rule an envelope is on, by its kind.
+    private func ruleLabel(for envelope: Envelope) -> String {
+        engines.first { $0.estate?.envelopes.contains { $0.id == envelope.id } ?? false }?
+            .estate?.policy.kind.label ?? ""
     }
 
     private func makeKit() {
@@ -317,7 +330,9 @@ struct PersonView: View {
             let store = ReceiptStore(ownerHash: myRoot.credentialIDHash)
             store.loadIfNeeded()
             store.add(receipt)
-            estateEngine.setHandoverReceipt(receipt.receiptID, for: hash)
+            // One key in their hand, so the record counts for every rule
+            // they hold a key for.
+            for engine in engines { engine.setHandoverReceipt(receipt.receiptID, for: hash) }
             if let fetched = try? await sync.fetchIdentity(credentialIDHash: hash) {
                 _ = try? await ReceiptService.publish(receipt, photo: nil,
                                                       receiverEndorsements: fetched.1, sync: sync)

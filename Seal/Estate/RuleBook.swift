@@ -371,13 +371,14 @@ final class EstateEngines {
         let custodian: Custodian
         let engines: [EstateEngine]
         var id: String { custodian.rootHash }
-        var ruleNames: [String] { engines.map(\.slot.name) }
+        var ruleNames: [String] { engines.map { $0.estate?.policy.kind.label ?? $0.slot.name } }
         /// The engine whose page opens for this person: the default rule's
         /// when they hold a key for it, otherwise the first.
         var primary: EstateEngine { engines.first { $0.slot.isDefault } ?? engines[0] }
-        /// Signed on every rule they hold a key for.
+        /// Signed on any rule they hold a key for: it is one physical key,
+        /// handed over once (1.3, now that there are always three rules).
         var handoverSigned: Bool {
-            engines.allSatisfy { engine in
+            engines.contains { engine in
                 engine.estate?.custodians.first { $0.rootHash == custodian.rootHash }?.handoverReceiptID != nil
             }
         }
