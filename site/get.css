@@ -26,6 +26,7 @@
 .key-callout{padding:96px max(28px,calc((100vw - 760px)/2));text-align:center;background:#eee2ce}
 .key-callout>p:not(.key-section-number){max-width:600px;margin:20px auto 30px;color:#625b52;font-size:18px}
 .key-callout .key-primary{display:inline-block}
+.key-callout-dark{color:#f6efe4;background:#191612}.key-callout-dark>p:not(.key-section-number){color:#bfb6aa}
 .key-callout small{display:block;margin-top:16px;color:#8a8176;font-size:14px}
 .key-harbor .harbor-stage{width:min(100%,570px);margin:auto}
 .key-harbor img{width:100%;border-radius:0;filter:drop-shadow(0 24px 26px rgba(0,0,0,.45))}
