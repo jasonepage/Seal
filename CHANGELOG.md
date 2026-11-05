@@ -150,6 +150,9 @@ Dates are the day the work landed in the repository. Anything marked
   `RuleSheet.swift`, `PolicyView.swift`, `Estate.hasUnsealedChanges`)
 - A new owner's first rule is Break glass instead of When I go quiet.
   Sets that already exist keep their kind. (`EstateEngine.createEstateIfNeeded`)
+- The seal bar no longer shows a dimmed Seal button when a rule has no key
+  holder. It says "Break glass needs a key holder first." and its button is
+  "Add key holder", which opens the guided flow for that rule.
 - Harbor's eyes are smaller and scale with his size.
 - `tools/run_core_tests.sh` now compiles with `-default-isolation MainActor`,
   the same isolation the app target uses. Before, Swift 6 reported

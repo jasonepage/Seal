@@ -56,6 +56,9 @@ struct EstateHomeView: View {
     /// setup card and the Keys tab open this when there is one rule; the
     /// picker above stays for the several-rules case.
     @State private var showGuidedKeyHolder = false
+    /// The rule the guided key holder flow adds to, when it is not the
+    /// default one (the seal bar sends the rule that is missing a key holder).
+    @State private var keyHolderEngine: EstateEngine?
     @State private var pendingKeyHolder: FriendStore.StoredFriend?
     @State private var showRecipientPicker = false
     /// What the recipient picker is being used for this time: the blank
@@ -576,23 +579,33 @@ struct EstateHomeView: View {
         let ready = notReady == nil && !DemoFixtures.isActive
         let reason: String = {
             guard let notReady else { return "Only on this phone until you do." }
+            let rule = notReady.estate?.policy.kind.label ?? notReady.slot.name
             if notReady.estate?.opensRightAway == true {
-                return engines.rules.count > 1
-                    ? "Write an envelope to someone for \(notReady.slot.name) first."
-                    : "Write an envelope to someone first."
+                return "Write an envelope to someone first."
             }
-            return engines.rules.count > 1
-                ? "Add a key holder for \(notReady.slot.name) on the Keys tab first."
-                : "Add a key holder on the Keys tab first."
+            return "\(rule) needs a key holder first."
         }()
         return HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(unsealed > 0 ? (unsealed == 1 ? "1 envelope not sealed" : "\(unsealed) envelopes not sealed") : "Seal again")
                     .font(.subheadline.weight(.semibold)).foregroundStyle(.white)
                 Text(reason)
-                    .font(.caption).foregroundStyle(.white.opacity(0.55)).lineLimit(1)
+                    .font(.caption).foregroundStyle(.white.opacity(0.55)).lineLimit(2)
             }
             Spacer()
+            // Not ready because a rule has no key holder: the button is the
+            // way to fix that, not a dimmed Seal nobody can read (1.3).
+            if let notReady, !DemoFixtures.isActive, !(notReady.estate?.opensRightAway ?? false) {
+                Button {
+                    keyHolderEngine = notReady
+                    showGuidedKeyHolder = true
+                } label: {
+                    Text("Add key holder").font(.system(.headline, design: .rounded))
+                        .padding(.horizontal, 14).padding(.vertical, 10)
+                }
+                .buttonStyle(.borderedProminent).tint(SealTheme.brass).foregroundStyle(SealTheme.ink)
+                .parentTapTarget(48)
+            } else {
             Button { runSeal() } label: {
                 HStack(spacing: 6) {
                     if sealing { ProgressView().tint(SealTheme.ink) }
@@ -603,6 +616,7 @@ struct EstateHomeView: View {
             .buttonStyle(.borderedProminent).tint(SealTheme.brass).foregroundStyle(SealTheme.ink)
             .disabled(sealing || !ready)
             .parentTapTarget(48)
+            }
         }
         .padding(.horizontal, 16).padding(.vertical, 12)
         .background(.ultraThinMaterial.opacity(0.9), in: RoundedRectangle(cornerRadius: 16))
@@ -833,8 +847,8 @@ struct EstateHomeView: View {
             // when there is more than one.
             .sheet(isPresented: $showGuidedKeyHolder) {
                 AddKeyHolderFlow(myRoot: myRoot, ceremony: ceremony, sync: sync,
-                                 friendStore: friendStore, estateEngine: estateEngine,
-                                 onClose: { showGuidedKeyHolder = false })
+                                 friendStore: friendStore, estateEngine: keyHolderEngine ?? estateEngine,
+                                 onClose: { showGuidedKeyHolder = false; keyHolderEngine = nil })
                     .environment(\.parentMode, parentMode)
                     .parentTypeScale()
             }
