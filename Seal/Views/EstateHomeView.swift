@@ -875,8 +875,8 @@ struct EstateHomeView: View {
                 isPresented: Binding(get: { pendingKeyHolder != nil }, set: { if !$0 { pendingKeyHolder = nil } }),
                 titleVisibility: .visible
             ) {
-                ForEach(engines.all.filter { !($0.estate?.opensRightAway ?? false) }, id: \.storeHash) { engine in
-                    Button(engine.slot.name) {
+                ForEach(engines.ordered.filter { !($0.estate?.opensRightAway ?? false) }, id: \.storeHash) { engine in
+                    Button(engine.ruleLabel) {
                         if let friend = pendingKeyHolder { engine.addCustodian(friend.identity) }
                         pendingKeyHolder = nil
                     }
@@ -1369,7 +1369,7 @@ struct EstateHomeView: View {
         let state = engine.ownerState
         let snapshot = engine.ownerSnapshot
         let estate = engine.estate
-        let ruleName: String? = engines.rules.count > 1 ? engine.slot.name : nil
+        let ruleName: String? = engines.rules.count > 1 ? engine.ruleLabel : nil
         return VStack(alignment: .leading, spacing: 10) {
             if let ruleName {
                 Text(ruleName).font(.caption.weight(.semibold)).foregroundStyle(.white.opacity(0.5))
@@ -1709,7 +1709,7 @@ struct EstateHomeView: View {
                     do {
                         try await engine.sealAndPublish()
                     } catch {
-                        if engines.rules.count > 1 { throw SealRuleError(rule: engine.slot.name, underlying: error) }
+                        if engines.rules.count > 1 { throw SealRuleError(rule: engine.ruleLabel, underlying: error) }
                         throw error
                     }
                 }
@@ -1830,7 +1830,7 @@ struct EstateHomeView: View {
         let able = estate.custodians.count - unresponsive.count
         if !unresponsive.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
-                Label((engines.rules.count > 1 ? "\(engine.slot.name): " : "") + (unresponsive.count == 1
+                Label((engines.rules.count > 1 ? "\(engine.ruleLabel): " : "") + (unresponsive.count == 1
                       ? "1 of your \(estate.custodians.count) key holders may not be able to help."
                       : "\(unresponsive.count) of your \(estate.custodians.count) key holders may not be able to help."),
                       systemImage: "exclamationmark.triangle.fill")

@@ -408,3 +408,10 @@ final class EstateEngines {
         OwnerNotices.wipe(ownerHash: engine.storeHash)
     }
 }
+
+extension EstateEngine {
+    /// The name a person sees for this rule: its kind ("Break glass",
+    /// "Right away", "When I go quiet"). Never the stored slot name, which is
+    /// "Your rule" for the first one and meant nothing to anybody (1.3).
+    var ruleLabel: String { estate?.policy.kind.label ?? slot.name }
+}

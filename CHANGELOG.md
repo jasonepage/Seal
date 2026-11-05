@@ -171,6 +171,9 @@ Dates are the day the work landed in the repository. Anything marked
   read them back after a launch or after adding one, so the prompt stayed
   forever. Every refresh and the backup key page now read them from the
   directory into memory. (`IdentityManager.adoptBackups`)
+- "Your rule" is gone from every screen. Rules are named only by their kind
+  (Break glass, Right away, When I go quiet), including "Which rule does Dad
+  hold a key for?", the status cards and seal errors. (`EstateEngine.ruleLabel`)
 - Harbor's eyes are smaller and scale with his size.
 - `tools/run_core_tests.sh` now compiles with `-default-isolation MainActor`,
   the same isolation the app target uses. Before, Swift 6 reported
