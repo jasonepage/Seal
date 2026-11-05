@@ -140,6 +140,11 @@ Dates are the day the work landed in the repository. Anything marked
   The contents stay sealed and still cannot be edited on the new phone;
   only the "I am here" line moves. The sign-out message says so.
   (`Seal/Estate/OwnedSets.swift`, `HomeView.refreshEverything`)
+- Your rules: "Make a new rule" asks how it should open (Right away, Break
+  glass, When I go quiet) and names it for that, instead of a text box
+  with "Sooner". With an envelope open, the envelope moves into the new
+  rule at once. A right away rule's card no longer shows Numbers and Key
+  holders buttons, or the line about handing out keys. (`RuleSheet.swift`)
 - Harbor's eyes are smaller and scale with his size.
 - `tools/run_core_tests.sh` now compiles with `-default-isolation MainActor`,
   the same isolation the app target uses. Before, Swift 6 reported

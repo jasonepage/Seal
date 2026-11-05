@@ -65,15 +65,15 @@ struct RuleSheet: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         Text(current == nil
-                             ? "A rule is one set of keys: how long a silence, how many warnings, and who holds a key. Every envelope is on one rule."
-                             : "This envelope opens under the rule marked below. Pick another to move it there.")
+                             ? "A rule decides when envelopes open. Each envelope uses one rule."
+                             : "This envelope uses the rule marked below. Pick another to change it.")
                             .font(.callout).foregroundStyle(.white.opacity(0.7))
                             .fixedSize(horizontal: false, vertical: true)
                         ForEach(engines.all, id: \.storeHash) { engine in
                             ruleCard(engine)
                         }
                         if engines.canAdd { addRow }
-                        Text("Every rule is its own set of keys. Your key holders tap once per rule, and each rule shows on their phone as its own line. Up to three.")
+                        Text("Up to three rules. Your key holders tap once for each rule they hold a key for.")
                             .font(.caption).foregroundStyle(.white.opacity(0.4))
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -96,14 +96,13 @@ struct RuleSheet: View {
                     .environment(\.parentMode, parentMode)
                     .parentTypeScale()
             }
-            .alert("Name the new rule", isPresented: $showAdd) {
-                TextField(RuleSlot.suggestedSecondName, text: $nameDraft)
-                Button("Add") {
-                    if let engine = engines.addRule(named: nameDraft) { policyFor = RuleRef(engine: engine) }
+            // 1.3: a new rule is picked by how it opens, and named for it.
+            // No typing. Rename stays in the card's menu.
+            .confirmationDialog("How should the new rule open?", isPresented: $showAdd, titleVisibility: .visible) {
+                ForEach(addableKinds, id: \.self) { kind in
+                    Button(kind.label) { addRule(kind) }
                 }
                 Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("It starts with a short rule: the shortest silence, one week of warnings, no extra quiet days. You can change the numbers next, then pick who holds a key for it.")
             }
             .alert("Rename this rule", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
                 TextField("Name", text: $nameDraft)
@@ -198,6 +197,8 @@ struct RuleSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            // A right away rule has no numbers to set and no key holders.
+            if !(estate?.opensRightAway ?? false) {
             HStack(spacing: 10) {
                 Button { policyFor = RuleRef(engine: engine) } label: {
                     Label("Numbers", systemImage: "slider.horizontal.3").frame(maxWidth: .infinity)
@@ -215,6 +216,7 @@ struct RuleSheet: View {
 
             if holdersOpen.contains(engine.storeHash) {
                 holderToggles(engine)
+            }
             }
 
             if let refusal, !engine.slot.isDefault, several {
@@ -281,16 +283,40 @@ struct RuleSheet: View {
         .padding(.top, 4)
     }
 
+    /// The kinds no rule uses yet, or all three if every kind is taken.
+    private var addableKinds: [ReleasePolicy.Kind] {
+        let used = Set(engines.all.compactMap { $0.estate?.policy.kind })
+        let open = ReleasePolicy.Kind.allCases.filter { !used.contains($0) }
+        return open.isEmpty ? ReleasePolicy.Kind.allCases : open
+    }
+
+    /// Makes the rule, named for its kind, and shapes it. With an envelope
+    /// in hand the envelope moves straight into it; otherwise the numbers
+    /// open next, except for right away, which has none.
+    private func addRule(_ kind: ReleasePolicy.Kind) {
+        guard let engine = engines.addRule(named: kind.label), let estate = engine.estate else { return }
+        do {
+            try engine.setPolicy(estate.policy.shaped(as: kind))
+        } catch {
+            problem = error.localizedDescription
+            return
+        }
+        if current != nil {
+            do { try onMove?(engine) } catch { problem = error.localizedDescription }
+        } else if kind != .rightAway {
+            policyFor = RuleRef(engine: engine)
+        }
+    }
+
     private var addRow: some View {
         Button {
-            nameDraft = engines.rules.count == 1 ? RuleSlot.suggestedSecondName : ""
             showAdd = true
         } label: {
             HStack(spacing: 14) {
                 Image(systemName: "plus.circle").font(.title3).foregroundStyle(.white.opacity(0.7)).frame(width: 28)
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Make a new rule").font(.headline).foregroundStyle(.white)
-                    Text("For the bills and the medical papers, say, so they can open sooner than the letters.")
+                    Text("Right away, when your key holders agree, or if you go quiet.")
                         .font(.caption).foregroundStyle(.white.opacity(0.55))
                         .fixedSize(horizontal: false, vertical: true)
                 }
