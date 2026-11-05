@@ -192,6 +192,18 @@ Dates are the day the work landed in the repository. Anything marked
 - The sealed confirmation is a full sheet now, so its two buttons fit with
   Bigger text on a small phone.
 
+## Web, with 1.3
+
+- Each card on sealmessenger.com/open names its rule beside the writer
+  (Break glass, Right away, When I go quiet), so two sets from one person
+  are no longer two identical cards.
+- The step before signing (start a claim, object) is one calm panel: the
+  line that must not be missed in an orange box ("This opens the envelopes
+  right away." for break glass), a full-width text box with an example, who
+  can read the note, and the two buttons side by side. Copy and layout
+  only; nothing about what is signed changed. (`site/open/js/app.js`,
+  `site/open/open.css`)
+
 ## Web 1.2b, key holders on the web (live 2026-10-17)
 
 ### Added

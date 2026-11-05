@@ -380,10 +380,12 @@ function holderActions(j, now) {
   return out;
 }
 
+// What each step says before it is signed. `warn` is the one line a person
+// must not miss; `field` asks for a note; `hint` says who can read it.
 const ASK = {
-  claim: { line: "This starts the release. The writer is warned every day for weeks, and one check-in from them stops it. Only do this if you believe they are gone.", field: "Why are you starting it? (everyone in the record can read this)", go: "Start the claim" },
-  claimGlass: { line: "This starts a break glass release. There is no waiting: it opens the moment enough key holders tap their keys, and the writer cannot stop it. Only do this if it is really needed.", field: "Why are you starting it? (everyone in the record can read this)", go: "Start the claim" },
-  object: { line: "This puts the release on hold while your objection stands.", field: "A note (everyone in the record can read this)", go: "Object" },
+  claim: { warn: "This starts the release.", line: "The writer is warned every day for weeks, and one check-in from them stops it. Only do this if you believe they are gone.", field: "Why are you starting it?", hint: "Everyone in the record can read this.", example: "For example: we have not heard from Mom since March.", go: "Start the claim" },
+  claimGlass: { warn: "This opens the envelopes right away.", line: "There is no waiting. Once enough key holders tap their keys, the envelopes open, and the writer cannot stop it. Only do this if it is really needed.", field: "Why are you starting it?", hint: "Everyone in the record can read this.", example: "For example: Dad is in the hospital and we need the bills.", go: "Start the claim" },
+  object: { line: "This puts the release on hold while your objection stands.", field: "A note", hint: "Everyone in the record can read this.", go: "Object" },
   withdraw: { line: "This takes back your objection. The countdown goes on.", go: "Withdraw it" },
   tap: { line: "Your key, tapped here, is one of the keys that opens the envelopes. You will tap it once more to sign.", go: "Tap my key" },
   release: { line: "This combines the keys and opens the envelopes for everyone they were written to. It cannot be undone.", go: "Release" },
@@ -394,17 +396,24 @@ function actionButton(j, action, label, primary = false) {
   return h("button", { class: primary ? "cta" : "cta ghost", type: "button", on: { click: () => askFirst(j, action) } }, label);
 }
 
+/** The rule's name, as the app shows it. */
+const KIND_LABEL = { quiet: "When I go quiet", breakGlass: "Break glass", rightAway: "Right away" };
+const kindPill = (j) => h("span", { class: "pill" }, KIND_LABEL[j.kind] ?? KIND_LABEL.quiet);
+
 function askFirst(j, action) {
   const a = action === "claim" && j.kind === "breakGlass" ? ASK.claimGlass : ASK[action];
-  const input = a.field ? h("textarea", { rows: 3, maxlength: 500, "aria-label": a.field }) : null;
+  const input = a.field ? h("textarea", { rows: 4, maxlength: 500, placeholder: a.example ?? "" }) : null;
   show(
-    h("h2", {}, `From ${j.ownerName || "someone"}`),
-    h("p", {}, a.line),
-    a.field ? h("p", { class: "small" }, a.field) : null,
-    input,
-    h("p", {},
-      h("button", { class: "cta", type: "button", on: { click: () => act(j, action, input?.value?.trim() ?? "").catch(failedAction) } }, a.go),
-      h("button", { class: "cta ghost", type: "button", on: { click: () => refresh().catch(failed) } }, "Back"),
+    h("div", { class: "ask" },
+      h("h2", {}, `From ${j.ownerName || "someone"}`, kindPill(j)),
+      a.warn
+        ? h("div", { class: "warn", role: "note" }, h("b", {}, a.warn), h("p", {}, a.line))
+        : h("p", {}, a.line),
+      a.field ? h("label", {}, a.field, input, a.hint ? h("span", { class: "hint" }, a.hint) : null) : null,
+      h("div", { class: "actions" },
+        h("button", { class: "cta", type: "button", on: { click: () => act(j, action, input?.value?.trim() ?? "").catch(failedAction) } }, a.go),
+        h("button", { class: "cta ghost", type: "button", on: { click: () => refresh().catch(failed) } }, "Back"),
+      ),
     ),
   );
 }
@@ -438,7 +447,7 @@ async function list(judged, now) {
     const holder = j.roles.has("custodian");
     const open = recipient && j.state === "released" && j.openingAllowed;
     items.push(h("div", { class: "card" },
-      h("h3", {}, `From ${j.ownerName || "someone"}`),
+      h("h3", {}, `From ${j.ownerName || "someone"}`, kindPill(j)),
       h("p", { class: "small" }, [recipient ? "They wrote to you." : null, holder ? "You hold one of their keys." : null].filter(Boolean).join(" ")),
       words ? h("p", { class: "small" }, `Their words: ${words}. In the app these show under their seal as "Your words". If you know theirs, check they match.`) : null,
       h("p", {}, stateLine(j, now)),
