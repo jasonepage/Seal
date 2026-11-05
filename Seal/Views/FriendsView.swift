@@ -70,6 +70,7 @@ struct FriendsView: View {
     @State private var recordFor: FriendStore.StoredFriend?
     /// Register a spare key as somebody who is not here (SponsoredKeyView).
     @State private var showSponsored = false
+    @State private var showFindKey = false
     @Environment(\.openURL) private var openURL
     /// Circle isn't reachable in Parent Mode (HomeView renders the chat list
     /// alone), so this is belt and braces, but the rule "accepting an
@@ -103,6 +104,10 @@ struct FriendsView: View {
             .sheet(isPresented: $showSponsored) {
                 SponsoredKeyView(myRoot: myRoot, ceremony: ceremony, sync: sync, friendStore: friendStore,
                                  onClose: { showSponsored = false })
+            }
+            .sheet(isPresented: $showFindKey) {
+                FindKeyOwnerView(ceremony: ceremony, sync: sync, friendStore: friendStore,
+                                 onClose: { showFindKey = false })
             }
             .sheet(item: $recordFor) { friend in
                 NavigationStack {
@@ -209,6 +214,16 @@ struct FriendsView: View {
                     }
                     .buttonStyle(.bordered)
                     .tint(.white)
+                    .parentTapTarget()
+
+                    // A person whose key you set up before, gone from People
+                    // after a sign-out or a new iPhone (FindKeyOwnerView).
+                    Button { showFindKey = true } label: {
+                        Text("Already set up a key? Tap it to add them back")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(SealTheme.brass)
+                            .multilineTextAlignment(.center)
+                    }
                     .parentTapTarget()
 
                     Button { stage = .guide } label: {

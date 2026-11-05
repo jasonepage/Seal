@@ -152,7 +152,7 @@ struct ProfileView: View {
                     onSignOut()
                 }
             } message: {
-                Text("This erases your envelopes and people from this iPhone, and they do not come back. Your account stays. Sign in again with your key or \(Biometry.name).")
+                Text("This erases your envelopes and people from this iPhone, and they do not come back. Envelopes you already sealed keep their rule, and this iPhone can no longer check in for them. Your account stays. Sign in again with your key or \(Biometry.name).")
             }
             // Account deletion (App Review 5.1.1(v)). The decision and every
             // warning are unchanged; only the screen leading here got simpler.

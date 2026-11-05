@@ -49,6 +49,7 @@ struct AddKeyHolderFlow: View {
     /// registered. The flow moves on from the sheet's onDismiss, because a
     /// stage change under a sheet that is still closing is easy to lose.
     @State private var showKitKey = false
+    @State private var showFindKey = false
     @State private var kitPerson: RootIdentity?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -98,6 +99,16 @@ struct AddKeyHolderFlow: View {
             SponsoredKeyView(myRoot: myRoot, ceremony: ceremony, sync: sync, friendStore: friendStore,
                              onClose: { showKitKey = false },
                              onRegistered: { kitPerson = $0 })
+        }
+        .sheet(isPresented: $showFindKey, onDismiss: {
+            if let person = kitPerson {
+                kitPerson = nil
+                move(.confirm(person))
+            }
+        }) {
+            FindKeyOwnerView(ceremony: ceremony, sync: sync, friendStore: friendStore,
+                             onClose: { showFindKey = false },
+                             onFound: { kitPerson = $0 })
         }
     }
 
@@ -194,6 +205,14 @@ struct AddKeyHolderFlow: View {
             Text("No phone needed for them. Type their name, tap the key twice, and give it to them later with the printed page.")
                 .font(.footnote).foregroundStyle(.white.opacity(0.45))
                 .fixedSize(horizontal: false, vertical: true)
+            // Their key was set up before, but they are gone from People
+            // (a sign-out, a new iPhone). One tap brings them back.
+            Button { showFindKey = true } label: {
+                Text("Already set up their key? Tap it")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(SealTheme.brass)
+            }
+            .disabled(DemoFixtures.isActive)
             // A physical product sold on the website (App Review 3.1.3(e)).
             Link("No kit yet? Get one", destination: URL(string: "https://sealmessenger.com/give")!)
                 .font(.footnote.weight(.semibold))

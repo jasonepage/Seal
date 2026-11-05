@@ -61,6 +61,21 @@ Xcode; every change is copy, a removed unused function, or one modifier):
   Likeliest compile spot: the `PhotosPicker` and its `.onChange` in
   ProfileView.
 
+- Add someone back by tapping their key (Jason hit it with his dad's kit
+  key after a sign-out). `findKeyOwner`: security key assertion over a
+  random challenge with every live directory credential allowed, then
+  refuses a backup key, the owner's own key, a retired account, a key that
+  fails to verify against the published key or this phone's pin, and an
+  account with no sponsored endorsement (those people have the app and a
+  seal to scan). Adds to People with `sponsored: true`. Writes nothing to
+  the directory. Likeliest compile spots: the `guard let (root,
+  endorsements)` line and the toolbar placement ternary in
+  FindKeyOwnerView.
+- Found while doing it: after a sign-out the old sealed set gets no more
+  check-ins (`heartbeat` writes only to the local estate), so it runs on
+  its rule. The sign-out dialog now says so. Bringing the owner's own
+  sealed set back onto a new phone is the real fix; not built.
+
 Checked here: `python3 tools/check_house_rules.py` (232 files, pass),
 `git diff --check` (pass). No web, release or crypto files changed, so the
 web tests were not needed.

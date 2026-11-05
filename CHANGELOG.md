@@ -124,6 +124,15 @@ Dates are the day the work landed in the repository. Anything marked
   "Delete account") with the consequences in the confirmation dialogs.
   Backup keys have their own page. No change to keys, deletion, purchase
   or sign-out behavior. (`ProfileView.swift`)
+- "Already set up a key? Tap it" (People, and Add a key holder): brings back
+  someone whose kit key you set up before, after a sign-out or on a new
+  iPhone. One tap on their key, checked against their published key and
+  this phone's pin. Same person, so envelopes already sealed for them still
+  open for them. Before, the only way out was retiring their account, which
+  would have locked them out of those envelopes.
+  (`CeremonyManager+FindKey.swift`, `FindKeyOwnerView.swift`)
+- The sign-out message now says that envelopes already sealed keep their
+  rule and this iPhone can no longer check in for them.
 - Harbor's eyes are smaller and scale with his size.
 - `tools/run_core_tests.sh` now compiles with `-default-isolation MainActor`,
   the same isolation the app target uses. Before, Swift 6 reported
