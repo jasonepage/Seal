@@ -26,8 +26,10 @@ import { custodianCanClaim, custodianCanAuthorize, claimantCanRelease, voidReaso
 import { fetchIdentity, findInvites, judgeEstate, openEstate, openMedia, waitingFor } from "./estate.js";
 import { verifiedDevices, parseAssertion, verifyAssertion, clientDataChallengeMatches } from "./identity.js";
 import { phrase } from "./words.js";
+import { letterFile, letterFileName, passOnCheck } from "./passon.js";
 
 const main = document.getElementById("app");
+const APP_STORE = "https://apps.apple.com/app/id6779471126";
 /** The signed-in person, in memory only, for this tab. */
 let session = null;
 /**
@@ -215,7 +217,7 @@ function showWaiting(me, found, ck, credentialID) {
     ),
   );
   const appLine = h("p", {}, "Open Seal on your iPhone or iPad to read them. This page only opens envelopes for keys that someone registered for you.");
-  const store = h("p", {}, h("a", { class: "cta ghost", href: "https://apps.apple.com/app/id6779471126" }, "Get Seal on the App Store"));
+  const store = h("p", {}, h("a", { class: "cta ghost", href: APP_STORE }, "Get Seal on the App Store"));
   const envelopes = found.filter((f) => f.sealed && !f.keyHolder);
   if (!found.length) {
     return show(
@@ -270,7 +272,7 @@ function confirmRetire(me, found, ck, credentialID) {
   );
 }
 
-async function retire(me, ck, credentialID) {
+async function retire(me, ck, credentialID, done = null) {
   const name = me.root.displayName;
   const nonce = random(32);
   const challenge = await sha256(concat(utf8("seal.identity.delete.v1"), nonce));
@@ -302,6 +304,7 @@ async function retire(me, ck, credentialID) {
   }
   if (!back) throw new Error("The relay said it saved this, but Apple's copy could not be found yet. Try again in a minute.");
   session = null;
+  if (done) return done(name);
   show(
     h("div", { class: "note", role: "status" }, h("p", {}, h("b", {}, "Retired. "), `This key no longer holds ${name}'s Seal identity. You can register it for someone else now.`)),
     h("button", { class: "cta", type: "button", on: { click: () => run().catch(failed) } }, "Sign in with this key again"),
@@ -335,6 +338,7 @@ async function refresh() {
     if (j.epoch?.custodianHashes.includes(me.root.credentialIDHash)) j.roles.add("custodian");
     judged.push(j);
   }
+  session.judged = judged;
   await list(judged, now);
 }
 
@@ -575,8 +579,78 @@ async function envelopes(ck, me, kems, j, now) {
     }
     nodes.push(h("section", { class: "envelope" }, parts));
   }
+  if (j.kind === "rightAway") nodes.push(passOnCard(j, opened));
   nodes.push(h("p", { class: "small" }, "Nothing is saved in this browser. When you are done, close the tab."));
   show(...nodes);
+}
+
+// ---------------------------------------------------------------- pass a key on
+
+/**
+ * PRODUCT.md section 18. Under an opened right away letter: save it, free
+ * the key (the web retire above, so the next holder can never read it),
+ * then write the next letter on an iPhone and hand the key over. Only for
+ * right away. A key for a quiet or break glass rule is protection for a
+ * family and is never passed on from here.
+ */
+function passOnCard(j, opened) {
+  const name = session.me.root.displayName;
+  const file = letterFileName(j.ownerName);
+  return h("section", { class: "passon" },
+    h("h2", {}, "Pass this key on"),
+    h("p", {}, "This key can carry a new letter to someone new. Here is how."),
+    h("ol", {},
+      h("li", {}, h("b", {}, "Save your letter. "), "Once the key moves on, it will not open this letter again.",
+        h("p", {}, h("a", { class: "cta ghost", href: blobURL(utf8(letterFile(j.ownerName, opened)), "text/plain;charset=utf-8"), download: file }, "Save my letter")),
+        h("p", { class: "small" }, "It saves a text file to this device. Secrets are left out; copy them above if you need them. Photos and voice messages have their own Save buttons.")),
+      h("li", {}, h("b", {}, "Free up the key. "), `This retires ${name} from the key, so whoever gets it next can never read your letter.`,
+        h("p", {}, h("button", { class: "cta ghost", type: "button", on: { click: () => confirmPassOn(j) } }, "Free up this key"))),
+      h("li", {}, h("b", {}, "Write the next letter on an iPhone. "), "In Seal, tap Set up a key for someone, touch this key, write your letter, choose Right away, and seal it.",
+        h("p", {}, h("a", { class: "cta ghost", href: APP_STORE }, "Get Seal on the App Store"))),
+      h("li", {}, h("b", {}, "Hand it to them in person. "), "Their letter opens here, at sealmessenger.com/open, the moment they touch the key."),
+    ),
+  );
+}
+
+function confirmPassOn(j) {
+  const { me, ck, holder } = session;
+  const name = me.root.displayName;
+  const check = passOnCheck(session.judged ?? [], j.estateID);
+  const back = h("button", { class: "cta ghost", type: "button", on: { click: () => refresh().catch(failed) } }, "Back");
+  if (!check.ok) {
+    show(
+      h("h2", {}, "Keep this key for now"),
+      h("div", { class: "note", role: "note" }, h("p", {}, `${name} is also a key holder for ${check.holdsFor.join(" and ")}. Freeing this key would take it out of their protection without telling them.`)),
+      h("p", {}, "Pass on a key that only opens this letter, or ask them to pick another key holder first."),
+      back,
+    );
+    return;
+  }
+  show(
+    h("div", { class: "ask" },
+      h("h2", {}, "Free up this key?"),
+      h("div", { class: "warn", role: "note" }, h("b", {}, "Your letter will not open again with this key."), h("p", {}, "Save it first if you have not. This cannot be undone.")),
+      check.alsoFrom.length ? h("p", {}, `This key also opens letters from ${check.alsoFrom.join(" and ")}. Those stop opening too.`) : null,
+      h("p", {}, `This retires ${name} from the key for good. Then the key is ready to be set up for someone new.`),
+      h("div", { class: "actions" },
+        h("button", { class: "cta", type: "button", on: { click: () => retire(me, ck, holder.credentialID, passedOn).catch(failed) } }, "Free up this key"),
+        back,
+      ),
+    ),
+  );
+}
+
+function passedOn() {
+  show(
+    h("div", { class: "note", role: "status" }, h("p", {}, h("b", {}, "The key is free. "), "Nobody can open your letter with it now.")),
+    h("h2", {}, "Now write the next letter"),
+    h("ol", {},
+      h("li", {}, "On an iPhone, open Seal and tap Set up a key for someone."),
+      h("li", {}, "Touch this key, write your letter, choose Right away, and seal it."),
+      h("li", {}, "Hand the key to them in person. Their letter opens at sealmessenger.com/open."),
+    ),
+    h("p", {}, h("a", { class: "cta ghost", href: APP_STORE }, "Get Seal on the App Store")),
+  );
 }
 
 start();

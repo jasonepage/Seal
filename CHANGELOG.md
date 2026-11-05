@@ -7,6 +7,13 @@ Dates are the day the work landed in the repository. Anything marked
 
 ### Added
 
+- Pass a key on (web only, PRODUCT.md section 18). Under an opened right away
+  letter, sealmessenger.com/open shows "Pass this key on": save the letter as
+  a text file (secrets left out), free up the key (the web retire, so the next
+  holder can never read it), then write the next letter on an iPhone and hand
+  the key over. Refused when the same key is a key holder for anyone else.
+  No change to the release rules, the record or the app. (`site/open/js/passon.js`,
+  `site/open/js/app.js`, `tools/webtests/passon.test.mjs`)
 - A rule now says when it opens (PRODUCT.md section 17): **When I go quiet**
   (as before, now with 7 and 14 day silences for people who need a short
   fuse), **Break glass** (instant: any M key holders together, on any day, open it

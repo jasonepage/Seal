@@ -67,3 +67,9 @@ details.safe p { margin-top:12px; }
 .ask .hint { display:block; font-weight:400; font-size:14px; color:var(--faint); margin-top:6px; }
 .actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:22px; }
 .actions .cta { margin:0; }
+
+/* Pass this key on (PRODUCT.md section 18): under an opened right away letter. */
+.passon { margin-top:48px; border-top:1px solid var(--rule); padding-top:8px; }
+.passon ol { padding-left:22px; }
+.passon li { margin-bottom:18px; font-size:18px; }
+.passon li p { margin:8px 0 0; }

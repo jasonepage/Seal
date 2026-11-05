@@ -978,3 +978,55 @@ described as an anonymous tip line.
   ships.
 - A break glass claim never expires. One left half done stays open for
   taps until enough keys arrive.
+
+## 18. Pass a key on (web, added 2026-11-05)
+
+**Built 2026-11-05 on the web page only. Nothing in the app, the release
+rules, the record or the capsule changed.**
+
+### The failure this exists for
+
+Nobody buys a security key to write one letter. But a key that was given
+to you, and that opened a letter from someone who cares about you, is a key
+you might use to write the next one. Today that takes four steps nobody
+would find: save the letter, retire the key's old identity, set the key up
+again on an iPhone, seal.
+
+### What it is
+
+Under an opened right away letter, sealmessenger.com/open shows "Pass this
+key on" with those steps in order:
+
+1. **Save my letter.** A text file of the titles, letters and "what to do
+   first" steps (`letterFile` in `site/open/js/passon.js`). Never the
+   secrets: a file lasts for years and copies anywhere, and the secrets have
+   their own copy buttons. Media keeps its own Save buttons.
+2. **Free up this key.** The existing web retire (`retire` in app.js, the
+   same tap over `seal.identity.delete.v1` and the same write-once
+   `tomb.<hash>` marker as RetireKeyCeremony.swift). After it, the old
+   identity is dead on every phone, so the next holder can never open the
+   old letter, and the iPhone's one-key-one-identity check no longer blocks
+   the key (`scanDirectory` drops dead identities).
+3. **Write the next letter on an iPhone:** Set up a key for someone, touch
+   this key, write, choose Right away, seal.
+4. **Hand it over in person.**
+
+### What it must not do
+
+- Appear for a quiet or break glass rule. Those keys are a family's
+  protection and are never passed on from here.
+- Free a key that is also a key holder for anyone else (`passOnCheck`). It
+  would take a key out of their rule without telling them. The page says
+  whose, and stops.
+- Put a secret in the saved file.
+
+### Known limits
+
+- Writing still needs an iPhone. An Android holder can open a letter and
+  free the key but cannot write the next one. Count how often that stops
+  someone; it is the evidence for a writer that does not need Apple.
+- The previous writer's phone will show the retired identity as gone
+  (GoneCheck). Expected: the key moved on.
+- Tests: `tools/webtests/passon.test.mjs` (25 checks). Not yet tried end to
+  end with a real key: open, save, free, set up again on an iPhone, open
+  the new letter.
