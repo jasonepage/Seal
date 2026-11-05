@@ -193,16 +193,19 @@ struct PersonView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("A key holder").font(.headline).foregroundStyle(.white)
             if let custodian {
-                Text("\(person.identity.displayName) is one of your key holders. \(custodian.handoverReceiptID == nil ? "\(person.identity.displayName) has not yet confirmed it on this phone." : "\(person.identity.displayName) confirmed it on this phone, and both of you signed the record.")")
+                // 1.3: this step is a signed note for the record, not a condition for
+                // sealing or opening (Estate.isReadyToSeal never reads it). Say so,
+                // so nobody reads "not confirmed" as "not working".
+                Text("\(person.identity.displayName) is one of your key holders. \(custodian.handoverReceiptID == nil ? "Your envelopes work already. Recording that \(person.identity.displayName) has the key is optional." : "\(person.identity.displayName) confirmed they have the key, and both of you signed the record.")")
                     .font(.callout).foregroundStyle(.white.opacity(0.7)).fixedSize(horizontal: false, vertical: true)
                 if custodian.handoverReceiptID == nil {
                     Button { Task { await handOverKey() } } label: {
                         HStack {
                             if handingOver { ProgressView().tint(SealTheme.ink) }
-                            Text("\(person.identity.displayName) confirms on this phone").frame(maxWidth: .infinity)
+                            Text("Record that \(person.identity.displayName) has the key").frame(maxWidth: .infinity)
                         }
                     }
-                    .buttonStyle(.borderedProminent).tint(SealTheme.brass)
+                    .buttonStyle(.bordered).tint(SealTheme.brass)
                     .disabled(handingOver || DemoFixtures.isActive)
                     .parentTapTarget()
                     // What actually happens (ReceiptService.issue and
@@ -212,7 +215,7 @@ struct PersonView: View {
                     // Nothing physical changes hands. iOS decides the path:
                     // a security key is tapped on this phone; a passkey goes
                     // through the cross-device QR code that iOS shows.
-                    Text("Do this with \(person.identity.displayName) next to you. Tap the button, then hand \(person.identity.displayName) this phone. If they use a security key, they tap it on this phone. If they use Face ID or Touch ID, this phone shows a square code: they scan it with their own phone and confirm there. That confirmation, plus this phone's signature, is the record that they agreed to hold a key. Nothing else changes hands.")
+                    Text("With \(person.identity.displayName) next to you, tap the button and let them tap their key on this phone, or scan the square code with their own phone. It adds a signed line to your record.")
                         .font(.caption).foregroundStyle(.white.opacity(0.45)).fixedSize(horizontal: false, vertical: true)
                 }
                 // The printed page that goes in the drawer with the key

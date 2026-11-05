@@ -174,6 +174,10 @@ Dates are the day the work landed in the repository. Anything marked
 - "Your rule" is gone from every screen. Rules are named only by their kind
   (Break glass, Right away, When I go quiet), including "Which rule does Dad
   hold a key for?", the status cards and seal errors. (`EstateEngine.ruleLabel`)
+- A key holder's page no longer says "Dad has not yet confirmed it on this
+  phone", which read like something was broken. It says the envelopes work
+  already and recording the handover is optional, and the button is "Record
+  that Dad has the key" (no longer the loudest button on the page).
 - Harbor's eyes are smaller and scale with his size.
 - `tools/run_core_tests.sh` now compiles with `-default-isolation MainActor`,
   the same isolation the app target uses. Before, Swift 6 reported
