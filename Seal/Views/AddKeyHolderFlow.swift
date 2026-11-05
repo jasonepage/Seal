@@ -176,7 +176,8 @@ struct AddKeyHolderFlow: View {
                     ForEach(candidates) { friend in
                         Button { move(.confirm(friend.identity)) } label: {
                             HStack(spacing: 14) {
-                                IdentityRing(displayName: friend.identity.displayName, tier: friend.identity.tier, size: 36)
+                                IdentityRing(displayName: friend.identity.displayName, tier: friend.identity.tier, size: 36,
+                                             photo: PersonPhotos.shared.image(for: friend.identity.credentialIDHash))
                                 Text(friend.identity.displayName)
                                     .font(.body).foregroundStyle(.white)
                                 Spacer()
@@ -326,9 +327,10 @@ struct AddKeyHolderFlow: View {
 
     private func confirm(_ friend: RootIdentity) -> some View {
         column {
-            IdentityRing(displayName: friend.displayName, tier: friend.tier, size: 64)
+            IdentityRing(displayName: friend.displayName, tier: friend.tier, size: 64,
+                         photo: PersonPhotos.shared.image(for: friend.credentialIDHash))
             title("Make \(friend.displayName) a key holder?")
-            body("After you have gone quiet for a long time and every warning has run, \(friend.displayName)'s key is one of the keys that opens your envelopes. Until then it does nothing. You can change your mind on the Keys tab any time.")
+            body("\(friend.displayName)'s key becomes one of the keys that can open your envelopes when this rule allows. Until then it does nothing. You can change your mind on the Keys tab any time.")
         } actions: {
             Button("Yes, \(friend.displayName) holds a key") {
                 // A right away rule takes no key holders (PRODUCT.md section 17);

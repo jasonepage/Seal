@@ -459,9 +459,13 @@ struct EstateHomeView: View {
         return HStack(alignment: .top, spacing: 14) {
             ZStack {
                 Circle().fill(envelope.sealed ? SealTheme.brass.opacity(0.18) : .white.opacity(0.08))
-                Text(initial.isEmpty ? "?" : initial)
-                    .font(.system(.headline, design: .rounded))
-                    .foregroundStyle(envelope.sealed ? SealTheme.brass : .white.opacity(0.85))
+                if envelope.isAddressed, let photo = PersonPhotos.shared.image(for: envelope.recipientHash) {
+                    Image(uiImage: photo).resizable().scaledToFill().clipShape(Circle())
+                } else {
+                    Text(initial.isEmpty ? "?" : initial)
+                        .font(.system(.headline, design: .rounded))
+                        .foregroundStyle(envelope.sealed ? SealTheme.brass : .white.opacity(0.85))
+                }
             }
             .frame(width: 42, height: 42)
             VStack(alignment: .leading, spacing: 3) {
@@ -2054,7 +2058,8 @@ struct RecipientPickerSheet: View {
             ForEach(metFriends) { friend in
                 Button { onPick(.met(friend)) } label: {
                     HStack(spacing: 12) {
-                        IdentityRing(displayName: friend.identity.displayName, tier: friend.identity.tier, size: 36)
+                        IdentityRing(displayName: friend.identity.displayName, tier: friend.identity.tier, size: 36,
+                                     photo: PersonPhotos.shared.image(for: friend.identity.credentialIDHash))
                         Text(friend.identity.displayName)
                             .font(.headline).foregroundStyle(.white)
                             .fixedSize(horizontal: false, vertical: true)

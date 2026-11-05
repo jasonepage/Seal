@@ -159,6 +159,13 @@ Dates are the day the work landed in the repository. Anything marked
   for every rule they hold a key for, since it is one physical key, so
   Harbor no longer asks to record a handover that was already recorded.
   (`PersonView.swift`, `EstateEngines.KeyHolderRow`)
+- A photo of each person you meet: tap their picture on their page to take
+  one with the camera or choose one from Photos. It shows on People, their
+  page, the envelopes written to them and the key holder lists. It stays on
+  this phone only, the person never sees it, and sign-out deletes it.
+  (`Seal/Identity/PersonPhotos.swift`)
+- "Make Dad a key holder?" no longer says the key opens things only after
+  a long silence; it says "when this rule allows", true of Break glass too.
 - Harbor's eyes are smaller and scale with his size.
 - `tools/run_core_tests.sh` now compiles with `-default-isolation MainActor`,
   the same isolation the app target uses. Before, Swift 6 reported

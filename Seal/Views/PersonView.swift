@@ -4,6 +4,7 @@
 
 import SwiftUI
 import UIKit
+import PhotosUI
 
 //  PersonView.swift
 //  Seal
@@ -28,6 +29,10 @@ struct PersonView: View {
     private var engines: [EstateEngine] { allEngines.isEmpty ? [estateEngine] : allEngines }
 
     @State private var handingOver = false
+    @State private var showPhotoOptions = false
+    @State private var showCamera = false
+    @State private var showLibrary = false
+    @State private var photoItem: PhotosPickerItem?
     @State private var confirmRemove = false
     @Environment(\.dismiss) private var dismiss
     @State private var handoverError: String?
@@ -60,7 +65,22 @@ struct PersonView: View {
                 VStack(spacing: 18) {
                     if let goneAt { goneBanner(goneAt) }
                     VStack(spacing: 8) {
-                        IdentityRing(displayName: person.identity.displayName, tier: person.identity.tier, size: 84)
+                        // Tap to add a picture of them (PersonPhotos): this phone only.
+                        Button { showPhotoOptions = true } label: {
+                            IdentityRing(displayName: person.identity.displayName, tier: person.identity.tier, size: 96,
+                                         photo: PersonPhotos.shared.image(for: hash))
+                                .overlay(alignment: .bottomTrailing) {
+                                    Image(systemName: "camera.fill")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(SealTheme.ink)
+                                        .padding(7)
+                                        .background(SealTheme.brass, in: Circle())
+                                }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(PersonPhotos.shared.image(for: hash) == nil
+                                            ? "Add a photo of \(person.identity.displayName)"
+                                            : "Change the photo of \(person.identity.displayName)")
                         Text(person.identity.displayName)
                             .font(.system(.title2, design: .rounded, weight: .semibold)).foregroundStyle(.white)
                         Text(person.friendship.sponsored == true
@@ -71,6 +91,34 @@ struct PersonView: View {
                             .font(.system(.caption, design: .monospaced)).foregroundStyle(SealTheme.brass.opacity(0.8))
                     }
                     .padding(.top, 12)
+                    .confirmationDialog("A photo of \(person.identity.displayName)", isPresented: $showPhotoOptions,
+                                        titleVisibility: .visible) {
+                        Button("Take a photo") { showCamera = true }
+                        Button("Choose from Photos") { showLibrary = true }
+                        if PersonPhotos.shared.image(for: hash) != nil {
+                            Button("Remove photo", role: .destructive) { PersonPhotos.shared.remove(for: hash) }
+                        }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("Only on this phone. \(person.identity.displayName) never sees it.")
+                    }
+                    .sheet(isPresented: $showCamera) {
+                        SystemCameraPicker(source: .camera) { image in
+                            if let image { PersonPhotos.shared.set(image, for: hash) }
+                            showCamera = false
+                        }
+                        .ignoresSafeArea()
+                    }
+                    .photosPicker(isPresented: $showLibrary, selection: $photoItem, matching: .images)
+                    .onChange(of: photoItem) { _, item in
+                        guard let item else { return }
+                        Task {
+                            if let data = try? await item.loadTransferable(type: Data.self) {
+                                PersonPhotos.shared.set(data: data, for: hash)
+                            }
+                            photoItem = nil
+                        }
+                    }
 
                     if goneAt == nil {
                         custodianCard

@@ -209,7 +209,8 @@ struct RuleSheet: View {
                     HStack(spacing: 12) {
                         Image(systemName: on ? "checkmark.circle.fill" : "circle")
                             .foregroundStyle(on ? SealTheme.brass : .white.opacity(0.4))
-                        IdentityRing(displayName: friend.identity.displayName, tier: friend.identity.tier, size: 30)
+                        IdentityRing(displayName: friend.identity.displayName, tier: friend.identity.tier, size: 30,
+                                     photo: PersonPhotos.shared.image(for: friend.identity.credentialIDHash))
                         Text(friend.identity.displayName).font(.callout).foregroundStyle(.white)
                         Spacer(minLength: 0)
                     }

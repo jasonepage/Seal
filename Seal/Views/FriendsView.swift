@@ -598,7 +598,19 @@ struct FriendsView: View {
             HStack {
                 // A gone person loses the verified badge. The badge says
                 // "this key is live and pinned", and it no longer is.
-                if goneAt == nil {
+                if goneAt == nil, let photo = PersonPhotos.shared.image(for: hash) {
+                    // Their picture (PersonPhotos), with the badge on it.
+                    Image(uiImage: photo)
+                        .resizable().scaledToFill()
+                        .frame(width: 44, height: 44)
+                        .clipShape(Circle())
+                        .overlay(alignment: .bottomTrailing) {
+                            Image(systemName: "checkmark.seal.fill")
+                                .font(.caption)
+                                .foregroundStyle(friend.identity.tier == .verified ? SealTheme.brass : SealTheme.silver)
+                                .background(Circle().fill(SealTheme.ink))
+                        }
+                } else if goneAt == nil {
                     Image(systemName: "checkmark.seal.fill")
                         .foregroundStyle(friend.identity.tier == .verified ? SealTheme.brass : SealTheme.silver)
                 } else {

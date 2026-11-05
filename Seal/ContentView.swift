@@ -146,6 +146,7 @@ struct ContentView: View {
             appLock = AppLock(ownerHash: hash)
         }
         ProfilePhoto.shared.load(ownerHash: hash)
+        PersonPhotos.shared.load(ownerHash: hash)
     }
 
     /// Clear all of this identity's local data + engines (shared by sign-out
@@ -159,6 +160,7 @@ struct ContentView: View {
             TimestampStore.wipe(ownerHash: hash)
             AppLock.wipe(ownerHash: hash)
             ProfilePhoto.wipe(ownerHash: hash)       // the owner's own picture
+            PersonPhotos.wipe(ownerHash: hash)       // the pictures of people met
             CustodianNotices.wipe(ownerHash: hash)   // what this phone has already announced
             OwnerNotices.wipe(ownerHash: hash)       // the owner's own scheduled reminders
             for storeHash in RuleBook.allStoreHashes(ownerHash: hash) where storeHash != hash {
