@@ -15,6 +15,15 @@ Dates are the day the work landed in the repository. Anything marked
   words are checked once, folded, instead of on every card. Reading a
   letter now has Back to the list. Display only: what opens and when is
   unchanged. (`site/open/index.html`, `site/open/js/app.js`, `open.css`)
+- Pass a key on: safety pass (PRODUCT.md section 18). "Save my letter" no
+  longer writes an envelope that is still held for a later date, not even
+  its title (it did before). Clearing the key now refuses unless the page
+  can prove the identity owns no set (one device ever, the sponsored one, no
+  backups), every invite is a set it opened, nothing is held, and there is no
+  other live key holder or recipient role. Anything unknown refuses. Copy no
+  longer promises the next holder can never read the old letter, and says to
+  wait a minute if iPhone setup still sees the key in use. "Ready to read"
+  is now "Ready to open".
 - Pass a key on (web only, PRODUCT.md section 18). Under an opened right away
   letter, sealmessenger.com/open shows "Pass this key on": save the letter as
   a text file (secrets left out), free up the key (the web retire, so the next

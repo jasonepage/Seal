@@ -979,54 +979,89 @@ described as an anonymous tip line.
 - A break glass claim never expires. One left half done stays open for
   taps until enough keys arrive.
 
-## 18. Pass a key on (web, added 2026-11-05)
+## 18. Pass a key on (web, added 2026-11-05, safety pass the same day)
 
-**Built 2026-11-05 on the web page only. Nothing in the app, the release
-rules, the record or the capsule changed.**
+**Built on the web page only. Nothing in the app, the release rules, the
+record, the relay or the capsule changed.**
 
-### The failure this exists for
+### The model
 
-Nobody buys a security key to write one letter. But a key that was given
-to you, and that opened a letter from someone who cares about you, is a key
-you might use to write the next one. Today that takes four steps nobody
-would find: save the letter, retire the key's old identity, set the key up
-again on an iPhone, seal.
+One physical key carries one live letter relationship at a time. The key
+holds sponsored identity A; A opens its right away letter; the holder
+saves what they want; A is retired; the same key is set up on an iPhone as
+sponsored identity B for the next person; a writer seals a new right away
+letter to B. The old envelope is never resealed (a released set never
+seals again). The writer uses their own Seal account. The traveling key is
+always the next recipient's key, never the writer's.
 
-### What it is
+### The rule
 
-Under an opened right away letter, sealmessenger.com/open shows "Pass this
-key on" with those steps in order:
+A key may be cleared only when the identity on it has no unfinished
+obligations, and the page can prove it. Anything it cannot prove refuses
+(`passOnPlan` in `site/open/js/passon.js`). In order:
 
-1. **Save my letter.** A text file of the titles, letters and "what to do
-   first" steps (`letterFile` in `site/open/js/passon.js`). Never the
-   secrets: a file lasts for years and copies anywhere, and the secrets have
-   their own copy buttons. Media keeps its own Save buttons.
-2. **Free up this key.** The existing web retire (`retire` in app.js, the
-   same tap over `seal.identity.delete.v1` and the same write-once
-   `tomb.<hash>` marker as RetireKeyCeremony.swift). After it, the old
-   identity is dead on every phone, so the next holder can never open the
-   old letter, and the iPhone's one-key-one-identity check no longer blocks
-   the key (`scanDirectory` drops dead identities).
-3. **Write the next letter on an iPhone:** Set up a key for someone, touch
-   this key, write, choose Right away, seal.
-4. **Hand it over in person.**
+1. **The current set** is a right away set, released, not cancelled, with
+   no problem, and its envelopes opened.
+2. **It owns nothing.** The web cannot list an identity's own sets: the app
+   keeps that list in the owner's private iCloud database (OwnedSets.swift),
+   EstateEvent is queryable only by `estate` (CLOUDKIT_DEPLOY.md), and
+   invites name recipients and key holders, never owners. So the page proves
+   it the other way: the record's raw device list, revoked devices included,
+   is exactly one device, the sponsored one on this key, and there are no
+   backup keys (`ownerProven`). Owner entries are signed only by a phone's
+   Secure Enclave key (`EstateEventBuilder.make`), the relay refuses owner
+   kinds (worker/index.js), and every phone an identity signs in on is added
+   to that same list (`SyncEngine.publishIdentity`). A key that ever signed
+   in on a phone is refused: "Check it in the Seal app before it can be
+   cleared." A modified client that signed owner entries with the sponsored
+   device's own key is outside this proof; it could only hurt itself.
+3. **Every invite is accounted for.** Every set named by an invite record
+   addressed to this identity (`estinv.<hash>.<set>`, read raw) must be one
+   the page opened. One it could not open, or junk a stranger wrote, refuses.
+   A list that hits the query's page limit refuses.
+4. **Nothing is held.** No envelope in the current set is still closed by
+   its "open on a date" (`isHeld`, the page's own test). Clearing would lose
+   it, so the page says to come back after that day.
+5. **No other obligation.** A key holder role in any set not yet released
+   refuses. A recipient role in any other set that is not cancelled refuses:
+   the page cannot know whether that letter was read or saved, because
+   opening is local and leaves no record. A cancelled set is finished.
 
-### What it must not do
+### The saved file
 
-- Appear for a quiet or break glass rule. Those keys are a family's
-  protection and are never passed on from here.
-- Free a key that is also a key holder for anyone else (`passOnCheck`). It
-  would take a key out of their rule without telling them. The page says
-  whose, and stops.
-- Put a secret in the saved file.
+Titles, letters and "what to do first" steps (`letterFile`). Never the
+secrets. Never an envelope that is still held, not even its title: the file
+must not open early what the page keeps closed.
 
-### Known limits
+### Honest limits
 
-- Writing still needs an iPhone. An Android holder can open a letter and
-  free the key but cannot write the next one. Count how often that stops
-  someone; it is the evidence for a writer that does not need Apple.
-- The previous writer's phone will show the retired identity as gone
-  (GoneCheck). Expected: the key moved on.
-- Tests: `tools/webtests/passon.test.mjs` (25 checks). Not yet tried end to
-  end with a real key: open, save, free, set up again on an iPhone, open
-  the new letter.
+- **Retiring is a directory marker, not a wiped key.** After it, every phone
+  and the page refuse identity A, and Seal will not open the old letter
+  with this key. But the old credential still lives on the physical key and
+  its locked halves are still public. Someone with modified software and the
+  key could still unlock the old letter. The copy says "Seal will not open
+  your letter with this key again", not "nobody can".
+- **CloudKit can lag.** The retire marker is read back by name before the
+  page says anything, but the iPhone's directory query can see the old
+  credential for a short while. The page says: if setup says the key is in
+  use, wait a minute and try again.
+- **Writing still needs an iPhone.** An Android holder can open and clear,
+  not write. Count how often that stops someone.
+- **The previous writer's phone** will show identity A as gone (GoneCheck).
+  Expected.
+
+### Re-registration, checked in code
+
+Web retire writes a signed `tomb.<hash>` marker (worker/index.js
+`relayRetire`). The iPhone's `fetchAllCredentialIDs` drops identities whose
+marker verifies (`BackupDirectory.scanDirectory`), so `registerSponsoredKey`
+no longer excludes the old credential and the key makes a fresh
+non-discoverable credential (`residentKeyPreference = .discouraged`). The
+page's `credentialIDs` leaves the retired identity out and offers the new
+one.
+
+### Tests
+
+`tools/webtests/passon.test.mjs`: the held boundary, held envelopes and
+secrets kept out of the file, the ownership proof, every refusal, and every
+unknown failing closed. Not yet tried with a real key end to end.

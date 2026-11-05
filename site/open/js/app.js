@@ -24,9 +24,9 @@ import { signingKeyFrom } from "./signer.js";
 import { buildAction, publish } from "./keyholder.js";
 import { custodianCanClaim, custodianCanAuthorize, claimantCanRelease, voidReason, silentDays } from "./release.js";
 import { fetchIdentity, findInvites, judgeEstate, openEstate, openMedia, waitingFor } from "./estate.js";
-import { verifiedDevices, parseAssertion, verifyAssertion, clientDataChallengeMatches } from "./identity.js";
+import { verifiedDevices, parseAssertion, verifyAssertion, clientDataChallengeMatches, parseDeviceEndorsements, parseBackupCredentials } from "./identity.js";
 import { phrase } from "./words.js";
-import { letterFile, letterFileName, passOnCheck } from "./passon.js";
+import { letterFile, letterFileName, isHeld, ownerProven, passOnPlan } from "./passon.js";
 
 const main = document.getElementById("app");
 const APP_STORE = "https://apps.apple.com/app/id6779471126";
@@ -306,7 +306,7 @@ async function retire(me, ck, credentialID, done = null) {
   session = null;
   if (done) return done(name);
   show(
-    h("div", { class: "note", role: "status" }, h("p", {}, h("b", {}, "Retired. "), `This key no longer holds ${name}'s Seal identity. You can register it for someone else now.`)),
+    h("div", { class: "note", role: "status" }, h("p", {}, h("b", {}, "Retired. "), `This key no longer holds ${name}'s Seal identity. It can be set up for someone else. If setup says the key is in use, wait a minute and try again.`)),
     h("button", { class: "cta", type: "button", on: { click: () => run().catch(failed) } }, "Sign in with this key again"),
   );
 }
@@ -444,8 +444,8 @@ function failedAction(err) {
 /** The line on a card that is ready to read. */
 function readyLine(j) {
   return j.kind === "rightAway"
-    ? "Written for you. It is ready to read."
-    : `It opened on ${dateLine(j.snapshot.releasedAt)}. It is ready to read.`;
+    ? "Written for you. Ready to open."
+    : `Released on ${dateLine(j.snapshot.releasedAt)}. Ready to open.`;
 }
 
 /** True when this key holder's tap or combine is what the envelopes wait on. */
@@ -497,7 +497,7 @@ async function list(judged, now) {
   const words = [...writers.values()].filter((w) => w.words);
   show(
     h("p", { class: "signed" }, `Signed in as ${session.me.root.displayName}.`),
-    ready.length ? [h("h2", { class: "group" }, ready.length === 1 ? "Ready to read" : `Ready to read (${ready.length})`), ...ready] : null,
+    ready.length ? [h("h2", { class: "group" }, ready.length === 1 ? "Ready to open" : `Ready to open (${ready.length})`), ...ready] : null,
     needs.length ? [h("h2", { class: "group" }, "Waiting for your key"), ...needs] : null,
     sealed.length ? [
       h("h2", { class: "group" }, "Still sealed"),
@@ -604,10 +604,11 @@ async function envelopes(ck, me, kems, j, now) {
     ? `From ${j.ownerName || "someone"}, sealed to open right away.`
     : `From ${j.ownerName || "someone"}, released ${dateLine(j.snapshot.releasedAt)}.`)];
   for (const { entry, payload } of opened) {
-    const held = payload.openNoEarlierThanEpoch !== null && now < payload.openNoEarlierThanEpoch;
+    const held = isHeld(payload, now);
     const parts = [h("h2", {}, payload.title || "An envelope")];
     if (held) {
-      parts.push(h("p", {}, `${j.ownerName || "The writer"} asked that this one stay closed until ${dateLine(payload.openNoEarlierThanEpoch)}. This page keeps it closed until then.`));
+      const until = typeof payload.openNoEarlierThanEpoch === "number" ? dateLine(payload.openNoEarlierThanEpoch) : "a later date";
+      parts.push(h("p", {}, `${j.ownerName || "The writer"} asked that this one stay closed until ${until}. This page keeps it closed until then.`));
     } else {
       if (payload.letter.trim()) parts.push(h("div", { class: "letter" }, payload.letter));
       if (payload.voiceNote) parts.push(mediaBlock(ck, j, entry, payload.voiceNote, "Play the voice message"));
@@ -626,7 +627,7 @@ async function envelopes(ck, me, kems, j, now) {
     }
     nodes.push(h("section", { class: "envelope" }, parts));
   }
-  if (j.kind === "rightAway") nodes.push(passOnCard(j, opened));
+  if (j.kind === "rightAway") nodes.push(passOnCard(j, opened, now));
   nodes.push(h("p", { class: "back" }, h("button", { class: "cta ghost", type: "button", on: { click: () => refresh().catch(failed) } }, "Back to the list")));
   nodes.push(h("p", { class: "small" }, "Nothing is saved in this browser. When you are done, close the tab."));
   show(...nodes);
@@ -641,47 +642,84 @@ async function envelopes(ck, me, kems, j, now) {
  * right away. A key for a quiet or break glass rule is protection for a
  * family and is never passed on from here.
  */
-function passOnCard(j, opened) {
-  const name = session.me.root.displayName;
+function passOnCard(j, opened, now) {
   const file = letterFileName(j.ownerName);
   return h("section", { class: "passon" },
     h("h2", {}, "Pass this key on"),
-    h("p", {}, "This key can carry a new letter to someone new. Here is how."),
+    h("p", {}, "This key can carry one letter at a time. When you are done with yours, it can carry a new one to someone new."),
     h("ol", {},
-      h("li", {}, h("b", {}, "Save your letter. "), "Once the key moves on, it will not open this letter again.",
-        h("p", {}, h("a", { class: "cta ghost", href: blobURL(utf8(letterFile(j.ownerName, opened)), "text/plain;charset=utf-8"), download: file }, "Save my letter")),
-        h("p", { class: "small" }, "It saves a text file to this device. Secrets are left out; copy them above if you need them. Photos and voice messages have their own Save buttons.")),
-      h("li", {}, h("b", {}, "Free up the key. "), `This retires ${name} from the key, so whoever gets it next can never read your letter.`,
-        h("p", {}, h("button", { class: "cta ghost", type: "button", on: { click: () => confirmPassOn(j) } }, "Free up this key"))),
-      h("li", {}, h("b", {}, "Write the next letter on an iPhone. "), "In Seal, tap Set up a key for someone, touch this key, write your letter, choose Right away, and seal it.",
+      h("li", {}, h("b", {}, "Save your letter. "), "Once the key moves on, Seal will not open this letter with it again.",
+        h("p", {}, h("a", { class: "cta ghost", href: blobURL(utf8(letterFile(j.ownerName, opened, now)), "text/plain;charset=utf-8"), download: file }, "Save my letter")),
+        h("p", { class: "small" }, "It saves a text file to this device. Secrets and anything still closed are left out. Photos and voice messages have their own Save buttons.")),
+      h("li", {}, h("b", {}, "Clear the key. "), "Seal checks that nothing else needs this key first.",
+        h("p", {}, h("button", { class: "cta ghost", type: "button", on: { click: () => checkPassOn(j, opened, now).catch(failed) } }, "Clear this key"))),
+      h("li", {}, h("b", {}, "Write the next letter on your iPhone. "), "Use your own Seal account, not this key. Tap Set up a key for someone, touch this key, write your letter, choose Right away, and seal it.",
         h("p", {}, h("a", { class: "cta ghost", href: APP_STORE }, "Get Seal on the App Store"))),
-      h("li", {}, h("b", {}, "Hand it to them in person. "), "Their letter opens here, at sealmessenger.com/open, the moment they touch the key."),
+      h("li", {}, h("b", {}, "Hand it to them in person. "), "Their letter opens here, at sealmessenger.com/open."),
     ),
   );
 }
 
-function confirmPassOn(j) {
+/** Why the key stays as it is, in the words a person needs. */
+function refusalLine(plan) {
+  const names = (plan.names ?? []).join(" and ");
+  switch (plan.reason) {
+    case "owner": return "This key may also be someone's own Seal account. Check it in the Seal app before it can be cleared.";
+    case "held": return `One of your envelopes stays closed until ${plan.until ? dateLine(plan.until) : "a later date"}. Clearing the key now would lose it. Come back after that day.`;
+    case "holder": return `This key also holds a key for ${names}. Clearing it would take it out of their protection.`;
+    case "other": return `This key also opens letters from ${names}. Clearing it would lose those too. Keep this key, and pass on a different one.`;
+    default: return "Seal could not check everything this key is part of, so it will not clear it. Try again in a minute.";
+  }
+}
+
+/**
+ * The facts passOnPlan needs, read fresh: the identity's raw device list
+ * (revoked devices included) and backup keys, and every invite record that
+ * names it. Any read that fails leaves its fact unknown, and unknown
+ * refuses. PRODUCT.md section 18.
+ */
+async function checkPassOn(j, opened, now) {
   const { me, ck, holder } = session;
-  const name = me.root.displayName;
-  const check = passOnCheck(session.judged ?? [], j.estateID);
+  working("Checking this key…");
+  let endorsements = null, backups = null, inviteEstateIDs = null;
+  try {
+    const record = await ck.record(holder.hash, ["deviceEndorsements", "backupEndorsements"]);
+    const devices = bytesField(record, "deviceEndorsements");
+    endorsements = devices ? parseDeviceEndorsements(devices) : null;
+    const hasBackups = record?.fields?.backupEndorsements !== undefined;
+    const backupBytes = bytesField(record, "backupEndorsements");
+    backups = !hasBackups ? [] : backupBytes ? parseBackupCredentials(backupBytes) : null;
+  } catch { /* unknown */ }
+  try {
+    const PAGES = 20;   // CloudKit.query's default page limit, 200 records a page
+    const prefix = `estinv.${holder.hash}.`;
+    const records = await ck.query("GroupInvite", "recipient", holder.hash, { desiredKeys: [], maxPages: PAGES });
+    if (records.length < PAGES * 200) {
+      inviteEstateIDs = [...new Set(records.map((r) => r.recordName)
+        .filter((n) => typeof n === "string" && n.startsWith(prefix)).map((n) => n.slice(prefix.length)))];
+    }
+  } catch { /* unknown */ }
+  const plan = passOnPlan({
+    current: j, opened, judged: session.judged, inviteEstateIDs, now,
+    ownerIsProven: ownerProven({ endorsements, backups, sponsoredDevicePublicKey: holder.signer.devicePublicKey }),
+  });
   const back = h("button", { class: "cta ghost", type: "button", on: { click: () => refresh().catch(failed) } }, "Back");
-  if (!check.ok) {
+  if (!plan.ok) {
     show(
       h("h2", {}, "Keep this key for now"),
-      h("div", { class: "note", role: "note" }, h("p", {}, `${name} is also a key holder for ${check.holdsFor.join(" and ")}. Freeing this key would take it out of their protection without telling them.`)),
-      h("p", {}, "Pass on a key that only opens this letter, or ask them to pick another key holder first."),
+      h("div", { class: "note", role: "note" }, h("p", {}, refusalLine(plan))),
       back,
     );
     return;
   }
+  const name = me.root.displayName;
   show(
     h("div", { class: "ask" },
-      h("h2", {}, "Free up this key?"),
-      h("div", { class: "warn", role: "note" }, h("b", {}, "Your letter will not open again with this key."), h("p", {}, "Save it first if you have not. This cannot be undone.")),
-      check.alsoFrom.length ? h("p", {}, `This key also opens letters from ${check.alsoFrom.join(" and ")}. Those stop opening too.`) : null,
-      h("p", {}, `This retires ${name} from the key for good. Then the key is ready to be set up for someone new.`),
+      h("h2", {}, "Clear this key?"),
+      h("div", { class: "warn", role: "note" }, h("b", {}, "Seal will not open your letter with this key again."), h("p", {}, "Save it first if you have not. This cannot be undone.")),
+      h("p", {}, `This retires ${name} from the key for good. Then it can be set up for someone new.`),
       h("div", { class: "actions" },
-        h("button", { class: "cta", type: "button", on: { click: () => retire(me, ck, holder.credentialID, passedOn).catch(failed) } }, "Free up this key"),
+        h("button", { class: "cta", type: "button", on: { click: () => retire(me, ck, holder.credentialID, passedOn).catch(failed) } }, "Clear this key"),
         back,
       ),
     ),
@@ -690,12 +728,13 @@ function confirmPassOn(j) {
 
 function passedOn() {
   show(
-    h("div", { class: "note", role: "status" }, h("p", {}, h("b", {}, "The key is free. "), "Nobody can open your letter with it now.")),
+    h("div", { class: "note", role: "status" }, h("p", {}, h("b", {}, "The old identity is retired. "), "Seal will not open your letter with this key again.")),
     h("h2", {}, "Now write the next letter"),
     h("ol", {},
-      h("li", {}, "On an iPhone, open Seal and tap Set up a key for someone."),
-      h("li", {}, "Touch this key, write your letter, choose Right away, and seal it."),
-      h("li", {}, "Hand the key to them in person. Their letter opens at sealmessenger.com/open."),
+      h("li", {}, "On your iPhone, open Seal with your own account, not this key."),
+      h("li", {}, "Tap Set up a key for someone, and touch this key. If Seal says the key is already in use, wait a minute and try again."),
+      h("li", {}, "Write the letter, choose Right away, and seal it."),
+      h("li", {}, "Hand the key to them in person."),
     ),
     h("p", {}, h("a", { class: "cta ghost", href: APP_STORE }, "Get Seal on the App Store")),
   );
