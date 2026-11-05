@@ -115,6 +115,15 @@ Dates are the day the work landed in the repository. Anything marked
   this device only, wiped on sign-out), and is never uploaded. It is redrawn
   as a small square, which also drops the photo's location data.
   (`Seal/Identity/ProfilePhoto.swift`, `IdentityRing`, `ProfileView`)
+- The You screen is rebuilt for someone who has never heard of keys:
+  photo and name with one "Edit name and photo"; a "Protect your account"
+  card when there is no backup key (or "Account recovery is ready"); then
+  grouped Security, Help, Purchase ("Buy Seal", "Restore purchase"), a
+  closed Advanced section (Record, History, timestamps, your words,
+  devices, account details) and Account ("Sign out on this iPhone",
+  "Delete account") with the consequences in the confirmation dialogs.
+  Backup keys have their own page. No change to keys, deletion, purchase
+  or sign-out behavior. (`ProfileView.swift`)
 - Harbor's eyes are smaller and scale with his size.
 - `tools/run_core_tests.sh` now compiles with `-default-isolation MainActor`,
   the same isolation the app target uses. Before, Swift 6 reported

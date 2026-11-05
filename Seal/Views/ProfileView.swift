@@ -58,114 +58,44 @@ struct ProfileView: View {
     /// passed-in copy that only refreshes when the parent re-renders).
     private var currentName: String { identity.rootIdentity?.displayName ?? myRoot.displayName }
 
+    @State private var showEditOptions = false
+    @State private var showPhotoPicker = false
+    @State private var showAdvanced = false
+
+    /// One corner radius for every surface on this screen.
+    private static let radius: CGFloat = 16
+
+    private var hasBackup: Bool { !(identity.rootIdentity?.backupCredentials ?? []).isEmpty }
+
+    // LAYOUT (1.3 redesign). Written for someone who was handed a phone and
+    // a key and wants to leave letters to their children. Top to bottom:
+    // who you are, the one thing that may need doing (a backup key), the
+    // everyday switches, help, the purchase, a closed Advanced drawer for
+    // records and technical detail, and the account actions last. Recovery
+    // is never inside Advanced. Consequences live in confirmation dialogs,
+    // not in paragraphs under buttons. No mascot: this is a security surface.
+
     var body: some View {
         NavigationStack {
             ZStack {
                 SealTheme.ink.ignoresSafeArea()
                 ScrollView {
-                VStack(spacing: 20) {
-                    // Tap the ring to choose a picture. It stays on this
-                    // phone (ProfilePhoto).
-                    PhotosPicker(selection: $photoItem, matching: .images) {
-                        IdentityRing(displayName: currentName, tier: myRoot.tier, size: 96,
-                                     photo: ProfilePhoto.shared.image)
-                            .overlay(alignment: .bottomTrailing) {
-                                Image(systemName: "camera.fill")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(SealTheme.ink)
-                                    .padding(7)
-                                    .background(SealTheme.brass, in: Circle())
-                            }
+                    VStack(spacing: 26) {
+                        header
+                        recoveryCard
+                        securityGroup
+                        helpGroup
+                        purchaseGroup
+                        advancedGroup
+                        accountGroup
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(ProfilePhoto.shared.image == nil ? "Add a photo" : "Change your photo")
-                    .padding(.top, 32)
-                    .onChange(of: photoItem) { _, item in
-                        guard let item else { return }
-                        Task {
-                            if let data = try? await item.loadTransferable(type: Data.self) {
-                                ProfilePhoto.shared.set(data)
-                            }
-                            photoItem = nil
-                        }
-                    }
-                    if ProfilePhoto.shared.image != nil {
-                        Button("Remove photo") { ProfilePhoto.shared.remove() }
-                            .font(.footnote)
-                            .foregroundStyle(.white.opacity(0.5))
-                    }
-                    Button {
-                        draftName = currentName
-                        renaming = true
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text(currentName)
-                                .font(.system(.title, design: .rounded, weight: .semibold))
-                                .foregroundStyle(.white)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.6)
-                            Image(systemName: "pencil")
-                                .font(.footnote)
-                                .foregroundStyle(.white.opacity(0.4))
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .alert("Change your name", isPresented: $renaming) {
-                        TextField("Your name", text: $draftName)
-                        Button("Save") { Task { await saveName() } }
-                        Button("Cancel", role: .cancel) {}
-                    } message: {
-                        Text("This only changes the name people see. Your key stays the same. Others see the new name the next time their app updates.")
-                    }
-                    Label(myRoot.tier == .verified ? "Verified, hardware key" : "Passkey",
-                          systemImage: myRoot.tier == .verified ? "key.radiowaves.forward.fill" : Biometry.symbol)
-                        .font(.subheadline)
-                        .foregroundStyle(myRoot.tier == .verified ? SealTheme.brass : SealTheme.silver)
-
-                    Text(FingerprintPhrase.phrase(for: myRoot.publicKey))
-                        .font(.title3)
-                        .foregroundStyle(SealTheme.brass)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.horizontal, 24)
-
-                    // ONE SCREEN. There used to be an "Advanced" drawer
-                    // below this one holding the backup keys, the devices,
-                    // the record and the timestamp switch. Two things gave it
-                    // away as wrong. The no-backup-key warning had to reach
-                    // into it from out here, because burying the one state
-                    // that costs you your identity was plainly wrong. And
-                    // RecordView had to tell people where to find a switch. A
-                    // product that gives directions to its own settings has
-                    // one screen too many. None of it needed hiding. It
-                    // needed headings, which is what it has now.
-                    //
-                    // The word "Advanced" also told the oldest person holding
-                    // this phone that their own backup key was not for them.
-                    //
-                    // The sections are computed properties rather than more
-                    // rows in this VStack because a body with two dozen
-                    // children and this many modifiers is how this project
-                    // lost a build to a type-check timeout once already.
-                    backupWarning
-                    onThisPhoneSection
-                    yourRecordSection
-                    yourKeysSection
-                    helpSection
-                    accountSection
-                }
-                // iPad/large widths: keep profile content a centered, readable
-                // column instead of full-bleed rows. No-op on iPhone.
-                .frame(maxWidth: 460)
-                .frame(maxWidth: .infinity)
-                // Pins the scroll content to exactly the scroll view's width.
-                // Without it, any child that demands more room than the screen
-                // (a long name, a long fingerprint phrase, a row whose text
-                // refuses to wrap, all of it likelier with Bigger text on)
-                // silently widens the content and the entire screen becomes
-                // draggable side to side. A vertical scroll view should not
-                // pan horizontally, ever.
-                .containerRelativeFrame(.horizontal)
+                    .padding(.bottom, 36)
+                    // iPad: a centered column. No-op on iPhone.
+                    .frame(maxWidth: 520)
+                    .frame(maxWidth: .infinity)
+                    // GOTCHAS, Layout: keep the scroll content to the screen's
+                    // width so nothing can make the page drag sideways.
+                    .containerRelativeFrame(.horizontal)
                 }
             }
             .navigationTitle("You")
@@ -179,11 +109,41 @@ struct ProfileView: View {
                     }
                 }
             }
-            .confirmationDialog(
-                "This deletes this device's copy of your envelopes and your people. They do not come back. Your account is kept. Sign in again with your key or \(Biometry.name).",
-                isPresented: $confirmReset, titleVisibility: .visible
-            ) {
-                Button("Sign out and delete local data", role: .destructive) {
+            .confirmationDialog("Your name and photo", isPresented: $showEditOptions, titleVisibility: .visible) {
+                Button("Change name") {
+                    draftName = currentName
+                    renaming = true
+                }
+                Button(ProfilePhoto.shared.image == nil ? "Choose a photo" : "Choose a new photo") {
+                    showPhotoPicker = true
+                }
+                if ProfilePhoto.shared.image != nil {
+                    Button("Remove photo", role: .destructive) { ProfilePhoto.shared.remove() }
+                }
+                Button("Cancel", role: .cancel) {}
+            }
+            .photosPicker(isPresented: $showPhotoPicker, selection: $photoItem, matching: .images)
+            .onChange(of: photoItem) { _, item in
+                guard let item else { return }
+                Task {
+                    if let data = try? await item.loadTransferable(type: Data.self) {
+                        ProfilePhoto.shared.set(data)
+                    }
+                    photoItem = nil
+                }
+            }
+            .alert("Change your name", isPresented: $renaming) {
+                TextField("Your name", text: $draftName)
+                Button("Save") { Task { await saveName() } }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This only changes the name people see. Your key stays the same. Others see the new name the next time their app updates.")
+            }
+            // The consequence goes here, not under the button. Signing out
+            // really does erase this iPhone's envelopes and people, so the
+            // dialog says so plainly.
+            .confirmationDialog("Sign out on this iPhone?", isPresented: $confirmReset, titleVisibility: .visible) {
+                Button("Sign out", role: .destructive) {
                     // ContentView wipes the engines; Parent Mode is view-layer
                     // presentation state, so it is cleared here, otherwise the
                     // next identity on this phone would inherit it.
@@ -191,7 +151,11 @@ struct ProfileView: View {
                     RecoveryNotice.wipe(ownerHash: myRoot.credentialIDHash)
                     onSignOut()
                 }
+            } message: {
+                Text("This erases your envelopes and people from this iPhone, and they do not come back. Your account stays. Sign in again with your key or \(Biometry.name).")
             }
+            // Account deletion (App Review 5.1.1(v)). The decision and every
+            // warning are unchanged; only the screen leading here got simpler.
             .confirmationDialog(
                 hasSealedEnvelopes
                 ? "Delete your Seal account forever? This cannot be undone. First, choose what happens to your sealed envelopes.\n\nKeep them: they stay sealed for your family. You can never check in again, so they open under your rule, after the silence, the warnings and your key holders' taps.\n\nCancel them: they are removed and can never be opened by anyone.\n\nYour key holders will see which you chose. Your key signs it, one more tap."
@@ -241,6 +205,13 @@ struct ProfileView: View {
             .alert("Could not remove the device", isPresented: Binding(get: { revokeError != nil }, set: { if !$0 { revokeError = nil } })) {
                 Button("OK", role: .cancel) {}
             } message: { Text(revokeError ?? "") }
+            .alert("Restore purchase", isPresented: $restored) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(purchase.isUnlocked
+                     ? "Found it. Seal is paid for on this Apple ID."
+                     : (purchase.loadError ?? "No Seal purchase was found on this Apple ID. If you paid with a different Apple ID, sign in to the App Store with that one and try again."))
+            }
             .task {
                 timestampsOn = TimestampStore.isEnabled(ownerHash: myRoot.credentialIDHash)
                 await loadDevices()
@@ -259,345 +230,397 @@ struct ProfileView: View {
         .preferredColorScheme(.dark)
     }
 
-    // MARK: - Sections
+    // MARK: - 1. Header
 
-    /// Having no backup key is the state that costs you the identity, so it
-    /// is the state that must not be quiet. It used to link into the Advanced
-    /// screen. It no longer links anywhere, because the section it was
-    /// sending people to is a little further down this same screen.
-    @ViewBuilder
-    private var backupWarning: some View {
-        if (identity.rootIdentity?.backupCredentials ?? []).isEmpty {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "exclamationmark.shield")
-                    .foregroundStyle(.orange)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("No backup key yet")
-                        .foregroundStyle(.white)
-                    Text("Lose your key and this account is gone. Nobody can reset it. Add one under Your keys, below.")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.6))
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 0)
+    /// The photo, the name and one way to change either. No credential tier
+    /// and no fingerprint words here; those are under Advanced.
+    private var header: some View {
+        VStack(spacing: 8) {
+            Button { showEditOptions = true } label: {
+                IdentityRing(displayName: currentName, tier: myRoot.tier, size: 88,
+                             photo: ProfilePhoto.shared.image)
             }
-            .font(.callout)
-            .multilineTextAlignment(.leading)
+            .buttonStyle(.plain)
+            .accessibilityLabel("Your photo")
+            .accessibilityHint("Change your name or photo")
+
+            Text(currentName)
+                .font(.system(.title2, design: .rounded, weight: .semibold))
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+            Text("Your Seal account")
+                .font(.subheadline)
+                .foregroundStyle(.white.opacity(0.55))
+            Button("Edit name and photo") { showEditOptions = true }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(SealTheme.brass)
+                .frame(minHeight: 44)
+        }
+        .padding(.top, 20)
+        .padding(.horizontal, 20)
+    }
+
+    // MARK: - 2. The one thing that may need doing
+
+    /// No backup key is the state that can cost someone their account, so it
+    /// sits right under the name. It asks instead of threatening; the full
+    /// story is on the backup key page.
+    @ViewBuilder
+    private var recoveryCard: some View {
+        if hasBackup {
+            NavigationLink { backupKeysPage } label: {
+                row("Account recovery is ready", icon: "checkmark.shield.fill", tint: SealTheme.brass,
+                    subtitle: "Manage backup keys")
+            }
+            .buttonStyle(.plain)
+            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: Self.radius, style: .continuous))
+            .padding(.horizontal, 20)
+        } else {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "exclamationmark.shield")
+                        .font(.title3)
+                        .foregroundStyle(.orange)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Protect your account")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                        Text("Add another key in case this one is lost.")
+                            .font(.subheadline)
+                            .foregroundStyle(.white.opacity(0.7))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                NavigationLink { backupKeysPage } label: {
+                    Text("Add a backup key")
+                        .font(.body.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(SealTheme.brass)
+                .foregroundStyle(SealTheme.ink)
+            }
             .padding(16)
-            .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: Self.radius, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: Self.radius, style: .continuous)
                     .strokeBorder(.orange.opacity(0.35), lineWidth: 1)
             )
-            .padding(.horizontal, 24)
+            .padding(.horizontal, 20)
         }
     }
 
-    @ViewBuilder
-    private var onThisPhoneSection: some View {
-        sectionHeading("On this phone")
-
-        if appLock.isAvailable {
-            SettingRow(icon: Biometry.symbol, tint: SealTheme.brass,
-                       title: "Require \(Biometry.name)",
-                       summary: "Lock Seal when you leave it",
-                       detail: "Seal always asks for \(Biometry.name) or your passcode before it shows a password or seed phrase, whether this is on or off. Turned on, it also locks Seal when you leave it.",
-                       isOn: .init(
-                           get: { appLock.isEnabled },
-                           set: { value in Task { await appLock.setEnabled(value) } }),
-                       switchTint: SealTheme.brass)
+    /// Adding, listing and removing backup keys: the existing section, on a
+    /// page of its own.
+    private var backupKeysPage: some View {
+        ZStack {
+            SealTheme.ink.ignoresSafeArea()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("A backup key gets you back into Seal if your main key or this iPhone is lost. Keep it somewhere different from your main key.")
+                        .font(.callout)
+                        .foregroundStyle(.white.opacity(0.7))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 24)
+                    BackupKeysSection(myRoot: myRoot, ceremony: ceremony, sync: sync)
+                }
+                .padding(.vertical, 20)
+                .frame(maxWidth: 520)
+                .frame(maxWidth: .infinity)
+                .containerRelativeFrame(.horizontal)
+            }
         }
-
-        // "Bigger text" was removed in 1.3: iOS Text Size does the same job.
+        .navigationTitle("Backup keys")
+        .navigationBarTitleDisplayMode(.inline)
     }
 
-    @ViewBuilder
-    private var yourKeysSection: some View {
-        sectionHeading("Your keys")
+    // MARK: - 3. Security
 
-        BackupKeysSection(myRoot: myRoot, ceremony: ceremony, sync: sync)
+    private var securityGroup: some View {
+        group("Security") {
+            if appLock.isAvailable {
+                Toggle(isOn: .init(
+                    get: { appLock.isEnabled },
+                    set: { value in Task { await appLock.setEnabled(value) } })) {
+                    rowText("Lock with \(Biometry.name)", icon: Biometry.symbol, tint: SealTheme.brass,
+                            subtitle: "Secrets always ask, even when this is off.")
+                }
+                .tint(SealTheme.brass)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .frame(minHeight: 56)
+                separator
+            }
+            NavigationLink { backupKeysPage } label: {
+                row("Backup key", icon: "key.horizontal.fill", tint: SealTheme.brass,
+                    value: hasBackup ? "Ready" : "Not added",
+                    valueTint: hasBackup ? .white.opacity(0.5) : .orange)
+            }
+            .buttonStyle(.plain)
+        }
+    }
 
-        // Shown whenever there is any device at all. "You have exactly one
-        // phone" is an answer, not noise.
-        if !devices.isEmpty { devicesCard }
+    // MARK: - 4. Help
 
-        // Last thing on the screen, shut. Nobody reads a truncated hex hash,
-        // and the fingerprint phrase at the top of this screen is the same
-        // number in words a person can say out loud to their daughter. This is
-        // evidence for the one day somebody needs to check it, so it sits at
-        // the bottom beside the other reference material rather than in the
-        // middle of the keys somebody came here to manage.
-        DisclosureCard(title: "Technical details") {
-            VStack(alignment: .leading, spacing: 10) {
-                infoRow("Seal", String(myRoot.credentialIDHash.prefix(24)) + "\u{2026}")
-                Text("The same seal as the words under your name.")
-                    .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.4))
-                infoRow("Directory", directoryStatus)
-                infoRow("This device", identity.deviceEndorsement != nil ? "Approved by your key" : "Not approved yet")
+    private var helpGroup: some View {
+        group("Help") {
+            Button { showHowTo = true } label: {
+                row("How Seal works", icon: "questionmark.circle")
+            }
+            .buttonStyle(.plain)
+            separator
+            // The site's support page: questions about keys, key holders, a
+            // lost phone, and the support email.
+            Link(destination: URL(string: "https://sealmessenger.com/support")!) {
+                row("Get help with keys and setup", icon: "lifepreserver")
+            }
+            .buttonStyle(.plain)
+            separator
+            // Moved here from People in 1.3. It only shares the website.
+            ShareLink(item: FriendsView.inviteURL,
+                      subject: Text("Seal"),
+                      message: Text(FriendsView.inviteMessage)) {
+                row("Share Seal", icon: "square.and.arrow.up")
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    // MARK: - 5. Purchase
+
+    /// Shown in the demo account too: App Review uses the demo, the demo
+    /// cannot seal, and without this row the reviewer could not reach the
+    /// purchase (rejection 2.1(b), 2026-10-02). Restore stays reachable for
+    /// App Review 3.1.1.
+    private var purchaseGroup: some View {
+        group("Purchase") {
+            if purchase.isUnlocked {
+                row("Seal is paid for", icon: "checkmark.seal.fill", tint: SealTheme.brass, chevron: false)
+            } else {
+                Button { showPaywall = true } label: {
+                    row("Buy Seal", icon: "seal", tint: SealTheme.brass,
+                        subtitle: "One purchase for the person creating envelopes.",
+                        value: purchase.displayPrice)
+                }
+                .buttonStyle(.plain)
+                separator
+                Button {
+                    Task { await purchase.restore(); restored = true }
+                } label: {
+                    row("Restore purchase", icon: "arrow.clockwise", chevron: false)
+                }
+                .buttonStyle(.plain)
             }
         }
     }
 
-    @ViewBuilder
-    private var yourRecordSection: some View {
-        sectionHeading("Your record")
+    // MARK: - 6. Advanced
 
-        // The Record (docs/RECORD.md). First, because it is a superset of
-        // History and the direction of travel: once it can export, History
-        // retires into it.
+    /// Closed by default. Records, devices, timestamps, the fingerprint words
+    /// and directory status. Never recovery.
+    private var advancedGroup: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                withAnimation(.easeOut(duration: 0.2)) { showAdvanced.toggle() }
+            } label: {
+                HStack {
+                    Text("Advanced")
+                        .font(.body)
+                        .foregroundStyle(.white.opacity(0.8))
+                    Spacer()
+                    Image(systemName: showAdvanced ? "chevron.up" : "chevron.down")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.4))
+                }
+                .padding(.horizontal, 16)
+                .frame(minHeight: 52)
+                .contentShape(Rectangle())
+                .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: Self.radius, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint(showAdvanced ? "Hides advanced settings" : "Shows advanced settings")
+
+            if showAdvanced {
+                Text("You usually will not need these settings.")
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.5))
+                    .padding(.horizontal, 16)
+                    .padding(.top, 4)
+                VStack(spacing: 0) { advancedRows }
+                    .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: Self.radius, style: .continuous))
+            }
+        }
+        .padding(.horizontal, 20)
+    }
+
+    @ViewBuilder
+    private var advancedRows: some View {
         NavigationLink {
-            RecordView(myRoot: myRoot, friendStore: friendStore,
-                       estateEngine: estateEngine)
+            RecordView(myRoot: myRoot, friendStore: friendStore, estateEngine: estateEngine)
         } label: {
-            pageRow("Record", "list.bullet.rectangle.portrait",
-                    "Everything that has happened between you and each person, signed.")
+            row("Record", icon: "list.bullet.rectangle.portrait",
+                subtitle: "Everything signed between you and each person.")
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, 24)
-        .parentTapTarget()
-
+        separator
         NavigationLink {
             ForgeLogView(myRoot: myRoot, friendStore: friendStore)
         } label: {
-            pageRow("History", "book.closed.fill",
-                    "Every person you've added in person, with the date it happened.")
+            row("History", icon: "book.closed", subtitle: "Everyone you added in person, with dates.")
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, 24)
-        .parentTapTarget()
-
-        // There was a "Handovers" page here, and a 573-line screen behind it
-        // for photographing any object and signing a receipt for it with
-        // anybody, friend or not. That was the messenger's ambition, not this
-        // product's. The one handover that matters to a will is the security
-        // key reaching a custodian, and that is recorded from the person's
-        // own page and shows up in the Record as a line like any other.
-
-        // Off by default and asked for explicitly, because turning it on
-        // means something leaves this phone. Silver: it changes what Seal can
-        // prove about time, which is a capability, not a trust claim about a
-        // person (UI.md 1.1).
-        SettingRow(icon: "clock.badge.checkmark", tint: SealTheme.silver,
-                   title: "Independent timestamps",
-                   summary: "Prove when, not just who",
-                   detail: "The times in your record come from this phone's own clock, so Seal can prove who signed something and that it has not changed, but not when it happened. Turn this on and an outside service signs each time as well. Only a short code is sent, never an envelope and never a name. It does tell that service that something was written down, which is why it is off until you ask for it.",
-                   isOn: .init(
-                       get: { timestampsOn },
-                       set: { value in
-                           TimestampStore.setEnabled(value, ownerHash: myRoot.credentialIDHash)
-                           timestampsOn = value
-                       }),
-                   switchTint: SealTheme.silver)
-    }
-
-    @ViewBuilder
-    private var helpSection: some View {
-        sectionHeading("Help")
-
-        // The tutorial, on demand. WelcomeCarousel only ever ran once, behind
-        // an @AppStorage flag on first launch, which meant the explanation of
-        // what Seal even is was unreachable the moment somebody tapped
-        // through it.
-        Button { showHowTo = true } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "questionmark.circle")
-                    .foregroundStyle(SealTheme.silver)
-                Text("How Seal works")
-                    .foregroundStyle(.white.opacity(0.9))
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.3))
-            }
-            .font(.callout)
-            .padding(16)
-            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
+        separator
+        // Off until asked for, because turning it on sends a short code to an
+        // outside timestamp service.
+        Toggle(isOn: .init(
+            get: { timestampsOn },
+            set: { value in
+                TimestampStore.setEnabled(value, ownerHash: myRoot.credentialIDHash)
+                timestampsOn = value
+            })) {
+            rowText("Independent timestamps", icon: "clock.badge.checkmark", tint: SealTheme.silver,
+                    subtitle: "An outside service also signs the time. Only a short code is sent.")
         }
-        .buttonStyle(.plain)
-        .padding(.horizontal, 24)
-        .parentTapTarget()
-
-        // Moved here from People in 1.3. It only shares a link to the
-        // website, so it should not compete with Scan on the People screen.
-        ShareLink(item: FriendsView.inviteURL,
-                  subject: Text("Seal"),
-                  message: Text(FriendsView.inviteMessage)) {
-            HStack(spacing: 12) {
-                Image(systemName: "square.and.arrow.up")
-                    .foregroundStyle(SealTheme.silver)
-                Text("Tell someone about Seal")
-                    .foregroundStyle(.white.opacity(0.9))
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.3))
-            }
-            .font(.callout)
-            .padding(16)
-            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
-        }
-        .buttonStyle(.plain)
-        .padding(.horizontal, 24)
-        .parentTapTarget()
-
-        // The purchase, reachable on purpose and not only from the seal
-        // button. Somebody whose estate sealed before there was a price
-        // never meets the paywall, and somebody who wants to pay ahead of
-        // writing should be able to. Hidden once it is paid for.
-        //
-        // Shown in the demo account too. App Review uses the demo (it needs
-        // no security key and no second person), the demo cannot seal, and
-        // so with this row hidden there the reviewer had no way to reach the
-        // purchase at all (rejection 2.1(b), 2026-10-02). The purchase is
-        // Apple's, not the demo identity's, so buying here is a real
-        // sandbox purchase on the reviewer's Apple ID.
-        if !purchase.isUnlocked {
-            Button { showPaywall = true } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "seal")
-                        .foregroundStyle(SealTheme.silver)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(purchase.displayPrice.map { "Pay for your seal, \($0)" } ?? "Pay for your seal")
-                            .foregroundStyle(.white.opacity(0.9))
-                        Text("One payment, once. The people you choose never pay.")
-                            .font(.caption).foregroundStyle(.white.opacity(0.5))
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.3))
-                }
+        .tint(SealTheme.silver)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(minHeight: 56)
+        separator
+        VStack(alignment: .leading, spacing: 6) {
+            rowText("Your words", icon: "text.quote", tint: SealTheme.silver,
+                    subtitle: "People you meet can check these match.")
+            Text(FingerprintPhrase.phrase(for: myRoot.publicKey))
                 .font(.callout)
-                .padding(16)
-                .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
+                .foregroundStyle(SealTheme.brass)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.leading, 40)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        if !devices.isEmpty {
+            separator
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Devices")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.5))
+                ForEach(devices, id: \.devicePublicKey) { device in
+                    deviceRow(device)
+                }
             }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 24)
-            .parentTapTarget()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
         }
-    }
-
-    @ViewBuilder
-    private var accountSection: some View {
-        // Restore purchases (App Review 3.1.1). One line, no card: the person
-        // who needs it has a new phone and an old receipt, and the sentence
-        // says exactly that.
-        Button {
-            Task { await purchase.restore(); restored = true }
-        } label: {
-            Text(purchase.isUnlocked ? "Your seal is paid for" : "Restore a seal you paid for")
-                .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.bordered)
-        .tint(.white)
-        .disabled(purchase.isUnlocked)
-        .padding(.horizontal, 24)
-        .padding(.top, 16)
-        .alert("Restore", isPresented: $restored) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(purchase.isUnlocked
-                 ? "Found it. Your seal is paid for on this Apple ID."
-                 : (purchase.loadError ?? "No seal purchase was found on this Apple ID. If you paid with a different Apple ID, sign in to the App Store with that one and try again."))
-        }
-
-        Button(role: .destructive) { confirmReset = true } label: {
-            Text("Sign out")
-                .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.bordered)
-        .tint(.orange)
-        .padding(.horizontal, 24)
-        .padding(.top, 16)
-
-        Text("Signing out deletes this device's copy of your envelopes and your people. Your account is kept. Sign back in with your key or \(Biometry.name).")
-            .font(.caption2)
-            .foregroundStyle(.white.opacity(0.5))
-            .multilineTextAlignment(.center)
-            .padding(.horizontal, 40)
-
-        // Account deletion (App Review 5.1.1(v)): directory record removed
-        // first, then the full local wipe.
-        Button(role: .destructive) { confirmDelete = true } label: {
-            Group {
-                if deleting { ProgressView() } else { Text("Delete my account") }
-            }
-            .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.bordered)
-        .tint(.red)
-        .disabled(deleting)
-        .padding(.horizontal, 24)
-
-        if let deleteError {
-            Text(deleteError)
-                .font(.caption2)
-                .foregroundStyle(.orange)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
-        }
-
-        Text("Deleting removes your account for good. People you have met can no longer check that it is you, and your history is gone. There is no way to undo it.")
-            .font(.caption2)
-            .foregroundStyle(.white.opacity(0.5))
-            .multilineTextAlignment(.center)
-            .padding(.horizontal, 40)
-            .padding(.bottom, 24)
-    }
-
-    /// Shown whenever there is any device at all, unlike the old Profile card
-    /// which hid itself below two devices. Under a heading that says "Your
-    /// keys", "you have exactly one phone" is an answer, not noise.
-    private var devicesCard: some View {
+        separator
         VStack(alignment: .leading, spacing: 10) {
-            Text("Devices")
-                .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.6))
-            ForEach(devices, id: \.devicePublicKey) { device in
-                deviceRow(device)
-            }
+            infoRow("Account", String(myRoot.credentialIDHash.prefix(16)) + "\u{2026}", monospaced: true)
+            infoRow("Sign-in", myRoot.tier == .verified ? "Hardware key" : "Passkey")
+            infoRow("Directory", directoryStatus)
+            infoRow("This iPhone", identity.deviceEndorsement != nil ? "Approved by your key" : "Not approved yet")
         }
         .padding(16)
-        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
-        .padding(.horizontal, 24)
     }
 
-    /// A plain heading over a group of rows. This is what replaced the
-    /// Advanced drawer: none of that material needed hiding, it needed
-    /// labels saying what was under them.
-    private func sectionHeading(_ text: String) -> some View {
-        Text(text)
-            .font(.system(.subheadline, design: .rounded, weight: .semibold))
-            .foregroundStyle(.white.opacity(0.6))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 24)
-            .padding(.top, 10)
+    // MARK: - 7. Account
+
+    /// Last on the screen and quiet until tapped. The consequences are in the
+    /// two confirmation dialogs.
+    private var accountGroup: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            group("Account") {
+                Button { confirmReset = true } label: {
+                    row("Sign out on this iPhone", icon: "rectangle.portrait.and.arrow.right", chevron: false)
+                }
+                .buttonStyle(.plain)
+                separator
+                Button { confirmDelete = true } label: {
+                    row(deleting ? "Deleting\u{2026}" : "Delete account", icon: "trash",
+                        tint: .red.opacity(0.85), titleTint: .red.opacity(0.9), chevron: false)
+                }
+                .buttonStyle(.plain)
+                .disabled(deleting)
+            }
+            if let deleteError {
+                Text(deleteError)
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 36)
+            }
+        }
     }
 
-    /// A row that opens a page. Was `advancedRow`, back when these three
-    /// lived behind a drawer called Advanced.
-    private func pageRow(_ title: String, _ icon: String, _ subtitle: String) -> some View {
-        HStack(spacing: 12) {
+    // MARK: - Building blocks
+
+    /// A titled group: one surface, rows inside it, thin separators between.
+    private func group<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.5))
+                .padding(.horizontal, 16)
+                .accessibilityAddTraits(.isHeader)
+            VStack(spacing: 0) { content() }
+                .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: Self.radius, style: .continuous))
+        }
+        .padding(.horizontal, 20)
+    }
+
+    private var separator: some View {
+        Divider()
+            .overlay(Color.white.opacity(0.08))
+            .padding(.leading, 56)
+    }
+
+    /// The icon, the title and at most one short line under it.
+    private func rowText(_ title: String, icon: String, tint: Color,
+                         titleTint: Color = .white, subtitle: String? = nil) -> some View {
+        HStack(spacing: 14) {
             Image(systemName: icon)
-                .foregroundStyle(SealTheme.brass)
+                .font(.body)
+                .foregroundStyle(tint)
+                .frame(width: 26)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .foregroundStyle(.white)
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.5))
+                    .font(.body)
+                    .foregroundStyle(titleTint)
                     .fixedSize(horizontal: false, vertical: true)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.footnote)
+                        .foregroundStyle(.white.opacity(0.55))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
-            Spacer()
-            Image(systemName: "chevron.right")
-                .font(.caption)
-                .foregroundStyle(.white.opacity(0.3))
         }
-        .font(.callout)
         .multilineTextAlignment(.leading)
-        .padding(16)
-        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    /// A tappable row: text on the left, an optional value and a chevron on
+    /// the right. At least 56 points tall.
+    private func row(_ title: String, icon: String, tint: Color = SealTheme.silver,
+                     titleTint: Color = .white, subtitle: String? = nil,
+                     value: String? = nil, valueTint: Color = .white.opacity(0.5),
+                     chevron: Bool = true) -> some View {
+        HStack(spacing: 10) {
+            rowText(title, icon: icon, tint: tint, titleTint: titleTint, subtitle: subtitle)
+            Spacer(minLength: 8)
+            if let value {
+                Text(value)
+                    .font(.body)
+                    .foregroundStyle(valueTint)
+            }
+            if chevron {
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.3))
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(minHeight: 56)
+        .contentShape(Rectangle())
     }
 
     private func deviceRow(_ device: DeviceEndorsement) -> some View {
@@ -607,7 +630,7 @@ struct ProfileView: View {
             Image(systemName: isRevoked ? "iphone.slash" : "iphone")
                 .foregroundStyle(isRevoked ? .orange.opacity(0.7) : SealTheme.silver)
             VStack(alignment: .leading, spacing: 1) {
-                Text(isThisDevice ? "This device" : "Device \(device.devicePublicKey.hexString.prefix(8))")
+                Text(isThisDevice ? "This iPhone" : "Device \(device.devicePublicKey.hexString.prefix(8))")
                     .font(.callout)
                     .foregroundStyle(.white.opacity(isRevoked ? 0.4 : 0.9))
                     .strikethrough(isRevoked)
@@ -719,13 +742,13 @@ struct ProfileView: View {
     /// one control Parent Mode absolutely must leave reachable is the toggle
     /// that turns Parent Mode off. Above accessibility sizes the switch moves
     /// below the label instead, where it has the full width.
-    private func infoRow(_ label: String, _ value: String) -> some View {
+    private func infoRow(_ label: String, _ value: String, monospaced: Bool = false) -> some View {
         HStack {
             Text(label).foregroundStyle(.white.opacity(0.5))
             Spacer()
             Text(value)
                 .foregroundStyle(.white.opacity(0.9))
-                .font(.callout.monospaced())
+                .font(monospaced ? .callout.monospaced() : .callout)
                 .lineLimit(1)
         }
         .font(.callout)
