@@ -38,12 +38,12 @@ struct PolicyView: View {
         switch policy.kind {
         case .quiet:
             showMore
-                ? [.kind, .silence, .threshold, .warning, .grace, .objection, .confirmation, .review]
-                : [.kind, .silence, .threshold, .review]
+                ? [.silence, .threshold, .warning, .grace, .objection, .confirmation, .review]
+                : [.silence, .threshold, .review]
         case .breakGlass:
-            showMore ? [.kind, .threshold, .confirmation, .review] : [.kind, .threshold, .review]
+            showMore ? [.threshold, .confirmation, .review] : [.threshold, .review]
         case .rightAway:
-            [.kind, .review]
+            [.review]
         }
     }
 
@@ -80,7 +80,7 @@ struct PolicyView: View {
                     controls
                 }
             }
-            .navigationTitle("Your rule")
+            .navigationTitle(policy.kind.label)
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
@@ -177,7 +177,7 @@ struct PolicyView: View {
                 .frame(height: 150)
             }
         case .review:
-            prompt("Ready to save?", "You can change the timing later. The opening type is fixed after your first seal.") {
+            prompt("Ready to save?", "You can change these numbers again later.") {
                 Text(policy.summary(custodianCount: estateEngine.estate?.custodians.count ?? 0))
                     .font(.system(.title3, design: .rounded, weight: .semibold))
                     .foregroundStyle(SealTheme.brass)

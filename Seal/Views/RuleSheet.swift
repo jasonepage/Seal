@@ -38,10 +38,6 @@ struct RuleSheet: View {
     @State private var policyFor: RuleRef?
     @State private var holdersOpen: Set<String> = []
     @State private var confirmMoveTo: RuleRef?
-    @State private var showAdd = false
-    @State private var renaming: RuleRef?
-    @State private var deleting: RuleRef?
-    @State private var nameDraft = ""
     @State private var problem: String?
     @Environment(\.parentMode) private var parentMode
 
@@ -69,11 +65,10 @@ struct RuleSheet: View {
                              : "This envelope uses the rule marked below. Pick another to change it.")
                             .font(.callout).foregroundStyle(.white.opacity(0.7))
                             .fixedSize(horizontal: false, vertical: true)
-                        ForEach(engines.all, id: \.storeHash) { engine in
+                        ForEach(engines.ordered, id: \.storeHash) { engine in
                             ruleCard(engine)
                         }
-                        if engines.canAdd { addRow }
-                        Text("Up to three rules. Your key holders tap once for each rule they hold a key for.")
+                        Text("Your key holders tap once for each rule they hold a key for.")
                             .font(.caption).foregroundStyle(.white.opacity(0.4))
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -96,36 +91,8 @@ struct RuleSheet: View {
                     .environment(\.parentMode, parentMode)
                     .parentTypeScale()
             }
-            // 1.3: a new rule is picked by how it opens, and named for it.
-            // No typing. Rename stays in the card's menu.
-            .confirmationDialog("How should the new rule open?", isPresented: $showAdd, titleVisibility: .visible) {
-                ForEach(addableKinds, id: \.self) { kind in
-                    Button(kind.label) { addRule(kind) }
-                }
-                Button("Cancel", role: .cancel) {}
-            }
-            .alert("Rename this rule", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
-                TextField("Name", text: $nameDraft)
-                Button("Rename") {
-                    if let ref = renaming { engines.rename(ref.engine.slot.id, to: nameDraft) }
-                    renaming = nil
-                }
-                Button("Cancel", role: .cancel) { renaming = nil }
-            } message: {
-                Text("Your key holders see the new name after your next seal.")
-            }
             .confirmationDialog(
-                "Delete this rule? It has no envelopes and was never sealed, so nothing is lost.",
-                isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
-                titleVisibility: .visible
-            ) {
-                Button("Delete rule", role: .destructive) {
-                    if let ref = deleting { engines.remove(ref.engine.slot.id) }
-                    deleting = nil
-                }
-            }
-            .confirmationDialog(
-                confirmMoveTo.map { "Move this envelope to \($0.engine.slot.name)? It goes into a different set of keys. Both sets need sealing again before the change counts." } ?? "",
+                confirmMoveTo.map { "Use \($0.engine.estate?.policy.kind.label ?? $0.engine.slot.name) for this envelope? Both rules need sealing again before the change counts." } ?? "",
                 isPresented: Binding(get: { confirmMoveTo != nil }, set: { if !$0 { confirmMoveTo = nil } }),
                 titleVisibility: .visible
             ) {
@@ -149,7 +116,6 @@ struct RuleSheet: View {
         let estate = engine.estate
         let isCurrent = current === engine
         let holders = estate?.custodians ?? []
-        let refusal = engines.removeRefusal(engine.slot.id)
         return VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Image(systemName: isCurrent ? "checkmark.circle.fill" : "clock.badge")
@@ -157,24 +123,8 @@ struct RuleSheet: View {
                     .foregroundStyle(isCurrent ? SealTheme.brass : .white.opacity(0.5))
                     .frame(width: 22)
                     .accessibilityHidden(true)
-                Text(engine.slot.name).font(.headline).foregroundStyle(.white)
+                Text(estate?.policy.kind.label ?? engine.slot.name).font(.headline).foregroundStyle(.white)
                 Spacer()
-                Menu {
-                    Button {
-                        nameDraft = engine.slot.name
-                        renaming = RuleRef(engine: engine)
-                    } label: { Label("Rename", systemImage: "pencil") }
-                    if !engine.slot.isDefault {
-                        Button(role: .destructive) { deleting = RuleRef(engine: engine) } label: {
-                            Label("Delete this rule", systemImage: "trash")
-                        }
-                        .disabled(refusal != nil)
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle").foregroundStyle(.white.opacity(0.6))
-                        .frame(width: 32, height: 32)
-                }
-                .accessibilityLabel("More for \(engine.slot.name)")
             }
 
             if isCurrent, current != nil {
@@ -219,11 +169,6 @@ struct RuleSheet: View {
             }
             }
 
-            if let refusal, !engine.slot.isDefault, several {
-                Text("To delete this rule: \(refusal.line)")
-                    .font(.caption2).foregroundStyle(.white.opacity(0.35))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
 
             if current != nil, !isCurrent {
                 Button { confirmMoveTo = RuleRef(engine: engine) } label: {
@@ -283,50 +228,4 @@ struct RuleSheet: View {
         .padding(.top, 4)
     }
 
-    /// The kinds no rule uses yet, or all three if every kind is taken.
-    private var addableKinds: [ReleasePolicy.Kind] {
-        let used = Set(engines.all.compactMap { $0.estate?.policy.kind })
-        let open = ReleasePolicy.Kind.allCases.filter { !used.contains($0) }
-        return open.isEmpty ? ReleasePolicy.Kind.allCases : open
-    }
-
-    /// Makes the rule, named for its kind, and shapes it. With an envelope
-    /// in hand the envelope moves straight into it; otherwise the numbers
-    /// open next, except for right away, which has none.
-    private func addRule(_ kind: ReleasePolicy.Kind) {
-        guard let engine = engines.addRule(named: kind.label), let estate = engine.estate else { return }
-        do {
-            try engine.setPolicy(estate.policy.shaped(as: kind))
-        } catch {
-            problem = error.localizedDescription
-            return
-        }
-        if current != nil {
-            do { try onMove?(engine) } catch { problem = error.localizedDescription }
-        } else if kind != .rightAway {
-            policyFor = RuleRef(engine: engine)
-        }
-    }
-
-    private var addRow: some View {
-        Button {
-            showAdd = true
-        } label: {
-            HStack(spacing: 14) {
-                Image(systemName: "plus.circle").font(.title3).foregroundStyle(.white.opacity(0.7)).frame(width: 28)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Make a new rule").font(.headline).foregroundStyle(.white)
-                    Text("Right away, when your key holders agree, or if you go quiet.")
-                        .font(.caption).foregroundStyle(.white.opacity(0.55))
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer()
-                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.white.opacity(0.3))
-            }
-            .padding(16)
-            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
-        }
-        .buttonStyle(.plain)
-        .parentTapTarget()
-    }
 }

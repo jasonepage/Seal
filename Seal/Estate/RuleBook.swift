@@ -173,6 +173,42 @@ final class EstateEngines {
         let rules = RuleBook.load(ownerHash: ownerHash)
         self.rules = rules
         self.all = rules.map { EstateEngine(ownerHash: ownerHash, identity: identity, sync: sync, slot: $0) }
+        ensurePresets()
+    }
+
+    /// The order the three kinds are shown in, most used first.
+    static let kindOrder: [ReleasePolicy.Kind] = [.breakGlass, .rightAway, .quiet]
+
+    /// 1.3 (Jason): there are only three kinds, so there are three rules,
+    /// one of each, from the start. Nobody makes a rule by hand; they only
+    /// change its numbers. Existing rules are kept as they are; a kind that
+    /// is missing is added while there is room under the cap of three. The
+    /// When I go quiet preset starts at the usual 90, 21 and 14 days.
+    /// An empty preset has nothing to seal (Estate.hasUnsealedChanges).
+    private func ensurePresets() {
+        guard !DemoFixtures.isActive else { return }
+        main.createEstateIfNeeded()
+        for kind in Self.kindOrder {
+            guard canAdd else { return }
+            if all.contains(where: { $0.estate?.policy.kind == kind }) { continue }
+            guard let engine = addRule(named: kind.label), let estate = engine.estate else { continue }
+            var policy = estate.policy.shaped(as: kind)
+            if kind == .quiet {
+                policy.silenceDays = ReleasePolicy.defaultSilenceDays
+                policy.warningDays = ReleasePolicy.defaultWarningDays
+                policy.graceDays = ReleasePolicy.defaultGraceDays
+            }
+            try? engine.setPolicy(policy)
+        }
+    }
+
+    /// Every rule in the order the three kinds are shown.
+    var ordered: [EstateEngine] {
+        all.sorted {
+            let a = Self.kindOrder.firstIndex(of: $0.estate?.policy.kind ?? .quiet) ?? 9
+            let b = Self.kindOrder.firstIndex(of: $1.estate?.policy.kind ?? .quiet) ?? 9
+            return a < b
+        }
     }
 
     /// The default rule's engine. What this phone holds for others lives
@@ -191,7 +227,7 @@ final class EstateEngines {
     /// The name to show beside an envelope, or nil when there is only one
     /// rule and a tag would be noise.
     func tag(for engine: EstateEngine) -> String? {
-        rules.count > 1 ? engine.slot.name : nil
+        rules.count > 1 ? (engine.estate?.policy.kind.label ?? engine.slot.name) : nil
     }
 
     /// Every envelope on this phone with the engine it belongs to, newest

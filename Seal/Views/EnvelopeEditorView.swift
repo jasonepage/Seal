@@ -875,7 +875,7 @@ struct EnvelopeEditorView: View {
             }
             return estate.policy.summary(custodianCount: holders.count) + " Keys: " + holders.map(\.displayName).joined(separator: ", ") + "."
         }()
-        return card(.rule, "clock.badge", several ? "When it opens: \(estateEngine.slot.name)" : "When it opens",
+        return card(.rule, "clock.badge", several ? "When it opens: \(estateEngine.estate?.policy.kind.label ?? estateEngine.slot.name)" : "When it opens",
                     prompt: releasePrompt(estate?.policy),
                     filled: !holders.isEmpty, action: "Change", onAction: { showRule = true }) {
             Text(line)

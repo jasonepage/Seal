@@ -140,11 +140,14 @@ Dates are the day the work landed in the repository. Anything marked
   The contents stay sealed and still cannot be edited on the new phone;
   only the "I am here" line moves. The sign-out message says so.
   (`Seal/Estate/OwnedSets.swift`, `HomeView.refreshEverything`)
-- Your rules: "Make a new rule" asks how it should open (Right away, Break
-  glass, When I go quiet) and names it for that, instead of a text box
-  with "Sooner". With an envelope open, the envelope moves into the new
-  rule at once. A right away rule's card no longer shows Numbers and Key
-  holders buttons, or the line about handing out keys. (`RuleSheet.swift`)
+- Three rules, one of each kind, from the start: Break glass, Right away
+  and When I go quiet (90, 21 and 14 days). Nobody makes or names a rule;
+  they pick one for each envelope and change its numbers. Existing rules
+  are kept and a missing kind is added while there is room. Rules are shown
+  by their kind, the numbers screen no longer asks which kind, and an empty
+  rule never counts as waiting to be sealed. A right away rule's card has
+  no Numbers or Key holders buttons. (`RuleBook.ensurePresets`,
+  `RuleSheet.swift`, `PolicyView.swift`, `Estate.hasUnsealedChanges`)
 - A new owner's first rule is Break glass instead of When I go quiet.
   Sets that already exist keep their kind. (`EstateEngine.createEstateIfNeeded`)
 - Harbor's eyes are smaller and scale with his size.

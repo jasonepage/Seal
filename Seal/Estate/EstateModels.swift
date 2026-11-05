@@ -368,7 +368,11 @@ struct Estate: Codable, Hashable {
     /// name is skipped by every step of the seal, so counting it here would
     /// leave the Seal button lit with nothing for it to do.
     var hasUnsealedChanges: Bool {
-        needsNewEpoch || publishedPolicy != policy || tablesStale || addressedEnvelopes.contains { !$0.sealed }
+        // 1.3: the three preset rules exist from the start. One that was
+        // never sealed and holds no envelope has nothing to seal, and must
+        // not hold up the Seal button or show as waiting.
+        if publishedPolicy == nil, !epochPublished, addressedEnvelopes.isEmpty { return false }
+        return needsNewEpoch || publishedPolicy != policy || tablesStale || addressedEnvelopes.contains { !$0.sealed }
     }
 }
 
