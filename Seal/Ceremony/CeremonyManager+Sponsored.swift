@@ -112,7 +112,9 @@ extension CeremonyManager {
             setPhase(.failed(CeremonyError.cancelled.localizedDescription))
             throw CeremonyError.cancelled
         } catch let error as ASAuthorizationError where error.code == .matchedExcludedCredential {
-            setPhase(.failed(CeremonyError.alreadyRegistered.localizedDescription))
+            // Not the generic "Use Sign in instead": signing in here would
+            // swap the owner's own account for the person the key belongs to.
+            setPhase(.failed("This key is already set up for someone. If you set it up on this iPhone, they are under People: make them a key holder or write to them from there."))
             throw CeremonyError.alreadyRegistered
         } catch {
             setPhase(.failed((error as? LocalizedError)?.errorDescription ?? "Something went wrong. Tap to try again."))
