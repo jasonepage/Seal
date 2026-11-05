@@ -134,6 +134,14 @@ struct HomeView: View {
             for engine in engines.all { await engine.refreshOwner() }
         } else {
             for engine in engines.all { await engine.heartbeat() }
+            // 1.3: sets sealed on another phone or before a sign-out keep
+            // getting check-ins (OwnedSets.swift). After the main heartbeat.
+            let held = engines.all.compactMap(\.estate)
+            await OwnedSets.remember(held.filter(\.epochPublished).map(\.id), ownerHash: myRoot.credentialIDHash)
+            await OwnedSets.checkIn(identity: identity, ownerHash: myRoot.credentialIDHash,
+                                    held: Set(held.map(\.id)),
+                                    people: friendStore.friends.map(\.identity.credentialIDHash),
+                                    sync: sync)
         }
         answerCheckInRequest()
         // The heartbeat just moved, so the owner's own reminders are measured

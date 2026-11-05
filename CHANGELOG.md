@@ -131,8 +131,15 @@ Dates are the day the work landed in the repository. Anything marked
   open for them. Before, the only way out was retiring their account, which
   would have locked them out of those envelopes.
   (`CeremonyManager+FindKey.swift`, `FindKeyOwnerView.swift`)
-- The sign-out message now says that envelopes already sealed keep their
-  rule and this iPhone can no longer check in for them.
+- Check-ins follow you. Before, a new iPhone or a sign-out meant the sets
+  you had already sealed never heard from you again, so to your key holders
+  you had gone quiet and a "When I go quiet" set could open while you were
+  fine. Now every foreground also checks in on every set you sealed
+  anywhere: found through a short list of set ids in your private iCloud
+  database, and for older sets through the invites sent to your people.
+  The contents stay sealed and still cannot be edited on the new phone;
+  only the "I am here" line moves. The sign-out message says so.
+  (`Seal/Estate/OwnedSets.swift`, `HomeView.refreshEverything`)
 - Harbor's eyes are smaller and scale with his size.
 - `tools/run_core_tests.sh` now compiles with `-default-isolation MainActor`,
   the same isolation the app target uses. Before, Swift 6 reported

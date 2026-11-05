@@ -71,10 +71,20 @@ Xcode; every change is copy, a removed unused function, or one modifier):
   the directory. Likeliest compile spots: the `guard let (root,
   endorsements)` line and the toolbar placement ternary in
   FindKeyOwnerView.
-- Found while doing it: after a sign-out the old sealed set gets no more
-  check-ins (`heartbeat` writes only to the local estate), so it runs on
-  its rule. The sign-out dialog now says so. Bringing the owner's own
-  sealed set back onto a new phone is the real fix; not built.
+- Found while doing it: after a sign-out the old sealed set got no more
+  check-ins (`heartbeat` writes only to the local estate). Fixed the same
+  night (Jason: "do it for 1.3"): `OwnedSets.checkIn` runs after the main
+  heartbeat in the foreground. Set ids come from `owned.<hash>` in the
+  PRIVATE database (GroupInvite type reused, so no schema deploy) and,
+  once a launch, from `estinv.<person>.<set>` invite names for everyone
+  under People. A set is the owner's only if its log has epochPublished or
+  estateCreated by them; released and departed sets are skipped. The line
+  is an ordinary heartbeat chained to `EstateLogStore.headDigest`.
+  NOT done: the contents (owner wraps were to the old phone's keys), and
+  a delete on the new phone writes no departure line into those old sets.
+  To test: seal a quiet set with a short silence, sign out, sign in, open
+  the app, and check in Console for "owned: checked in on"; on a key
+  holder's phone the set's last check-in should move to now.
 
 Checked here: `python3 tools/check_house_rules.py` (232 files, pass),
 `git diff --check` (pass). No web, release or crypto files changed, so the

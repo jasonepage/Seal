@@ -104,6 +104,14 @@ from the outside.
   The page also leaves retired identities out of its list now, because a
   web retire cannot flip the live record (only its creator can).
 
+- **A new phone used to silence the owner (fixed 2026-11-04).** The
+  heartbeat goes only to the sets this phone holds. After a sign-out or a
+  new iPhone the old sets heard nothing and ran on their rule.
+  `OwnedSets.swift` now checks in on them too, found through `owned.<hash>`
+  in the private database or the invites to the owner's people. It cannot
+  bring their contents back, and it needs the same Apple ID for the
+  private list.
+
 ## Messaging
 
 - **The cross-device desync of 2026-06-26** looked like two unrelated bugs:
