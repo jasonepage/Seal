@@ -236,7 +236,7 @@ struct GuardedEstateView: View {
     private var custodyCard: some View {
         let last = estateEngine.myLastCustodyConfirmation(estateID: guarded.estateID)
         let due = estateEngine.custodyConfirmationDue(estateID: guarded.estateID)
-        let months = snapshot?.policy.custodyConfirmMonths ?? ReleasePolicy.defaultCustodyConfirmMonths
+        let months = snapshot?.policy.custodyConfirmMonths ?? ReleasePolicy.legacyCustodyConfirmMonths
         return VStack(alignment: .leading, spacing: 10) {
             Label(due ? "Do you still have the key \(live.ownerName) gave you?" : "Your key",
                   systemImage: due ? "key.viewfinder" : "checkmark.seal")
@@ -258,6 +258,10 @@ struct GuardedEstateView: View {
                 .buttonStyle(.borderedProminent).tint(SealTheme.brass).foregroundStyle(SealTheme.ink)
                 .disabled(working || DemoFixtures.isActive)
                 .parentTapTarget(60)
+            } else if !ReleasePolicy.asksForKeyCheck(months: months) {
+                Text("Keep it somewhere safe. Seal will not ask you to check it.")
+                    .font(.caption).foregroundStyle(.white.opacity(0.5))
+                    .fixedSize(horizontal: false, vertical: true)
             } else if let last {
                 Text("You confirmed you still have it \(SecretAge.ago(since: last, now: estateEngine.now)). Seal asks again every \(months == 12 ? "year" : "\(months) months").")
                     .font(.caption).foregroundStyle(.white.opacity(0.5))

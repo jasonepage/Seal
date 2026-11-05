@@ -53,9 +53,15 @@ enum CustodyReminders {
         let center = UNUserNotificationCenter.current()
         var changed = false
         var toAdd: [(id: String, body: String, fireIn: TimeInterval?)] = []
+        var toRemove: [String] = []
 
         for g in engine.guarded where g.isCustodian {
             guard let s = engine.guardedSnapshots[g.estateID], s.releasedAt == nil else { continue }
+            // "Never" (1.3): drop any reminder an earlier rule scheduled.
+            guard s.policy.asksForKeyCheck else {
+                if record.removeValue(forKey: g.estateID) != nil { changed = true; toRemove.append(identifier(g.estateID)) }
+                continue
+            }
             let anchor = engine.myLastCustodyConfirmation(estateID: g.estateID) ?? engine.custodySince(estateID: g.estateID)
             let anchorEpoch = anchor.timeIntervalSince1970
             if record[g.estateID] == anchorEpoch { continue }
@@ -66,6 +72,7 @@ enum CustodyReminders {
             toAdd.append((identifier(g.estateID), line(ownerName: g.ownerName), fireIn > 60 ? fireIn : nil))
         }
         if changed { save(record, ownerHash: ownerHash) }
+        if !toRemove.isEmpty { center.removePendingNotificationRequests(withIdentifiers: toRemove) }
         guard !toAdd.isEmpty else { return }
 
         let status = await center.notificationSettings().authorizationStatus

@@ -37,6 +37,13 @@ Xcode; every change is copy, a removed unused function, or one modifier):
   the same line read as unsafe global state. Script mismatch, not a release
   issue. No clock code changed. The flag needs Swift 6.2 (Xcode 26).
 - AGENTS.md: "What Seal is" now names the three kinds of rule.
+- Key checks: Never is now a choice and the default for new rules
+  (`ReleasePolicy.neverCustodyConfirmMonths`, 1200 months on purpose, see
+  CHANGELOG). Rules already sealed keep their interval; to turn it off on
+  one, open the rule, tap More options, pick Never, and seal again. Test:
+  a rule set to Never shows "Handed the key ..." under the key holder with
+  no "Ask ..." line, the key holder's screen says "Seal will not ask you
+  to check it", and no reminder arrives. Not tested on a phone yet.
 
 - Rule wizard, later the same day (Jason: too complicated for lay people):
   a quiet rule now asks 3 things (kind, how long quiet, how many agree)

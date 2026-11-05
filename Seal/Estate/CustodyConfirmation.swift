@@ -111,6 +111,13 @@ enum CustodyConfirmation {
     }
 
     static func standing(name: String, lastConfirmed: Date?, handedOverAt: Date, months: Int, now: Date) -> Standing {
+        // "Never" (1.3): nobody is asked, so nobody is ever overdue.
+        guard ReleasePolicy.asksForKeyCheck(months: months) else {
+            if let lastConfirmed {
+                return Standing(line: "Confirmed they still have their key \(SecretAge.ago(since: lastConfirmed, now: now)).", overdue: false)
+            }
+            return Standing(line: "Handed the key \(SecretAge.ago(since: handedOverAt, now: now)).", overdue: false)
+        }
         let since = lastConfirmed ?? handedOverAt
         let overdue = now.timeIntervalSince(since) > interval(months: months)
         if let lastConfirmed {
@@ -127,6 +134,7 @@ enum CustodyConfirmation {
 
     /// Whether a key holder's phone should be asking now.
     static func isDue(lastConfirmed: Date?, since fallback: Date, months: Int, now: Date) -> Bool {
-        now.timeIntervalSince(lastConfirmed ?? fallback) > interval(months: months)
+        guard ReleasePolicy.asksForKeyCheck(months: months) else { return false }
+        return now.timeIntervalSince(lastConfirmed ?? fallback) > interval(months: months)
     }
 }

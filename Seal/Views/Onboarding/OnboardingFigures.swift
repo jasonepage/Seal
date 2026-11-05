@@ -96,6 +96,8 @@ struct OnboardingNumbers: Hashable {
 
     /// "Once a year," or "Every six months," and so on, for the start of a
     /// sentence about the key holder's yearly tap.
+    var asksForKeyCheck: Bool { ReleasePolicy.asksForKeyCheck(months: custodyConfirmMonths) }
+
     var custodyConfirmLead: String {
         switch custodyConfirmMonths {
         case 12: return "Once a year,"

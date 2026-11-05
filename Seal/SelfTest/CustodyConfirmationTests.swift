@@ -136,7 +136,13 @@ enum CustodyConfirmationTests {
         let never = CustodyConfirmation.standing(name: "Karen", lastConfirmed: nil, handedOverAt: t0.addingTimeInterval(300 * day), months: 12, now: now)
         t.check(!never.overdue, "handed over 100 days ago, never confirmed, not yet due")
         t.check(CustodyConfirmation.isDue(lastConfirmed: nil, since: t0, months: 6, now: t0.addingTimeInterval(181 * day)), "due after six months of thirty days")
-        for s in [fresh, stale, never] { t.check(!s.line.contains("\u{2014}"), "no em dash") }
+        let off = ReleasePolicy.neverCustodyConfirmMonths
+        let unasked = CustodyConfirmation.standing(name: "Karen", lastConfirmed: nil, handedOverAt: t0, months: off, now: now)
+        t.check(!unasked.overdue && !unasked.line.contains("Ask Karen"), "never asked, never overdue: \(unasked.line)")
+        t.check(!CustodyConfirmation.isDue(lastConfirmed: nil, since: t0, months: off, now: t0.addingTimeInterval(36_500 * day)),
+                "a rule that never asks is never due, even a century later")
+        t.check(ReleasePolicy(threshold: 1).custodyConfirmMonths == off, "a new rule never asks by default")
+        for s in [fresh, stale, never, unasked] { t.check(!s.line.contains("\u{2014}"), "no em dash") }
     }
 
     static func policyDecodes(_ t: SelfTest.Context) throws {

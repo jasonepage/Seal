@@ -808,8 +808,8 @@ what the family will see that sat in a menu most people never open.
    promises in section 7 did not change; only how they are said.
 2. **Harbor's one next step.** On the quiet home screen, once everything
    is sealed, Harbor holds one line: the single most useful thing left. A
-   key handover nobody recorded, then a key holder whose yearly check is
-   overdue, then a backup key. Nothing while something is unsealed, because
+   key handover nobody recorded, then a key holder whose key check is
+   overdue (only when the owner turned key checks on), then a backup key. Nothing while something is unsealed, because
    the strip and the Seal bar already say that. Harbor stays off key,
    identity and release decision screens; this card is on the home screen
    and opens them.

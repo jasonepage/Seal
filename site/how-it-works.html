@@ -126,10 +126,10 @@ s_i        = Wrap(s_i, pk_holder_i)                   one piece per key holder</
     <tr><td><code>objectionWithdrawn</code></td><td>key holder</td><td>the claim, and a note</td></tr>
     <tr><td><code>authorization</code></td><td>key holder</td><td>claim ID, epoch, the record head, the WebAuthn assertion from their key, and their share re-wrapped to the claimant</td></tr>
     <tr><td><code>released</code></td><td>key holder</td><td>claim ID, epoch, which share indexes were used, and the Estate Key in the clear</td></tr>
-    <tr><td><code>custodyConfirmed</code></td><td>key holder</td><td>epoch, the record head, and an assertion. The yearly “I still have my key”</td></tr>
+    <tr><td><code>custodyConfirmed</code></td><td>key holder</td><td>epoch, the record head, and an assertion. The “I still have my key” check, which the owner can turn off</td></tr>
     <tr><td><code>ownerDeparted</code></td><td>owner</td><td>whether to keep the envelopes for the family or cancel them, and when</td></tr>
   </table>
-  <p>An event by anybody else, or an owner event of a key holder kind or the reverse, is invalid and ignored. A <code>custodyConfirmed</code> is signed over a different domain string from an <code>authorization</code>, on purpose, so a yearly check-in cannot be counted as a release tap.</p>
+  <p>An event by anybody else, or an owner event of a key holder kind or the reverse, is invalid and ignored. A <code>custodyConfirmed</code> is signed over a different domain string from an <code>authorization</code>, on purpose, so a key check cannot be counted as a release tap.</p>
 
   <h2>The capsule</h2>
   <p>Anybody holding part of an estate can export one JSON file carrying the whole signed history. It holds:</p>

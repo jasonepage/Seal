@@ -15,6 +15,20 @@ Dates are the day the work landed in the repository. Anything marked
   and at sealmessenger.com/open, with no key holders). Right away rules seal
   for free. Builds in the simulator; not yet run end to end on a phone. (`ReleasePolicy.Kind`, `EstateKeys.wrapTableDirect`,
   `EstateEngine.sealAndPublish`, `PolicyView`, `site/open/js`)
+- Key checks can be turned off, and a new rule starts with them off. The
+  rule's "Should Seal ask key holders to check their key?" question (under
+  More options) offers Never, every 6 months, every year or every 2 years.
+  Never asks nobody, so no reminder, no "Ask Dad if he still has it" line,
+  no overdue key holder, and the printed key page and onboarding stop
+  promising a yearly tap. A key holder can still confirm on the website.
+  Never is stored as 1200 months, not zero, so a key holder on an older
+  build reads it as a reminder a century away instead of one due on every
+  refresh. A policy saved before the interval existed still means once a
+  year, and rules already sealed keep the interval they were sealed with.
+  Nothing in the release machine reads it. (`ReleasePolicy`,
+  `CustodyConfirmation`, `CustodyReminders`, `PolicyView`,
+  `GuardedEstateView`, `SurvivalKitPDF`, site privacy, support and how it
+  works pages)
 - Harbor, an old and patient seal drawn entirely in SwiftUI. Harbor breathes,
   blinks, listens, protects a sealed envelope and can release one carefully.
   Reduce Motion always gets a complete still pose, and each animation settles

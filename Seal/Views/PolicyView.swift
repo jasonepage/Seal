@@ -19,8 +19,8 @@ struct PolicyView: View {
     @State private var problem: String?
     @State private var step = 0
     /// Most people answer only the first few questions. The rest keep safe
-    /// defaults (21 days of warnings, 14 more, pause on an objection, a key
-    /// check every year) and show only after "More options" on the last step.
+    /// defaults (21 days of warnings, 14 more, pause on an objection, no key
+    /// check) and show only after "More options" on the last step.
     @State private var showMore = false
 
     private var custodianCount: Int { max(estateEngine.estate?.custodians.count ?? 0, 1) }
@@ -167,10 +167,10 @@ struct PolicyView: View {
                 }
             }
         case .confirmation:
-            prompt("How often should keys be checked?", "This only confirms that each key holder still has their key. It cannot open anything.") {
+            prompt("Should Seal ask key holders to check their key?", "Never is fine for most people. If you pick a time, their phone asks them to tap their key to show they still have it. It cannot open anything.") {
                 Picker("Key check", selection: $policy.custodyConfirmMonths) {
                     ForEach(ReleasePolicy.allowedCustodyConfirmMonths, id: \.self) {
-                        Text($0 == 12 ? "Every year" : ($0 == 24 ? "Every 2 years" : "Every \($0) months")).tag($0)
+                        Text(!ReleasePolicy.asksForKeyCheck(months: $0) ? "Never" : ($0 == 12 ? "Every year" : ($0 == 24 ? "Every 2 years" : "Every \($0) months"))).tag($0)
                     }
                 }
                 .pickerStyle(.wheel)

@@ -23,7 +23,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ALLOWED = {
     "AVFoundation", "AVKit", "AppIntents", "AuthenticationServices", "CloudKit",
     "CoreImage", "CoreImage.CIFilterBuiltins", "CryptoKit", "Foundation",
-    "FoundationModels", "LocalAuthentication", "Photos", "Security", "Speech",
+    "FoundationModels", "LocalAuthentication", "Photos", "PhotosUI", "Security", "Speech",
     "StoreKit", "SwiftUI", "UIKit", "UniformTypeIdentifiers", "UserNotifications",
     "Vision", "VisionKit", "WidgetKit", "os", "OSLog", "Combine", "Charts",
     "PDFKit", "QuickLook", "SafariServices", "StoreKitTest", "XCTest",

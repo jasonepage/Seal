@@ -106,8 +106,21 @@ struct ReleasePolicy: Codable, Hashable {
     static let defaultSilenceDays = 90
     static let defaultWarningDays = 21
     static let defaultGraceDays = 14
-    static let allowedCustodyConfirmMonths = [6, 12, 24]
-    static let defaultCustodyConfirmMonths = 12
+    /// "Never" (1.3). Stored as a number, not as zero, on purpose: a key
+    /// holder on an older build reads it as "ask in a hundred years", which
+    /// is never. Zero would make those phones ask on every refresh.
+    static let neverCustodyConfirmMonths = 1200
+    static let allowedCustodyConfirmMonths = [neverCustodyConfirmMonths, 6, 12, 24]
+    /// A new rule never asks key holders to check their key (1.3). The
+    /// owner can still turn it on under More options.
+    static let defaultCustodyConfirmMonths = neverCustodyConfirmMonths
+    /// What a policy saved before the interval existed means: once a year.
+    /// Kept apart from the default so old bytes keep their old meaning.
+    static let legacyCustodyConfirmMonths = 12
+
+    /// False when key holders are never asked to check their key.
+    static func asksForKeyCheck(months: Int) -> Bool { months < neverCustodyConfirmMonths }
+    var asksForKeyCheck: Bool { Self.asksForKeyCheck(months: custodyConfirmMonths) }
 
     /// How long the owner can go without opening the app before custodians
     /// may start a claim.
@@ -262,7 +275,7 @@ extension ReleasePolicy {
         graceDays = try c.decode(Int.self, forKey: .graceDays)
         threshold = try c.decode(Int.self, forKey: .threshold)
         objectionBehavior = try c.decode(ObjectionBehavior.self, forKey: .objectionBehavior)
-        custodyConfirmMonths = try c.decodeIfPresent(Int.self, forKey: .custodyConfirmMonths) ?? ReleasePolicy.defaultCustodyConfirmMonths
+        custodyConfirmMonths = try c.decodeIfPresent(Int.self, forKey: .custodyConfirmMonths) ?? ReleasePolicy.legacyCustodyConfirmMonths
         // An unknown kind throws, so the whole body fails to decode, the
         // same as an unknown objection behaviour. schema.js does the same.
         kind = try c.decodeIfPresent(Kind.self, forKey: .kind) ?? .quiet

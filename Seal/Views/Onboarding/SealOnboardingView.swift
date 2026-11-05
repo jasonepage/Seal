@@ -339,7 +339,7 @@ enum OnboardingScript {
         out.append(OnboardingScreen(
             id: "\(p).holders",
             title: "Key holders are met in person.",
-            body: "You meet each key holder face to face and hand them a small security key. A YubiKey is one kind. \(n.custodyConfirmLead) Seal asks them to tap it once, to confirm they still have it. A printed page goes in the drawer with the key, so anyone who finds it knows what it is for.",
+            body: "You meet each key holder face to face and hand them a small security key. A YubiKey is one kind. \(n.asksForKeyCheck ? "\(n.custodyConfirmLead) Seal asks them to tap it once, to confirm they still have it. " : "")A printed page goes in the drawer with the key, so anyone who finds it knows what it is for.",
             figure: .keep))
 
         out.append(OnboardingScreen(
@@ -476,7 +476,7 @@ enum OnboardingScript {
         let keep = OnboardingScreen(
             id: "k.keep",
             title: "Your job is to still be findable.",
-            body: "Put the key somewhere you can find in ten years. A drawer you never clean out. A safe. With your passport. Keep the printed page with it. \(n.custodyConfirmLead) Seal asks you to tap the key once, to show you still have it. Keep Seal on your phone, and if you get a new phone, sign in again. That is the whole job.",
+            body: "Put the key somewhere you can find in ten years. A drawer you never clean out. A safe. With your passport. Keep the printed page with it. \(n.asksForKeyCheck ? "\(n.custodyConfirmLead) Seal asks you to tap the key once, to show you still have it. " : "")Keep Seal on your phone, and if you get a new phone, sign in again. That is the whole job.",
             figure: .keep)
 
         return [nothing, several, quiet, keep]
