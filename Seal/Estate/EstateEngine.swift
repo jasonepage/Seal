@@ -306,6 +306,12 @@ final class EstateEngine {
     func createEstateIfNeeded() -> Estate {
         if let estate { return estate }
         var fresh = Estate.new(ownerHash: ownerHash, now: clock.now)
+        if slot.isDefault {
+            // 1.3 (Jason): a new owner's first rule is Break glass, "my
+            // people open it together when it's needed", the rule most
+            // people want. Only a brand-new set; a stored one keeps its kind.
+            fresh.policy = fresh.policy.shaped(as: .breakGlass)
+        }
         if slot.startsShort {
             // The short rule. The shortest silence the machine allows, one
             // week of warnings, no grace. The owner can change it.

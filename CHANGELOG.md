@@ -145,6 +145,8 @@ Dates are the day the work landed in the repository. Anything marked
   with "Sooner". With an envelope open, the envelope moves into the new
   rule at once. A right away rule's card no longer shows Numbers and Key
   holders buttons, or the line about handing out keys. (`RuleSheet.swift`)
+- A new owner's first rule is Break glass instead of When I go quiet.
+  Sets that already exist keep their kind. (`EstateEngine.createEstateIfNeeded`)
 - Harbor's eyes are smaller and scale with his size.
 - `tools/run_core_tests.sh` now compiles with `-default-isolation MainActor`,
   the same isolation the app target uses. Before, Swift 6 reported
