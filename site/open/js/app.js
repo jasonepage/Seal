@@ -83,18 +83,18 @@ function start() {
   }
   show(
     config.development ? h("div", { class: "note", role: "note" }, h("p", {}, h("b", {}, "Test database. "), "This reads the data debug builds write, not real envelopes.")) : null,
-    h("p", { class: "lede" }, "Have the security key you were given ready. If it has a PIN, you will need that too."),
+    h("p", { class: "lede" }, "Have the key someone gave you. If they gave you a PIN, have that too."),
     h("button", { class: "cta big", type: "button", on: { click: () => run().catch(failed) } }, "Use my security key"),
-    h("p", { class: "small" }, "You will tap it twice. Nothing is saved in this browser."),
-    h("p", { class: "guide-jump" }, h("a", { href: "#guide" }, "First time? The steps are below, with pictures.")),
   );
   showGuide(true);
 }
 
 /** The step by step guide under the page: on the first screen, out of the way once something is shown. */
 function showGuide(on) {
-  const g = document.getElementById("guide");
-  if (g) g.hidden = !on;
+  for (const id of ["guide", "hero-pic"]) {
+    const g = document.getElementById(id);
+    if (g) g.hidden = !on;
+  }
 }
 
 function failed(err) {
@@ -441,27 +441,74 @@ function failedAction(err) {
   problem(err?.message || "Something went wrong. Nothing was sent.");
 }
 
+/** The line on a card that is ready to read. */
+function readyLine(j) {
+  return j.kind === "rightAway"
+    ? "Written for you. It is ready to read."
+    : `It opened on ${dateLine(j.snapshot.releasedAt)}. It is ready to read.`;
+}
+
+/** True when this key holder's tap or combine is what the envelopes wait on. */
+function needsMe(j, now) {
+  const s = j.snapshot;
+  const me = session.holder.hash;
+  if (!s || !j.openingAllowed || !j.epoch?.custodianHashes.includes(me)) return false;
+  return custodianCanAuthorize(s, now, me) || (s.claim?.claimantHash === me && claimantCanRelease(s, now));
+}
+
+/**
+ * One screen, three groups, in the order a person cares about them:
+ * letters ready to read, then anything waiting on this person's key, then
+ * what is still sealed. Each group shows only when it has something in it.
+ * The writer's three words, a check for the careful, are folded away once
+ * at the bottom instead of repeated on every card.
+ */
 async function list(judged, now) {
   const { ck } = session;
-  const items = [];
+  const ready = [], needs = [], sealed = [];
+  const writers = new Map();
   for (const j of judged) {
-    const owner = await fetchIdentity(ck, j.ownerHash, { history: true }).catch(() => null);
-    const words = owner ? await phrase(owner.root.publicKey) : null;
+    const name = j.ownerName || "someone";
+    if (!writers.has(j.ownerHash)) {
+      const owner = await fetchIdentity(ck, j.ownerHash, { history: true }).catch(() => null);
+      writers.set(j.ownerHash, { name, words: owner ? await phrase(owner.root.publicKey) : null });
+    }
     const recipient = j.roles.has("recipient");
-    const holder = j.roles.has("custodian");
-    const open = recipient && j.state === "released" && j.openingAllowed;
-    items.push(h("div", { class: "card" },
-      h("h3", {}, `From ${j.ownerName || "someone"}`, kindPill(j)),
-      h("p", { class: "small" }, [recipient ? "They wrote to you." : null, holder ? "You hold one of their keys." : null].filter(Boolean).join(" ")),
-      words ? h("p", { class: "small" }, `Their words: ${words}. In the app these show under their seal as "Your words". If you know theirs, check they match.`) : null,
-      h("p", {}, stateLine(j, now)),
-      open ? h("button", { class: "cta", type: "button", on: { click: () => envelopes(ck, session.me, session.kems, j, now).catch(failed) } }, "Open my envelopes") : null,
-      holder && j.problem !== "owner" ? holderActions(j, now) : null,
-    ));
+    const holder = j.roles.has("custodian") && j.problem !== "owner";
+    const title = h("h3", {}, `From ${name}`, kindPill(j));
+    if (recipient && j.state === "released" && j.openingAllowed) {
+      ready.push(h("div", { class: "ready" },
+        title,
+        h("p", {}, readyLine(j)),
+        h("button", { class: "cta big", type: "button", on: { click: () => envelopes(ck, session.me, session.kems, j, now).catch(failed) } }, "Open it"),
+      ));
+    } else if (holder && needsMe(j, now)) {
+      needs.push(h("div", { class: "card needs" }, title, h("p", {}, stateLine(j, now)), holderActions(j, now)));
+    } else {
+      sealed.push(h("div", { class: "row" },
+        title,
+        // Under a "Still sealed" heading the line need not say it again.
+        h("p", { class: "dim" }, stateLine(j, now).replace(/^Still sealed\. /, "")),
+        holder ? h("p", { class: "small" }, "You hold one of their keys.") : null,
+        holder ? h("div", { class: "row-actions" }, holderActions(j, now)) : null,
+      ));
+    }
   }
+  const words = [...writers.values()].filter((w) => w.words);
   show(
-    h("p", { class: "lede" }, `Signed in as ${session.me.root.displayName}.`),
-    ...items,
+    h("p", { class: "signed" }, `Signed in as ${session.me.root.displayName}.`),
+    ready.length ? [h("h2", { class: "group" }, ready.length === 1 ? "Ready to read" : `Ready to read (${ready.length})`), ...ready] : null,
+    needs.length ? [h("h2", { class: "group" }, "Waiting for your key"), ...needs] : null,
+    sealed.length ? [
+      h("h2", { class: "group" }, "Still sealed"),
+      ...sealed,
+      h("p", { class: "calm-line" }, "Still sealed is normal. Keep the key somewhere safe, like with your important papers, and come back later."),
+    ] : null,
+    words.length ? h("details", { class: "words" },
+      h("summary", {}, "Check it is really them"),
+      h("p", {}, "In the Seal app, every writer has three words under their seal. If you know theirs, check they match."),
+      h("ul", {}, words.map((w) => h("li", {}, h("b", {}, `${w.name}: `), w.words))),
+    ) : null,
     h("p", { class: "small" }, "Nothing is saved in this browser. When you are done, close the tab."),
   );
 }
@@ -580,6 +627,7 @@ async function envelopes(ck, me, kems, j, now) {
     nodes.push(h("section", { class: "envelope" }, parts));
   }
   if (j.kind === "rightAway") nodes.push(passOnCard(j, opened));
+  nodes.push(h("p", { class: "back" }, h("button", { class: "cta ghost", type: "button", on: { click: () => refresh().catch(failed) } }, "Back to the list")));
   nodes.push(h("p", { class: "small" }, "Nothing is saved in this browser. When you are done, close the tab."));
   show(...nodes);
 }

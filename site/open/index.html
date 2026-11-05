@@ -21,63 +21,33 @@
   </header>
 
   <h1>Open your envelopes</h1>
+
+  <!-- One picture, one button, three short steps (2026-11-05). The long
+       guide was most of the screen; for someone reading alone, the button
+       has to be the first thing they find. The picture and the steps hide
+       once something has opened (showGuide in app.js). No inline styles or
+       scripts: the Content Security Policy forbids them. -->
+  <div id="hero-pic">
+  <svg class="hero-pic" viewBox="0 0 120 80" role="img" aria-label="A security key held against a phone">
+    <rect x="40" y="6" width="40" height="68" rx="7" fill="none" stroke="currentColor" stroke-width="3"/>
+    <rect x="47" y="22" width="26" height="12" rx="4" fill="none" stroke="currentColor" stroke-width="2.5"/>
+    <circle class="gold" cx="53" cy="28" r="3"/>
+    <path d="M84 22 q8 6 0 12 M90 17 q14 11 0 22" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+  </svg>
+  </div>
+
   <main id="app">
     <noscript><p>This page needs JavaScript to open your envelopes on your own device. The Seal app on an iPhone opens them without it.</p></noscript>
   </main>
 
-  <!-- The guide. Plain words, big type, one idea per line, for someone who
-       has never used a security key and may be reading this alone. Shown
-       on the first screen and hidden once something has opened (app.js).
-       No inline styles or scripts: the Content Security Policy forbids
-       them, so the drawings use SVG attributes and open.css. -->
-  <section id="guide" class="guide" aria-labelledby="guide-title">
-    <h2 id="guide-title">How it works, step by step</h2>
-    <p class="guide-lede">It takes about a minute. Nothing you do here can break anything or delete anything, so take your time.</p>
-
-    <ol class="steps">
-      <li>
-        <svg class="pic" viewBox="0 0 120 80" aria-hidden="true">
-          <rect x="22" y="26" width="64" height="28" rx="9" fill="none" stroke="currentColor" stroke-width="3"/>
-          <rect x="86" y="33" width="14" height="14" rx="3" fill="none" stroke="currentColor" stroke-width="3"/>
-          <circle class="gold" cx="46" cy="40" r="7"/>
-          <circle cx="30" cy="40" r="3" fill="none" stroke="currentColor" stroke-width="2"/>
-        </svg>
-        <h3>Have your key ready</h3>
-        <p>This is the small key the writer gave you. It may say YubiKey on it.</p>
-        <p>If they told you a PIN, a short number for the key, have that ready too.</p>
-      </li>
-      <li>
-        <svg class="pic" viewBox="0 0 120 80" aria-hidden="true">
-          <rect x="40" y="6" width="40" height="68" rx="7" fill="none" stroke="currentColor" stroke-width="3"/>
-          <rect x="47" y="22" width="26" height="12" rx="4" fill="none" stroke="currentColor" stroke-width="2.5"/>
-          <circle class="gold" cx="53" cy="28" r="3"/>
-          <path d="M84 22 q8 6 0 12 M90 17 q14 11 0 22" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-        </svg>
-        <h3>Press the button, then touch the key</h3>
-        <p>Press <b>Use my security key</b> above. Your screen will ask for the key.</p>
-        <p><b>On a computer:</b> plug the key in. When its light blinks, touch the gold circle.</p>
-        <p><b>On a phone:</b> hold the key flat against the back of the phone and keep it still until the phone buzzes or shows a check mark.</p>
-        <p>You will do this twice. The second time unlocks your letters.</p>
-      </li>
-      <li>
-        <svg class="pic" viewBox="0 0 120 80" aria-hidden="true">
-          <path d="M18 24 h84 v44 h-84 z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
-          <path d="M18 24 l42 28 l42 -28" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
-          <circle class="gold" cx="60" cy="50" r="9"/>
-        </svg>
-        <h3>See what is waiting for you</h3>
-        <p>The page shows who wrote to you. If their letters are ready, you can read them right here, along with any photos, voice messages and passwords they left.</p>
-        <p>Nothing is saved on this phone or computer. Come back any time with the same key.</p>
-      </li>
+  <section id="guide" class="guide" aria-label="How to use your key">
+    <ol class="mini-steps">
+      <li>Press <b>Use my security key</b>.</li>
+      <li>Hold the key flat on the back of your phone until it buzzes. On a computer, plug it in and touch the gold circle.</li>
+      <li>Do it once more. The second touch unlocks your letters.</li>
     </ol>
-
-    <div class="calm">
-      <h3>If it says &ldquo;Still sealed&rdquo;</h3>
-      <p>That is normal, and it means everything is working. A Seal letter only opens after its writer has been quiet for a long time and the people holding keys agree. Until then it stays closed, even to you.</p>
-      <p>You do not need to do anything. Keep the key somewhere safe, like with your important papers, and come back later.</p>
-    </div>
-
-    <h2>Questions people ask</h2>
+    <details class="questions">
+      <summary>Questions people ask</summary>
     <div class="faq">
       <details>
         <summary>Where exactly do I touch the key on my phone?</summary>
@@ -115,6 +85,7 @@
         <p>Email <a href="mailto:support@sealmessenger.com">support@sealmessenger.com</a>. A real person answers, usually the same day. Say what you see on the screen, or send a photo of it. You will never be asked for your PIN or your key.</p>
       </details>
     </div>
+    </details>
   </section>
 
   <details class="safe">

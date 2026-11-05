@@ -7,6 +7,14 @@ Dates are the day the work landed in the repository. Anything marked
 
 ### Added
 
+- The web page, simpler (sealmessenger.com/open). The first screen is one
+  picture, one big button and three short steps; the long guide and the
+  questions fold away. After signing in, letters ready to read come first
+  with one big Open it button, then anything waiting on your key, then
+  what is still sealed, as quiet rows with one calm line. The writer's three
+  words are checked once, folded, instead of on every card. Reading a
+  letter now has Back to the list. Display only: what opens and when is
+  unchanged. (`site/open/index.html`, `site/open/js/app.js`, `open.css`)
 - Pass a key on (web only, PRODUCT.md section 18). Under an opened right away
   letter, sealmessenger.com/open shows "Pass this key on": save the letter as
   a text file (secrets left out), free up the key (the web retire, so the next

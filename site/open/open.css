@@ -73,3 +73,33 @@ details.safe p { margin-top:12px; }
 .passon ol { padding-left:22px; }
 .passon li { margin-bottom:18px; font-size:18px; }
 .passon li p { margin:8px 0 0; }
+
+/* 2026-11-05: one thing per screen, for someone reading alone.
+   The button is the biggest thing on the first screen; the list leads with
+   what is ready to read; everything else is quieter or folded away. */
+.hero-pic { display:block; width:150px; height:100px; color:var(--dim); margin:8px 0 6px; }
+.hero-pic .gold { fill:var(--brass); }
+button.cta.big { display:block; width:100%; max-width:440px; min-height:64px; font-size:21px;
+  padding:16px 28px; border-radius:14px; margin:8px 0 22px; }
+.mini-steps { margin:0 0 8px; padding-left:24px; font-size:18px; }
+.mini-steps li { margin-bottom:10px; padding-left:4px; }
+.guide { margin-top:8px; border-top:none; padding-top:0; }
+details.questions { margin-top:20px; }
+details.questions > summary { cursor:pointer; font-size:18px; font-weight:600; color:var(--brass); padding:10px 0; }
+details.questions > summary:focus-visible { outline:3px solid var(--brass-bright); outline-offset:4px; }
+
+.signed { color:var(--dim); margin:0 0 4px; }
+h2.group { font-size:22px; margin:30px 0 10px; }
+.ready { border:2px solid var(--brass); background:var(--paper2); border-radius:14px; padding:20px 22px 4px; margin:0 0 16px; }
+.ready h3, .card.needs h3, .row h3 { margin:0 0 6px; color:var(--ink); font-size:19px; letter-spacing:0; }
+.ready p { font-size:18px; margin:0 0 4px; }
+.ready button.cta.big { margin:12px 0 18px; }
+.card.needs { margin:0 0 16px; }
+.row { border-top:1px solid var(--rule); padding:14px 0 6px; }
+.row p { margin:0 0 8px; }
+.row-actions .cta { font-size:15px; padding:9px 16px; margin:4px 8px 8px 0; }
+.calm-line { color:var(--dim); font-size:16px; border-left:3px solid var(--rule); padding-left:12px; margin:14px 0 26px; }
+details.words { margin:30px 0 8px; color:var(--dim); font-size:16px; }
+details.words summary { cursor:pointer; font-weight:600; color:var(--ink); }
+details.words ul { padding-left:20px; }
+p.back { margin-top:36px; }
