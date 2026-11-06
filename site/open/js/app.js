@@ -27,6 +27,7 @@ import { fetchIdentity, findInvites, judgeEstate, openEstate, openMedia, waiting
 import { verifiedDevices, parseAssertion, verifyAssertion, clientDataChallengeMatches, parseDeviceEndorsements, parseBackupCredentials } from "./identity.js";
 import { phrase } from "./words.js";
 import { letterFile, letterFileName, isHeld, ownerProven, passOnPlan } from "./passon.js";
+import { SAMPLE } from "./sample.js";
 
 const main = document.getElementById("app");
 const APP_STORE = "https://apps.apple.com/app/id6779471126";
@@ -72,7 +73,8 @@ const dateLine = (s) => new Date(s * 1000).toLocaleDateString(undefined, { year:
 // ---------------------------------------------------------------- start
 
 function start() {
-  if (config.development) document.title = "TEST DATABASE: " + document.title;
+  if (config.development && !document.title.startsWith("TEST DATABASE")) document.title = "TEST DATABASE: " + document.title;
+  if (location.hash === "#sample") { sample(); return; }
   if (!config.apiToken) {
     problem("This page is not switched on yet. Your envelopes are safe, and the Seal app on an iPhone opens them today.", false);
     return;
@@ -85,8 +87,51 @@ function start() {
     config.development ? h("div", { class: "note", role: "note" }, h("p", {}, h("b", {}, "Test database. "), "This reads the data debug builds write, not real envelopes.")) : null,
     h("p", { class: "lede" }, "Have the key someone gave you. If they gave you a PIN, have that too."),
     h("button", { class: "cta big", type: "button", on: { click: () => run().catch(failed) } }, "Use my security key"),
+    h("p", { class: "sample-link" }, h("a", { href: "#sample", on: { click: (e) => { e.preventDefault(); history.pushState(null, "", "#sample"); sample(); } } }, "No key yet? See a sample letter open")),
   );
   showGuide(true);
+}
+
+// Back and forward between the start screen and the sample. Never while
+// someone is signed in with a key: their envelopes stay on screen.
+window.addEventListener("hashchange", () => { if (!session) start(); });
+
+/**
+ * A sample letter for people who have no key yet. Plain data from
+ * sample.js, shown through the same reveal a real letter gets. No key, no
+ * CloudKit, no release rules, and it says it is a sample on screen.
+ */
+function sample() {
+  showGuide(false);
+  const items = [];
+  const add = (node) => { node.classList.add("reveal-item"); items.push(node); return node; };
+  const intro = add(h("p", { class: "reveal-intro" }, `From ${SAMPLE.from}, a sample letter.`));
+  const parts = [
+    add(h("h2", { class: "reveal-title" }, SAMPLE.title)),
+    add(h("div", { class: "letter" }, SAMPLE.letter)),
+    add(h("figure", { class: "media sample-photo" },
+      h("img", { src: SAMPLE.photo.src, alt: SAMPLE.photo.alt, width: 960, height: 640 }),
+      h("figcaption", { class: "small" }, SAMPLE.photo.caption))),
+    add(h("h3", {}, "What to do first")),
+    add(h("ol", { class: "plain" }, SAMPLE.steps.map((s) => h("li", {}, h("b", {}, s.title), s.note ? h("span", { class: "dim" }, ` ${s.note}`) : null)))),
+    add(h("h3", {}, "Secrets")),
+    ...SAMPLE.secrets.map((card) => add(secretBlock(card))),
+  ];
+  const theater = h("div", { class: "reveal-theater" },
+    h("button", { class: "skip-reveal", type: "button" }, "Skip reveal"),
+    revealArt(),
+    h("div", { class: "revealed-stack" }, intro, h("section", { class: "envelope reveal-envelope-content" }, parts)),
+  );
+  show(
+    h("div", { class: "note sample-note", role: "note" }, h("p", {}, h("b", {}, "This is a sample. "), "It shows what opening a letter looks like. No key needed, and nothing in it is real.")),
+    theater,
+    h("section", { class: "sample-next" },
+      h("h2", {}, "Write one for someone"),
+      h("p", {}, "Seal is free on iPhone, and letters that open right away are free to seal. One payment of $29.99 unlocks key holders, for good."),
+      h("p", {}, h("a", { class: "cta", href: APP_STORE }, "Get Seal on the App Store")),
+      h("p", {}, h("a", { class: "cta ghost", href: "./", on: { click: (e) => { e.preventDefault(); history.pushState(null, "", location.pathname); start(); } } }, "I have a key"))),
+  );
+  requestAnimationFrame(() => playReveal(theater, items));
 }
 
 /** The step by step guide under the page: on the first screen, out of the way once something is shown. */

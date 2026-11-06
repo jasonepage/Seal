@@ -185,3 +185,8 @@ body.home { display:flex; flex-direction:column; min-height:100vh; min-height:10
   .door-open:hover { color:#14120F; }
   .door-harbor { filter:drop-shadow(0 14px 24px rgba(0,0,0,.48)); }
 }
+
+/* how-it-works.html: the short version above the full detail. */
+.short { border:1px solid var(--rule); border-radius:12px; background:var(--paper2); padding:4px 22px 14px; margin:22px 0 30px; }
+.short ol { padding-left:20px; }
+.short li { margin-bottom:8px; }

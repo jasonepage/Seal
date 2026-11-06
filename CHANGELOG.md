@@ -7,6 +7,19 @@ Dates are the day the work landed in the repository. Anything marked
 
 ### Added
 
+- A sample letter anyone can open without a key (sealmessenger.com/open/#sample,
+  and "No key yet? See a sample letter open" on the first screen). It plays
+  the same reveal a real letter gets, on plain data that says on screen it is
+  a sample: a house sitter's letter, a photo, two steps and two secret cards.
+  No key, no CloudKit, no release rules. Then one card: get the app. The
+  home page, the kit page and How it works link to it. (`site/open/js/sample.js`,
+  `app.js`, `tools/webtests/sample.test.mjs`)
+- The kit page leads with the free app and says the prices plainly: the app
+  is free, right away letters are free to seal, one $29.99 payment unlocks
+  key holders for good, keys from $49. Keys are plugged in on every page,
+  never tapped. How it works opens with a five line short version. The Skip
+  reveal button now goes away once a reveal finishes instead of covering the
+  first line.
 - Sealing a right away envelope no longer gets stuck (found testing 1.3).
   The first-run card looked only at the default rule, so an envelope moved
   to Right away left the card asking for a key holder and hid the Seal bar.

@@ -146,6 +146,7 @@ p.back { margin-top:36px; }
 .reveal-theater { position:relative; min-height:520px; margin:2px 0 20px; overflow:visible; }
 .skip-reveal { position:absolute; z-index:20; top:0; right:0; border:1px solid var(--rule); border-radius:999px;
   background:var(--paper); color:var(--dim); padding:8px 14px; font:600 14px var(--sans); cursor:pointer; }
+.reveal-theater.is-finished .skip-reveal { display:none; }
 .skip-reveal:focus-visible { outline:3px solid var(--brass-bright); outline-offset:3px; }
 .reveal-art { position:relative; width:min(560px, 100%); height:430px; margin:30px auto 0; perspective:1000px; }
 .reveal-glow { position:absolute; left:10%; right:10%; top:12%; bottom:4%; border-radius:50%; background:var(--brass-bright);
@@ -233,3 +234,10 @@ p.back { margin-top:36px; }
   .reveal-glow, .reveal-envelope, .reveal-envelope-flap, .reveal-wax, .wax-crack, .reveal-letter-sheet,
   .reveal-art, .revealed-stack, .reveal-item, .secret-card-inner, .passon-wrap { transition-duration:1ms; }
 }
+
+/* The sample letter (#sample). */
+.sample-link { margin:4px 0 18px; font-size:16px; }
+.sample-note { margin-bottom:8px; }
+.sample-photo { margin:18px 0; }
+.sample-photo img { width:100%; }
+.sample-next { margin-top:48px; border-top:1px solid var(--rule); padding-top:8px; }
