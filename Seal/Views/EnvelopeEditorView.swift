@@ -877,7 +877,9 @@ struct EnvelopeEditorView: View {
         }()
         return card(.rule, "clock.badge", several ? "When it opens: \(estateEngine.estate?.policy.kind.label ?? estateEngine.slot.name)" : "When it opens",
                     prompt: releasePrompt(estate?.policy),
-                    filled: !holders.isEmpty, action: "Change", onAction: { showRule = true }) {
+                    // Right away has no key holders by design, so choosing it is the
+                    // whole step (1.3).
+                    filled: (estate?.opensRightAway ?? false) || !holders.isEmpty, action: "Change", onAction: { showRule = true }) {
             Text(line)
                 .font(.callout).foregroundStyle(.white.opacity(0.8))
                 .fixedSize(horizontal: false, vertical: true)

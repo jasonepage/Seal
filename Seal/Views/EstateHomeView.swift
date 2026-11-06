@@ -579,16 +579,29 @@ struct EstateHomeView: View {
     private var sealBar: some View {
         let pending = engines.all.filter { $0.estate?.hasUnsealedChanges ?? false }
         let unsealed = pending.reduce(0) { $0 + ($1.estate?.addressedEnvelopes.filter { !$0.sealed }.count ?? 0) }
+        // A rule that is ready seals now; one still waiting for a key holder
+        // stays waiting and no longer holds the others up (1.3). Before, one
+        // rule with no key holder hid the Seal button for every rule.
+        let readyRules = pending.filter { $0.estate?.isReadyToSeal ?? false }
         let notReady = pending.first { !($0.estate?.isReadyToSeal ?? false) }
-        let ready = notReady == nil && !DemoFixtures.isActive
+        let canSeal = !readyRules.isEmpty && !DemoFixtures.isActive
         let reason: String = {
             guard let notReady else { return "Only on this phone until you do." }
             let rule = notReady.estate?.policy.kind.label ?? notReady.slot.name
-            if notReady.estate?.opensRightAway == true {
-                return "Write an envelope to someone first."
-            }
-            return "\(rule) needs a key holder first."
+            let missing = notReady.estate?.opensRightAway == true
+                ? "\(rule) needs an envelope to someone first."
+                : "\(rule) needs a key holder first."
+            return canSeal ? "\(missing) The rest can be sealed now." : missing
         }()
+        let sealButton = Button { runSeal() } label: {
+            HStack(spacing: 6) {
+                if sealing { ProgressView().tint(SealTheme.ink) }
+                Text("Seal").font(.system(.headline, design: .rounded))
+            }
+            .padding(.horizontal, 18).padding(.vertical, 10)
+        }
+        .buttonStyle(.borderedProminent).tint(SealTheme.brass).foregroundStyle(SealTheme.ink)
+        .parentTapTarget(48)
         return HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(unsealed > 0 ? (unsealed == 1 ? "1 envelope not sealed" : "\(unsealed) envelopes not sealed") : "Seal again")
@@ -597,9 +610,11 @@ struct EstateHomeView: View {
                     .font(.caption).foregroundStyle(.white.opacity(0.55)).lineLimit(2)
             }
             Spacer()
-            // Not ready because a rule has no key holder: the button is the
-            // way to fix that, not a dimmed Seal nobody can read (1.3).
-            if let notReady, !DemoFixtures.isActive, !(notReady.estate?.opensRightAway ?? false) {
+            if canSeal {
+                sealButton.disabled(sealing)
+            } else if let notReady, !DemoFixtures.isActive, !(notReady.estate?.opensRightAway ?? false) {
+                // Nothing can seal because a rule has no key holder: the
+                // button is the way to fix that, not a dimmed Seal (1.3).
                 Button {
                     keyHolderEngine = notReady
                     showGuidedKeyHolder = true
@@ -610,16 +625,7 @@ struct EstateHomeView: View {
                 .buttonStyle(.borderedProminent).tint(SealTheme.brass).foregroundStyle(SealTheme.ink)
                 .parentTapTarget(48)
             } else {
-            Button { runSeal() } label: {
-                HStack(spacing: 6) {
-                    if sealing { ProgressView().tint(SealTheme.ink) }
-                    Text("Seal").font(.system(.headline, design: .rounded))
-                }
-                .padding(.horizontal, 18).padding(.vertical, 10)
-            }
-            .buttonStyle(.borderedProminent).tint(SealTheme.brass).foregroundStyle(SealTheme.ink)
-            .disabled(sealing || !ready)
-            .parentTapTarget(48)
+                sealButton.disabled(true)
             }
         }
         .padding(.horizontal, 16).padding(.vertical, 12)
@@ -1044,12 +1050,23 @@ struct EstateHomeView: View {
         var id: Int { rawValue }
     }
 
-    /// True until the first successful seal. While this holds, the home
-    /// screen is ONE card.
-    private var inSetup: Bool { !(estate?.epochPublished ?? false) }
+    /// True until the first successful seal of ANY rule. While this holds,
+    /// the home screen is ONE card. It used to look only at the default rule,
+    /// so an owner whose first envelope went to another rule (say Right
+    /// away) stayed in setup with no Seal bar, asked for a key holder on a
+    /// rule they were not using (1.3).
+    private var inSetup: Bool { !engines.all.contains { $0.estate?.epochPublished == true } }
+
+    /// The rule the first-run card is about: the first one (default first)
+    /// that holds an envelope addressed to someone, else the default rule.
+    /// The card follows the envelope when "When it opens" moves it.
+    private var setupEngine: EstateEngine {
+        engines.all.first { !($0.estate?.addressedEnvelopes.isEmpty ?? true) } ?? estateEngine
+    }
+    private var setupEstate: Estate? { setupEngine.estate }
 
     private func isDone(_ step: SetupStep) -> Bool {
-        guard let estate else { return false }
+        guard let estate = setupEstate else { return false }
         switch step {
         case .envelope: return !estate.envelopes.isEmpty
         case .keyHolders: return !estate.custodians.isEmpty || !estate.policy.kind.needsKeyHolders
@@ -1098,10 +1115,10 @@ struct EstateHomeView: View {
         case .keyHolders:
             return "People you trust to open your envelopes together when your rule allows. Have a Seal kit? Set up their keys yourself, tonight. Or add someone who is next to you with their phone."
         case .rule:
-            if let estate, estate.policy.kind != .quiet {
+            if let estate = setupEstate, estate.policy.kind != .quiet {
                 return "Right now: " + estate.policy.summary(custodianCount: estate.custodians.count) + " Tap to change it."
             }
-            if let estate, !estate.custodians.isEmpty {
+            if let estate = setupEstate, !estate.custodians.isEmpty {
                 let p = estate.policy
                 return "Right now: " + (estate.custodians.count == 1
                     ? "your one key holder"
@@ -1119,20 +1136,22 @@ struct EstateHomeView: View {
             pickerMode = .blank
             showRecipientPicker = true
         case .keyHolders:
+            keyHolderEngine = setupEngine
             showGuidedKeyHolder = true
         case .rule:
-            policyFor = EngineRef(engine: estateEngine)
+            policyFor = EngineRef(engine: setupEngine)
         case .seal:
             // Nothing to seal until there are key holders and a valid rule,
             // and the row above says so. Send them there rather than firing
             // a seal that throws.
-            if estate?.isReadyToSeal == true {
+            if setupEstate?.isReadyToSeal == true {
                 runSeal()
-            } else if estate?.opensRightAway == true {
+            } else if setupEstate?.opensRightAway == true {
                 // A right away rule needs an envelope, never a key holder.
                 pickerMode = .blank
                 showRecipientPicker = true
             } else {
+                keyHolderEngine = setupEngine
                 showGuidedKeyHolder = true
             }
         }
@@ -1674,12 +1693,26 @@ struct EstateHomeView: View {
     /// cannot seal at all.
     private func runSeal() {
         guard !sealing, !DemoFixtures.isActive else { return }
+        // Only the rules that can seal now (1.3). A rule still waiting for a
+        // key holder stays waiting, and the Seal bar says so; it must not
+        // block a ready rule, nor put a free right away seal behind the paywall.
+        let waiting = engines.all.filter {
+            ($0.estate?.hasUnsealedChanges ?? false) || !$0.custodiansWithNewPhones.isEmpty
+        }
+        var due = waiting.filter { !$0.custodiansWithNewPhones.isEmpty || ($0.estate?.isReadyToSeal ?? false) }
+        if due.isEmpty {
+            guard waiting.isEmpty else {
+                sealError = "Nothing here is ready to seal yet. Add a key holder, or write an envelope to someone first."
+                return
+            }
+            // Nothing waiting at all: the default rule (the setup card's last step).
+            due = [estateEngine]
+        }
+        let dueRules = due
         // Right away rules (message in a bottle) seal for free: the bottle is
         // the demo and the way in, and the unlock stays on the rules that
         // need key holders (PRODUCT.md section 17, decided 2026-11-03).
-        let pendingKinds = engines.all
-            .filter { ($0.estate?.hasUnsealedChanges ?? false) || !$0.custodiansWithNewPhones.isEmpty }
-            .map { $0.estate?.policy.kind ?? .quiet }
+        let pendingKinds = dueRules.map { $0.estate?.policy.kind ?? .quiet }
         let onlyBottles = !pendingKinds.isEmpty && pendingKinds.allSatisfy { $0 == .rightAway }
         guard purchase.isUnlocked || onlyBottles else {
             // The launch check may still be in flight on a fast tap. Finish
@@ -1697,15 +1730,10 @@ struct EstateHomeView: View {
         sealing = true
         Task {
             defer { sealing = false }
-            // Every rule with something waiting, the default rule when
-            // nothing is (the setup card's last step). One pass, in order,
-            // stopping at the first failure so the message names one rule.
-            var due = engines.all.filter { engine in
-                (engine.estate?.hasUnsealedChanges ?? false) || !engine.custodiansWithNewPhones.isEmpty
-            }
-            if due.isEmpty { due = [estateEngine] }
+            // The rules chosen above, in order, stopping at the first failure
+            // so the message names one rule.
             do {
-                for engine in due {
+                for engine in dueRules {
                     do {
                         try await engine.sealAndPublish()
                     } catch {

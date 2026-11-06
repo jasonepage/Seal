@@ -7,6 +7,15 @@ Dates are the day the work landed in the repository. Anything marked
 
 ### Added
 
+- Sealing a right away envelope no longer gets stuck (found testing 1.3).
+  The first-run card looked only at the default rule, so an envelope moved
+  to Right away left the card asking for a key holder and hid the Seal bar.
+  The card now follows the rule that holds the envelope, and setup ends once
+  any rule is sealed. The Seal bar seals every rule that is ready and leaves
+  one still waiting for a key holder waiting, instead of blocking them all,
+  and a free right away seal no longer hits the paywall because another rule
+  is unfinished. The editor's "When it opens" card shows a check for Right
+  away. (`EstateHomeView.swift`, `EnvelopeEditorView.swift`)
 - The web page, simpler (sealmessenger.com/open). The first screen is one
   picture, one big button and three short steps; the long guide and the
   questions fold away. After signing in, letters ready to read come first
