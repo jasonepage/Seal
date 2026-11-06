@@ -22,18 +22,40 @@
 
   <h1>Open your envelopes</h1>
 
-  <!-- One picture, one button, three short steps (2026-11-05). The long
-       guide was most of the screen; for someone reading alone, the button
-       has to be the first thing they find. The picture and the steps hide
-       once something has opened (showGuide in app.js). No inline styles or
-       scripts: the Content Security Policy forbids them. -->
-  <div id="hero-pic">
-  <svg class="hero-pic" viewBox="0 0 120 80" role="img" aria-label="A security key held against a phone">
-    <rect x="40" y="6" width="40" height="68" rx="7" fill="none" stroke="currentColor" stroke-width="3"/>
-    <rect x="47" y="22" width="26" height="12" rx="4" fill="none" stroke="currentColor" stroke-width="2.5"/>
-    <circle class="gold" cx="53" cy="28" r="3"/>
-    <path d="M84 22 q8 6 0 12 M90 17 q14 11 0 22" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-  </svg>
+  <div id="hero-pic" class="sealed-home">
+    <p class="sealed-kicker">Something is sealed for you.</p>
+    <svg class="sealed-home-art" viewBox="0 0 620 390" role="img" aria-label="A sealed envelope and its security key">
+      <defs>
+        <linearGradient id="home-paper" x1="0" y1="0" x2="0" y2="1">
+          <stop class="paper-stop-one" offset="0"/>
+          <stop class="paper-stop-two" offset="1"/>
+        </linearGradient>
+        <radialGradient id="home-wax" cx="38%" cy="30%" r="70%">
+          <stop class="wax-stop-one" offset="0"/>
+          <stop class="wax-stop-two" offset="1"/>
+        </radialGradient>
+      </defs>
+      <ellipse class="home-halo" cx="300" cy="205" rx="230" ry="145"/>
+      <g class="home-envelope">
+        <path class="home-light home-light-left" d="M80 274 L300 93 L540 274 Z"/>
+        <rect class="home-paper" x="80" y="92" width="460" height="230" rx="18"/>
+        <path class="home-fold" d="M82 310 L250 164 Q300 121 350 164 L538 310"/>
+        <path class="home-flap" d="M83 105 L268 258 Q300 283 332 258 L537 105"/>
+        <g class="home-seal">
+          <circle class="home-seal-rim" cx="304" cy="247" r="52"/>
+          <circle class="home-seal-face" cx="304" cy="247" r="42"/>
+          <path class="home-seal-mark" d="M285 239 Q304 218 323 239 L318 263 Q304 274 290 263 Z"/>
+        </g>
+      </g>
+      <g class="home-key">
+        <path class="home-key-body" d="M426 281 H539 Q566 281 566 308 Q566 335 539 335 H426 Q402 335 402 311 Q402 287 426 281 Z"/>
+        <path class="home-key-plug" d="M566 295 H602 V321 H566 Z"/>
+        <path class="home-key-slot" d="M579 302 H595 M579 314 H595"/>
+        <circle class="home-key-ring" cx="435" cy="308" r="18"/>
+        <circle class="home-key-touch" cx="511" cy="308" r="16"/>
+      </g>
+    </svg>
+    <p class="sealed-whisper">Your key is the only way in.</p>
   </div>
 
   <main id="app">
@@ -43,16 +65,15 @@
   <section id="guide" class="guide" aria-label="How to use your key">
     <ol class="mini-steps">
       <li>Press <b>Use my security key</b>.</li>
-      <li>Hold the key flat on the back of your phone until it buzzes. On a computer, plug it in and touch the gold circle.</li>
+      <li>Plug the key in. When it blinks, touch the gold circle.</li>
       <li>Do it once more. The second touch unlocks your letters.</li>
     </ol>
     <details class="questions">
       <summary>Questions people ask</summary>
     <div class="faq">
       <details>
-        <summary>Where exactly do I touch the key on my phone?</summary>
-        <p>On most iPhones, near the top of the back. On most Android phones, the middle of the back. If nothing happens, slide the key slowly around the back of the phone and hold it still for a few seconds. A phone case is fine.</p>
-        <p>If your key has a plug that fits your phone, you can plug it in instead and touch the gold circle.</p>
+        <summary>Where do I touch the key?</summary>
+        <p>Plug the key into your phone or computer. When the key blinks, touch the gold circle on the key.</p>
       </details>
       <details>
         <summary>It is asking for a PIN</summary>

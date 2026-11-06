@@ -97,8 +97,13 @@ function showGuide(on) {
   }
 }
 
+function setHomeListening(on) {
+  document.getElementById("hero-pic")?.classList.toggle("is-listening", on);
+}
+
 function failed(err) {
-  if (err?.name === "NotAllowedError") return problem("The key was not tapped, or the request was cancelled. Nothing was opened.");
+  setHomeListening(false);
+  if (err?.name === "NotAllowedError") return problem("The key did not answer, or the request was cancelled. Nothing was opened.");
   if (err?.name === "SecurityError") return problem("This page has to be opened at sealmessenger.com for your key to answer.", false);
   problem(err?.message || "Something went wrong. Nothing was opened.");
 }
@@ -162,7 +167,8 @@ async function run() {
   const ids = (await credentialIDs(ck)).filter((id) => !skipIDs.some((s) => same(s, id)));
   if (!ids.length) throw new Error("Seal's directory could not be read. Try again in a minute.");
 
-  working("Tap your security key.");
+  setHomeListening(true);
+  working("Plug in your key. When it blinks, touch the gold circle.");
   const first = await navigator.credentials.get(keyRequest(ids));
   const credentialID = new Uint8Array(first.rawId);
   const myHash = toHex(await sha256(credentialID));
@@ -180,7 +186,7 @@ async function run() {
     return showWaiting(me, await waitingFor(ck, myHash, nowSeconds()), ck, credentialID);
   }
 
-  working("Tap your security key again to unlock.");
+  working("Touch the gold circle once more to unlock.");
   const second = await navigator.credentials.get(keyRequest([credentialID], { prf: { eval: { first: sponsored.prfSalt } } }));
   if (!same(new Uint8Array(second.rawId), credentialID)) throw new Error("A different key answered the second time. Use the same key for both taps.");
   const prf = second.getClientExtensionResults?.().prf?.results?.first;
@@ -199,6 +205,7 @@ async function run() {
   // the public half the endorsement commits to before it signs anything.
   const signer = await signingKeyFrom(unlocked.signingKey, sponsored.devicePublicKey);
   session = { ck, me, kems, holder: { hash: myHash, credentialID, signer, kems } };
+  setHomeListening(false);
   await refresh();
 }
 
@@ -276,7 +283,7 @@ async function retire(me, ck, credentialID, done = null) {
   const name = me.root.displayName;
   const nonce = random(32);
   const challenge = await sha256(concat(utf8("seal.identity.delete.v1"), nonce));
-  working("Tap your security key to retire it.");
+  working("Touch the gold circle on your key to clear it.");
   const cred = await navigator.credentials.get({ publicKey: {
     rpId: config.rpId, challenge, userVerification: "preferred", timeout: 120_000,
     allowCredentials: [{ type: "public-key", id: credentialID, transports: ["usb", "nfc"] }],
@@ -357,9 +364,9 @@ function stateLine(j, now) {
   switch (j.state) {
     case "released": return "Released.";
     case "warning":
-    case "grace": return `Not open yet. A key holder started the release, and the writer is being warned${j.timeline ? `. Keys can be tapped from ${dateLine(j.timeline.claimOpensAt)}` : ""}.`;
+    case "grace": return `Not open yet. A key holder started the release, and the writer is being warned${j.timeline ? `. Keys can be used from ${dateLine(j.timeline.claimOpensAt)}` : ""}.`;
     case "claimOpen": return "The key holders are being asked to tap their keys.";
-    case "authorized": return "Enough key holders have tapped. The one who started the claim can combine the keys.";
+    case "authorized": return "Enough key holders have used their keys. The one who started the claim can combine the keys.";
     case "objected": return "A key holder objected, so the release is on hold.";
     case "overdue": return `The writer has been quiet longer than their rule allows (${silentDays(j.snapshot, now)} days). Nothing opens unless a key holder starts a claim and the warnings run out.`;
     case "cancelled": return "The writer stopped the last claim by checking in. Still sealed.";
@@ -388,12 +395,12 @@ function holderActions(j, now) {
 // must not miss; `field` asks for a note; `hint` says who can read it.
 const ASK = {
   claim: { warn: "This starts the release.", line: "The writer is warned every day for weeks, and one check-in from them stops it. Only do this if you believe they are gone.", field: "Why are you starting it?", hint: "Everyone in the record can read this.", example: "For example: we have not heard from Mom since March.", go: "Start the claim" },
-  claimGlass: { warn: "This opens the envelopes right away.", line: "There is no waiting. Once enough key holders tap their keys, the envelopes open, and the writer cannot stop it. Only do this if it is really needed.", field: "Why are you starting it?", hint: "Everyone in the record can read this.", example: "For example: Dad is in the hospital and we need the bills.", go: "Start the claim" },
+  claimGlass: { warn: "This opens the envelopes right away.", line: "There is no waiting. Once enough key holders use their keys, the envelopes open, and the writer cannot stop it. Only do this if it is really needed.", field: "Why are you starting it?", hint: "Everyone in the record can read this.", example: "For example: Dad is in the hospital and we need the bills.", go: "Start the claim" },
   object: { line: "This puts the release on hold while your objection stands.", field: "A note", hint: "Everyone in the record can read this.", go: "Object" },
   withdraw: { line: "This takes back your objection. The countdown goes on.", go: "Withdraw it" },
-  tap: { line: "Your key, tapped here, is one of the keys that opens the envelopes. You will tap it once more to sign.", go: "Tap my key" },
+  tap: { line: "Your key is one of the keys that opens the envelopes. You will touch its gold circle once more to sign.", go: "Use my key" },
   release: { line: "This combines the keys and opens the envelopes for everyone they were written to. It cannot be undone.", go: "Release" },
-  confirmCustody: { line: "This tells the writer you still have your key. Tap it once more to sign.", go: "Confirm" },
+  confirmCustody: { line: "This tells the writer you still have your key. Touch its gold circle once more to sign.", go: "Confirm" },
 };
 
 function actionButton(j, action, label, primary = false) {
@@ -403,6 +410,7 @@ function actionButton(j, action, label, primary = false) {
 /** The rule's name, as the app shows it. */
 const KIND_LABEL = { quiet: "When I go quiet", breakGlass: "Break glass", rightAway: "Right away" };
 const kindPill = (j) => h("span", { class: "pill" }, KIND_LABEL[j.kind] ?? KIND_LABEL.quiet);
+const displayOwnerName = (name) => (name || "someone").replace(/\s*\((right away|break glass|when i go quiet)\)\s*$/i, "");
 
 function askFirst(j, action) {
   const a = action === "claim" && j.kind === "breakGlass" ? ASK.claimGlass : ASK[action];
@@ -423,7 +431,7 @@ function askFirst(j, action) {
 }
 
 async function act(j, action, text) {
-  working(action === "tap" || action === "confirmCustody" ? "Tap your security key." : "Signing…");
+  working(action === "tap" || action === "confirmCustody" ? "Touch the gold circle on your key." : "Signing…");
   const built = await buildAction(action, {
     ck: session.ck, judged: j, me: session.holder, now: nowSeconds(),
     reason: text, note: text, rpId: config.rpId,
@@ -437,7 +445,7 @@ async function act(j, action, text) {
 }
 
 function failedAction(err) {
-  if (err?.name === "NotAllowedError") return problem("The key was not tapped, or the request was cancelled. Nothing was sent.");
+  if (err?.name === "NotAllowedError") return problem("The key did not answer, or the request was cancelled. Nothing was sent.");
   problem(err?.message || "Something went wrong. Nothing was sent.");
 }
 
@@ -468,7 +476,7 @@ async function list(judged, now) {
   const ready = [], needs = [], sealed = [];
   const writers = new Map();
   for (const j of judged) {
-    const name = j.ownerName || "someone";
+    const name = displayOwnerName(j.ownerName);
     if (!writers.has(j.ownerHash)) {
       const owner = await fetchIdentity(ck, j.ownerHash, { history: true }).catch(() => null);
       writers.set(j.ownerHash, { name, words: owner ? await phrase(owner.root.publicKey) : null });
@@ -529,7 +537,7 @@ function downloadLink(bytes, name, type = "application/octet-stream") {
 
 /** A media item that loads when asked, never before. */
 function mediaBlock(ck, j, entry, item, label) {
-  const box = h("div", { class: "media" });
+  const box = h("div", { class: `media media-${item.kind}` });
   const load = async () => {
     box.replaceChildren(h("p", { class: "small", role: "status" }, "Opening…"));
     try {
@@ -552,7 +560,11 @@ function mediaBlock(ck, j, entry, item, label) {
       box.replaceChildren(h("p", { class: "small" }, err?.message || "That file could not be opened."));
     }
   };
-  box.append(h("button", { class: "cta ghost", type: "button", on: { click: load } }, label));
+  const mark = item.kind === "voice" ? "▶" : item.kind === "video" ? "▶" : "＋";
+  box.append(h("button", { class: "media-open", type: "button", on: { click: load } },
+    h("span", { class: "media-open-mark", "aria-hidden": "true" }, mark),
+    h("span", {}, label),
+  ));
   return box;
 }
 
@@ -563,14 +575,17 @@ const CARD_LABELS = {
 const chunked = (s) => [...s].map((c, i) => (i > 0 && i % 4 === 0 ? " " + c : c)).join("");
 
 function secretBlock(card) {
-  const value = h("p", { class: "secret" }, "Hidden until you show it.");
+  const value = h("p", { class: "secret" }, card.cardType === "cryptoAddress" ? chunked(card.value) : card.value);
   const line = h("p", { class: "small", role: "status" });
   let shown = false;
-  const showBtn = h("button", { class: "cta ghost", type: "button", on: { click: () => {
-    shown = !shown;
-    value.textContent = shown ? (card.cardType === "cryptoAddress" ? chunked(card.value) : card.value) : "Hidden until you show it.";
-    showBtn.textContent = shown ? "Hide" : "Show";
-  } } }, "Show");
+  let shell;
+  const setShown = (next) => {
+    shown = next;
+    shell.classList.toggle("is-revealed", shown);
+    shell.setAttribute("aria-label", shown ? `${card.title}, revealed` : `${card.title}, hidden`);
+  };
+  const revealBtn = h("button", { class: "cta secret-reveal", type: "button", on: { click: () => setShown(true) } }, "Reveal");
+  const hideBtn = h("button", { class: "cta ghost", type: "button", on: { click: () => setShown(false) } }, "Hide");
   const copyBtn = h("button", { class: "cta ghost", type: "button", on: { click: async () => {
     try {
       await navigator.clipboard.writeText(card.value);
@@ -581,14 +596,68 @@ function secretBlock(card) {
       line.textContent = "This browser would not copy. Show it and copy it by hand.";
     }
   } } }, "Copy");
-  return h("div", { class: "card" },
+  const front = h("div", { class: "secret-face secret-front" },
+    h("p", { class: "secret-inside" }, "Something is inside"),
+    h("h3", {}, card.title),
+    revealBtn,
+  );
+  const back = h("div", { class: "secret-face secret-back" },
     h("h3", {}, card.title),
     h("p", { class: "small" }, card.asset ? `${card.asset} · ${CARD_LABELS[card.cardType]}` : CARD_LABELS[card.cardType]),
     value,
     card.note ? h("p", { class: "dim" }, card.note) : null,
-    h("p", {}, showBtn, copyBtn),
+    h("p", { class: "secret-actions" }, copyBtn, hideBtn),
     line,
   );
+  shell = h("div", { class: "secret-card", "aria-label": `${card.title}, hidden` },
+    h("div", { class: "secret-card-inner" }, front, back),
+  );
+  return shell;
+}
+
+function revealArt() {
+  return h("div", { class: "reveal-art", "aria-hidden": "true" },
+    h("div", { class: "reveal-glow" }),
+    h("div", { class: "reveal-letter-sheet" }, h("span", {}), h("span", {}), h("span", {})),
+    h("div", { class: "reveal-envelope" },
+      h("div", { class: "reveal-envelope-back" }),
+      h("div", { class: "reveal-envelope-flap" }),
+      h("div", { class: "reveal-envelope-front" }),
+      h("div", { class: "reveal-wax" }, h("span", { class: "wax-crack wax-crack-one" }), h("span", { class: "wax-crack wax-crack-two" })),
+    ),
+  );
+}
+
+function playReveal(theater, items) {
+  let done = false;
+  const timers = [];
+  const later = (delay, fn) => timers.push(window.setTimeout(fn, delay));
+  const finish = () => {
+    if (done) return;
+    done = true;
+    timers.forEach(window.clearTimeout);
+    theater.classList.add("is-finished");
+    theater.classList.remove("is-still", "is-cracking", "is-opening", "is-rising");
+    items.forEach((item) => item.classList.add("is-shown"));
+  };
+  theater.addEventListener("click", (event) => {
+    if (!done) {
+      event.preventDefault();
+      event.stopPropagation();
+      finish();
+    }
+  }, { once: true, capture: true });
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    requestAnimationFrame(finish);
+    return;
+  }
+  theater.classList.add("is-still");
+  later(420, () => theater.classList.add("is-cracking"));
+  later(980, () => theater.classList.add("is-opening"));
+  later(1580, () => theater.classList.add("is-rising"));
+  later(2250, () => theater.classList.add("is-reading"));
+  items.forEach((item, index) => later(2450 + index * 280, () => item.classList.add("is-shown")));
+  later(Math.min(4900, 2850 + items.length * 280), finish);
 }
 
 async function envelopes(ck, me, kems, j, now) {
@@ -600,37 +669,77 @@ async function envelopes(ck, me, kems, j, now) {
       : "The release is real, but no envelope here opens with your key. If you were given a new key, the writer may need to seal again.");
     return;
   }
-  const nodes = [h("p", { class: "lede" }, j.kind === "rightAway"
-    ? `From ${j.ownerName || "someone"}, sealed to open right away.`
-    : `From ${j.ownerName || "someone"}, released ${dateLine(j.snapshot.releasedAt)}.`)];
+  const revealItems = [];
+  const stack = h("div", { class: "revealed-stack" });
+  const intro = h("p", { class: "reveal-intro reveal-item" }, j.kind === "rightAway"
+    ? `From ${displayOwnerName(j.ownerName)}, sealed to open right away.`
+    : `From ${displayOwnerName(j.ownerName)}, released ${dateLine(j.snapshot.releasedAt)}.`);
+  revealItems.push(intro);
+  stack.append(intro);
   for (const { entry, payload } of opened) {
     const held = isHeld(payload, now);
-    const parts = [h("h2", {}, payload.title || "An envelope")];
+    const title = h("h2", { class: "reveal-item reveal-title" }, payload.title || "An envelope");
+    revealItems.push(title);
+    const parts = [title];
     if (held) {
       const until = typeof payload.openNoEarlierThanEpoch === "number" ? dateLine(payload.openNoEarlierThanEpoch) : "a later date";
-      parts.push(h("p", {}, `${j.ownerName || "The writer"} asked that this one stay closed until ${until}. This page keeps it closed until then.`));
+      const heldLine = h("div", { class: "held-envelope reveal-item" },
+        h("span", { class: "held-seal", "aria-hidden": "true" }, "S"),
+        h("p", {}, `${displayOwnerName(j.ownerName)} asked that this one stay closed until ${until}.`),
+        h("p", { class: "small" }, "This page keeps it closed until then."),
+      );
+      revealItems.push(heldLine);
+      parts.push(heldLine);
     } else {
-      if (payload.letter.trim()) parts.push(h("div", { class: "letter" }, payload.letter));
-      if (payload.voiceNote) parts.push(mediaBlock(ck, j, entry, payload.voiceNote, "Play the voice message"));
-      if (payload.videoNote) parts.push(mediaBlock(ck, j, entry, payload.videoNote, "Play the video"));
-      payload.photos.forEach((p, i) => parts.push(mediaBlock(ck, j, entry, p, payload.photos.length > 1 ? `Show photo ${i + 1}` : "Show the photo")));
+      if (payload.letter.trim()) {
+        const letter = h("div", { class: "letter reveal-item" }, payload.letter);
+        revealItems.push(letter);
+        parts.push(letter);
+      }
+      const addMedia = (item, label) => {
+        const block = mediaBlock(ck, j, entry, item, label);
+        block.classList.add("reveal-item");
+        revealItems.push(block);
+        parts.push(block);
+      };
+      if (payload.videoNote) addMedia(payload.videoNote, "Play the video");
+      if (payload.voiceNote) addMedia(payload.voiceNote, "Play the voice message");
+      payload.photos.forEach((p, i) => addMedia(p, payload.photos.length > 1 ? `Show photo ${i + 1}` : "Show the photo"));
       const steps = (payload.firstSteps ?? []).filter((s) => s.title.trim() || s.note.trim());
       if (steps.length) {
-        parts.push(h("h3", {}, "What to do first"));
-        parts.push(h("ol", { class: "plain" }, steps.map((s) => h("li", {}, h("b", {}, s.title), s.note ? h("span", { class: "dim" }, ` ${s.note}`) : null))));
+        const heading = h("h3", { class: "reveal-item" }, "What to do first");
+        const stepList = h("ol", { class: "plain reveal-item" }, steps.map((s) => h("li", {}, h("b", {}, s.title), s.note ? h("span", { class: "dim" }, ` ${s.note}`) : null)));
+        revealItems.push(heading, stepList);
+        parts.push(heading, stepList);
       }
       if (payload.secrets.length) {
-        parts.push(h("h3", {}, "Secrets"));
-        for (const card of payload.secrets) parts.push(secretBlock(card));
+        const heading = h("h3", { class: "reveal-item" }, "Secrets");
+        revealItems.push(heading);
+        parts.push(heading);
+        for (const card of payload.secrets) {
+          const secret = secretBlock(card);
+          secret.classList.add("reveal-item");
+          revealItems.push(secret);
+          parts.push(secret);
+        }
       }
-      for (const f of payload.files ?? []) parts.push(mediaBlock(ck, j, entry, f, `Get ${f.fileName || "the file"}`));
+      for (const f of payload.files ?? []) addMedia(f, `Get ${f.fileName || "the file"}`);
     }
-    nodes.push(h("section", { class: "envelope" }, parts));
+    stack.append(h("section", { class: "envelope reveal-envelope-content" }, parts));
   }
-  if (j.kind === "rightAway") nodes.push(passOnCard(j, opened, now));
-  nodes.push(h("p", { class: "back" }, h("button", { class: "cta ghost", type: "button", on: { click: () => refresh().catch(failed) } }, "Back to the list")));
-  nodes.push(h("p", { class: "small" }, "Nothing is saved in this browser. When you are done, close the tab."));
-  show(...nodes);
+  const theater = h("div", { class: "reveal-theater" },
+    h("button", { class: "skip-reveal", type: "button" }, "Skip reveal"),
+    revealArt(),
+    stack,
+  );
+  const passOn = j.kind === "rightAway" ? h("div", { class: "passon-wrap" }, passOnCard(j, opened, now)) : null;
+  show(
+    theater,
+    passOn,
+    h("p", { class: "back" }, h("button", { class: "cta ghost", type: "button", on: { click: () => refresh().catch(failed) } }, "Back to the list")),
+    h("p", { class: "small" }, "Nothing is saved in this browser. When you are done, close the tab."),
+  );
+  requestAnimationFrame(() => playReveal(theater, revealItems));
 }
 
 // ---------------------------------------------------------------- pass a key on
@@ -653,7 +762,7 @@ function passOnCard(j, opened, now) {
         h("p", { class: "small" }, "It saves a text file to this device. Secrets and anything still closed are left out. Photos and voice messages have their own Save buttons.")),
       h("li", {}, h("b", {}, "Clear the key. "), "Seal checks that nothing else needs this key first.",
         h("p", {}, h("button", { class: "cta ghost", type: "button", on: { click: () => checkPassOn(j, opened, now).catch(failed) } }, "Clear this key"))),
-      h("li", {}, h("b", {}, "Write the next letter on your iPhone. "), "Use your own Seal account, not this key. Tap Set up a key for someone, touch this key, write your letter, choose Right away, and seal it.",
+      h("li", {}, h("b", {}, "Write the next letter on your iPhone. "), "Use your own Seal account, not this key. Choose Set up a key for someone, plug this key in, write your letter, choose Right away, and seal it.",
         h("p", {}, h("a", { class: "cta ghost", href: APP_STORE }, "Get Seal on the App Store"))),
       h("li", {}, h("b", {}, "Hand it to them in person. "), "Their letter opens here, at sealmessenger.com/open."),
     ),
@@ -726,13 +835,13 @@ async function checkPassOn(j, opened, now) {
   );
 }
 
-function passedOn() {
+function passedOn(name) {
   show(
-    h("div", { class: "note", role: "status" }, h("p", {}, h("b", {}, "The old identity is retired. "), "Seal will not open your letter with this key again.")),
+    h("div", { class: "note", role: "status" }, h("p", {}, h("b", {}, `${name} is cleared from this key. `), "Seal will not open your letter with this key again.")),
     h("h2", {}, "Now write the next letter"),
     h("ol", {},
       h("li", {}, "On your iPhone, open Seal with your own account, not this key."),
-      h("li", {}, "Tap Set up a key for someone, and touch this key. If Seal says the key is already in use, wait a minute and try again."),
+      h("li", {}, "Choose Set up a key for someone, then plug this key in. If Seal says the key is already in use, wait a minute and try again."),
       h("li", {}, "Write the letter, choose Right away, and seal it."),
       h("li", {}, "Hand the key to them in person."),
     ),

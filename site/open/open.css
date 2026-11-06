@@ -103,3 +103,133 @@ details.words { margin:30px 0 8px; color:var(--dim); font-size:16px; }
 details.words summary { cursor:pointer; font-weight:600; color:var(--ink); }
 details.words ul { padding-left:20px; }
 p.back { margin-top:36px; }
+
+/* The sealed object on the first screen. Brass is saved for the seal and
+   the key's touch point, where trust is asked for. */
+.sealed-home { position:relative; max-width:620px; margin:8px auto 10px; text-align:center; }
+.sealed-kicker { margin:0; font-family:var(--serif); font-size:clamp(24px,5vw,34px); line-height:1.2; }
+.sealed-whisper { margin:-10px 0 12px; color:var(--dim); font-size:16px; }
+.sealed-home-art { display:block; width:100%; height:auto; max-height:360px; overflow:visible; }
+.paper-stop-one { stop-color:var(--paper2); }
+.paper-stop-two { stop-color:var(--paper); }
+.wax-stop-one { stop-color:var(--brass-bright); }
+.wax-stop-two { stop-color:var(--brass); }
+.home-halo { fill:var(--brass-bright); opacity:.08; }
+.home-envelope { transform-origin:300px 220px; animation:home-breathe 4.6s ease-in-out infinite; }
+.home-paper { fill:url(#home-paper); stroke:var(--rule); stroke-width:4; }
+.home-fold { fill:var(--paper2); stroke:var(--rule); stroke-width:4; stroke-linejoin:round; }
+.home-flap { fill:var(--paper); stroke:var(--rule); stroke-width:4; stroke-linejoin:round; }
+.home-light { fill:var(--brass-bright); opacity:0; transform-origin:300px 210px; }
+.home-seal { transform-origin:304px 247px; animation:seal-breathe 3.1s ease-in-out infinite; }
+.home-seal-rim { fill:var(--brass); opacity:.22; }
+.home-seal-face { fill:url(#home-wax); stroke:var(--brass); stroke-width:3; }
+.home-seal-mark { fill:none; stroke:var(--paper); stroke-width:5; stroke-linejoin:round; opacity:.8; }
+.home-key { transform-origin:500px 308px; }
+.home-key-body { fill:var(--ink); stroke:var(--dim); stroke-width:3; }
+.home-key-plug { fill:var(--faint); stroke:var(--dim); stroke-width:3; }
+.home-key-slot { fill:none; stroke:var(--paper2); stroke-width:3; }
+.home-key-ring { fill:var(--paper); stroke:var(--faint); stroke-width:4; }
+.home-key-touch { fill:var(--brass-bright); stroke:var(--paper2); stroke-width:3; }
+.sealed-home.is-listening .home-halo { animation:listen-halo 1.45s ease-in-out infinite; }
+.sealed-home.is-listening .home-light { animation:light-listen 1.45s ease-in-out infinite; }
+.sealed-home.is-listening .home-key { animation:key-listen 1.45s ease-in-out infinite; }
+.sealed-home.is-listening .home-seal { animation:seal-listen 1.45s ease-in-out infinite; }
+@keyframes home-breathe { 0%,100% { transform:translateY(0) scale(1); } 50% { transform:translateY(-5px) scale(1.008); } }
+@keyframes seal-breathe { 0%,100% { transform:scale(1); opacity:.92; } 50% { transform:scale(1.055); opacity:1; } }
+@keyframes listen-halo { 0%,100% { opacity:.08; transform:scale(.92); } 50% { opacity:.24; transform:scale(1.06); } }
+@keyframes light-listen { 0%,100% { opacity:.08; transform:scale(.94); } 50% { opacity:.34; transform:scale(1.04); } }
+@keyframes key-listen { 0%,100% { transform:translateY(0) scale(1); opacity:.84; } 50% { transform:translateY(-3px) scale(1.035); opacity:1; } }
+@keyframes seal-listen { 0%,100% { transform:scale(1); opacity:.9; } 50% { transform:scale(1.12); opacity:1; } }
+
+/* One reveal, from sealed object to readable letter. The DOM already holds
+   only content that the release rules allowed open. */
+.reveal-theater { position:relative; min-height:520px; margin:2px 0 20px; overflow:visible; }
+.skip-reveal { position:absolute; z-index:20; top:0; right:0; border:1px solid var(--rule); border-radius:999px;
+  background:var(--paper); color:var(--dim); padding:8px 14px; font:600 14px var(--sans); cursor:pointer; }
+.skip-reveal:focus-visible { outline:3px solid var(--brass-bright); outline-offset:3px; }
+.reveal-art { position:relative; width:min(560px, 100%); height:430px; margin:30px auto 0; perspective:1000px; }
+.reveal-glow { position:absolute; left:10%; right:10%; top:12%; bottom:4%; border-radius:50%; background:var(--brass-bright);
+  opacity:.04; transform:scale(.8); }
+.reveal-envelope { position:absolute; left:8%; right:8%; bottom:42px; height:250px; transform-origin:50% 70%; }
+.reveal-envelope-back { position:absolute; inset:0; border:3px solid var(--rule); border-radius:16px; background:var(--paper2); }
+.reveal-envelope-front { position:absolute; inset:0; border:3px solid var(--rule); border-radius:16px;
+  background:var(--paper); clip-path:polygon(0 18%,50% 72%,100% 18%,100% 100%,0 100%); }
+.reveal-envelope-flap { position:absolute; z-index:3; left:0; right:0; top:0; height:68%; border:3px solid var(--rule); border-radius:16px 16px 8px 8px;
+  background:var(--paper2); clip-path:polygon(0 0,100% 0,50% 100%); transform-origin:50% 0; transform:rotateX(0deg); }
+.reveal-wax { position:absolute; z-index:5; left:50%; top:49%; width:88px; height:88px; margin:-44px; border-radius:50%;
+  background:var(--brass); border:7px double var(--brass-bright); transform:scale(1); opacity:1; }
+.wax-crack { position:absolute; left:42px; top:5px; width:4px; height:74px; background:var(--paper2); opacity:0; transform-origin:50% 50%; }
+.wax-crack-one { transform:rotate(18deg) scaleY(.8); }
+.wax-crack-two { transform:rotate(-26deg) scaleY(.62); }
+.reveal-letter-sheet { position:absolute; z-index:2; left:14%; right:14%; bottom:70px; height:285px; border:2px solid var(--rule); border-radius:10px;
+  background:var(--paper); padding:64px 16% 0; opacity:0; transform:translateY(90px) scale(.82); }
+.reveal-letter-sheet span { display:block; height:3px; margin:0 0 22px; background:var(--rule); }
+.reveal-theater.is-cracking .wax-crack { opacity:1; }
+.reveal-theater.is-cracking .reveal-wax { transform:scale(1.08); }
+.reveal-theater.is-opening .reveal-wax { opacity:0; transform:scale(.7); }
+.reveal-theater.is-opening .reveal-envelope-flap { transform:rotateX(174deg); }
+.reveal-theater.is-opening .reveal-glow { opacity:.34; transform:scale(1.08); }
+.reveal-theater.is-opening .reveal-letter-sheet { opacity:1; }
+.reveal-theater.is-rising .reveal-letter-sheet { opacity:1; transform:translateY(-80px) scale(1); }
+.reveal-theater.is-rising .reveal-envelope { transform:translateY(70px) scale(.92); opacity:.74; }
+.reveal-theater.is-reading .reveal-art, .reveal-theater.is-finished .reveal-art { position:absolute; inset:0; opacity:0; transform:translateY(-24px) scale(.96); pointer-events:none; }
+.reveal-glow, .reveal-envelope, .reveal-envelope-flap, .reveal-wax, .wax-crack, .reveal-letter-sheet, .reveal-art {
+  transition-property:transform,opacity; transition-duration:560ms; transition-timing-function:cubic-bezier(.2,.8,.2,1); }
+.reveal-envelope-flap { transition-duration:720ms; transition-timing-function:cubic-bezier(.16,1,.3,1); }
+.reveal-letter-sheet { transition-duration:760ms; transition-timing-function:cubic-bezier(.16,1,.3,1); }
+
+.revealed-stack { position:absolute; top:30px; left:0; right:0; opacity:0; transform:translateY(22px); pointer-events:none; }
+.reveal-theater.is-reading .revealed-stack, .reveal-theater.is-finished .revealed-stack {
+  position:relative; top:auto; opacity:1; transform:translateY(0); pointer-events:auto; }
+.reveal-theater.is-reading, .reveal-theater.is-finished { min-height:0; }
+.revealed-stack, .reveal-item { transition-property:transform,opacity; transition-duration:600ms; transition-timing-function:cubic-bezier(.16,1,.3,1); }
+.reveal-item { opacity:0; transform:translateY(24px) scale(.985); }
+.reveal-item.is-shown { opacity:1; transform:translateY(0) scale(1); }
+.reveal-intro { color:var(--dim); font-size:18px; margin:0 0 8px; }
+.reveal-title { margin:8px 0 18px; font-size:clamp(32px,7vw,48px); }
+.reveal-envelope-content { margin-top:16px; padding-top:8px; }
+.reveal-envelope-content:first-of-type { border-top:0; }
+.reveal-envelope-content .letter { font-size:clamp(21px,4vw,26px); line-height:1.72; padding:clamp(24px,5vw,42px); border-radius:18px; }
+
+.media-open { width:100%; min-height:92px; display:flex; align-items:center; justify-content:center; gap:16px; border:1px solid var(--rule);
+  border-radius:18px; background:var(--paper2); color:var(--ink); font:650 20px var(--sans); cursor:pointer; }
+.media-open-mark { display:inline-flex; width:58px; height:58px; align-items:center; justify-content:center; border-radius:50%;
+  background:var(--brass); color:var(--paper); font-size:22px; padding-left:3px; }
+.media-open:focus-visible { outline:3px solid var(--brass-bright); outline-offset:3px; }
+
+.secret-card { margin:24px 0; perspective:1200px; min-height:300px; }
+.secret-card-inner { position:relative; min-height:300px; transform-style:preserve-3d; transition:transform 760ms cubic-bezier(.16,1,.3,1); }
+.secret-card.is-revealed .secret-card-inner { transform:rotateY(180deg); }
+.secret-face { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:28px;
+  border:2px solid var(--brass); border-radius:20px; background:var(--paper2); text-align:center; backface-visibility:hidden; }
+.secret-back { transform:rotateY(180deg); align-items:stretch; text-align:left; }
+.secret-face h3 { margin:6px 0 18px; font-size:24px; color:var(--ink); }
+.secret-inside { margin:0; color:var(--brass); font-size:15px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; }
+.secret-reveal { min-width:160px; margin:8px 0 0; border:0; }
+.secret-back .secret { margin:6px 0 18px; font-size:clamp(22px,6vw,36px); line-height:1.35; }
+.secret-actions { display:flex; flex-wrap:wrap; gap:8px; margin:0; }
+.secret-actions .cta { margin:0; }
+.held-envelope { border:1px solid var(--rule); border-radius:18px; background:var(--paper2); padding:26px; text-align:center; }
+.held-seal { display:inline-flex; width:58px; height:58px; align-items:center; justify-content:center; border-radius:50%;
+  background:var(--brass); color:var(--paper); font-family:var(--serif); font-size:26px; margin-bottom:14px; }
+
+.passon-wrap { opacity:0; transform:translateY(14px); pointer-events:none; transition:transform 500ms ease,opacity 500ms ease; }
+.reveal-theater.is-finished + .passon-wrap { opacity:1; transform:translateY(0); pointer-events:auto; }
+
+@media (max-width:540px) {
+  .sealed-home-art { margin:-8px 0 -2px; }
+  .sealed-whisper { margin-top:-18px; }
+  .reveal-art { height:350px; margin-top:52px; }
+  .reveal-envelope { left:2%; right:2%; height:190px; bottom:38px; }
+  .reveal-letter-sheet { left:8%; right:8%; height:230px; bottom:54px; }
+  .reveal-wax { width:70px; height:70px; margin:-35px; }
+  .wax-crack { left:32px; height:58px; }
+  .secret-face { padding:22px 18px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-envelope, .home-seal, .sealed-home.is-listening .home-halo, .sealed-home.is-listening .home-light,
+  .sealed-home.is-listening .home-key, .sealed-home.is-listening .home-seal { animation:none; }
+  .reveal-glow, .reveal-envelope, .reveal-envelope-flap, .reveal-wax, .wax-crack, .reveal-letter-sheet,
+  .reveal-art, .revealed-stack, .reveal-item, .secret-card-inner, .passon-wrap { transition-duration:1ms; }
+}
