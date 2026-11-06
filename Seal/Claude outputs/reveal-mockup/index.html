@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Seal reveal mockup</title>
+  <link rel="stylesheet" href="mockup.css">
+</head>
+<body>
+  <main class="mock-wrap">
+    <header class="mock-head">
+      <a class="logo" href="#">Seal<span>.</span></a>
+      <button id="reset" class="text-button" type="button">Reset mockup</button>
+    </header>
+
+    <section id="ready" class="ready-panel">
+      <p class="eyebrow">From Jason</p>
+      <h1>A letter is ready for you.</h1>
+      <p class="lede">It was sealed to open with your key.</p>
+      <button id="open" class="cta big" type="button">Open it</button>
+    </section>
+
+    <section id="opening" class="opening-screen" hidden aria-live="polite">
+      <p id="opening-status" class="opening-status">Opening your envelope...</p>
+      <div id="reveal-stage" class="reveal-stage is-sealed">
+        <div class="envelope-visual" aria-hidden="true">
+          <div class="envelope-back"></div>
+          <div class="envelope-letter-preview">
+            <span></span><span></span><span></span>
+          </div>
+          <div class="envelope-flap"></div>
+          <div class="envelope-pocket"></div>
+          <div class="wax-seal">
+            <span class="wax-half wax-left">S</span>
+            <span class="wax-half wax-right">S</span>
+            <svg class="wax-cracks" viewBox="0 0 64 64">
+              <path d="M32 4 L27 20 L36 29 L28 42 L34 60"/>
+              <path d="M32 28 L45 21"/>
+              <path d="M29 42 L17 48"/>
+            </svg>
+          </div>
+        </div>
+
+        <article class="reveal-letter" tabindex="-1">
+          <p class="letter-from">From Jason</p>
+          <h2 class="reveal-title">You found it.</h2>
+          <div class="reveal-body">
+            <p>If you are reading this, your key was the right one.</p>
+            <p>I wanted the moment to feel like opening a real letter, because that is what this is. The key did not lead to a page. It opened something written for you.</p>
+          </div>
+        </article>
+      </div>
+
+      <div id="reveal-content" class="reveal-content" hidden>
+        <section class="reveal-media reveal-video" aria-label="Video message">
+          <div class="video-frame">
+            <button class="media-play video-play" type="button" aria-label="Play the video">
+              <span class="play-triangle" aria-hidden="true"></span>
+            </button>
+            <p>Video from Jason</p>
+          </div>
+          <button class="download-link" type="button">Download video</button>
+        </section>
+
+        <section class="reveal-media reveal-voice" aria-label="Voice message">
+          <button id="voice-play" class="voice-button" type="button" aria-label="Play the voice message">
+            <span class="play-triangle" aria-hidden="true"></span>
+          </button>
+          <div class="voice-copy">
+            <h3>Voice message</h3>
+            <p id="voice-label">Play the voice message</p>
+            <div class="voice-track"><span></span></div>
+            <p class="voice-time">0:00 <span>0:18</span></p>
+          </div>
+          <button class="download-link voice-download" type="button">Download voice message</button>
+        </section>
+
+        <section class="secrets-section">
+          <h2>Something else is inside</h2>
+          <div id="secret" class="secret-turn is-hidden">
+            <div class="secret-inner">
+              <div class="secret-face secret-front" aria-hidden="false">
+                <div class="small-seal" aria-hidden="true">S</div>
+                <p>Something is inside</p>
+                <button id="reveal-secret" class="cta" type="button">Reveal</button>
+              </div>
+              <div class="secret-face secret-back" aria-hidden="true">
+                <p class="secret-kind">Gift card code</p>
+                <p class="secret-value" tabindex="-1">FOUND-500-WINNER</p>
+                <div class="secret-actions">
+                  <button id="hide-secret" class="cta ghost" type="button">Hide</button>
+                  <button id="copy-secret" class="cta ghost" type="button">Copy</button>
+                </div>
+                <p id="copy-status" class="copy-status" role="status"></p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="held-example">
+          <div class="held-envelope" aria-hidden="true">
+            <div class="held-flap"></div>
+            <div class="held-pocket"></div>
+            <div class="held-seal">S</div>
+          </div>
+          <h2>Closed until December 25, 2026</h2>
+          <p>Jason asked Seal to keep this envelope closed until then.</p>
+        </section>
+
+        <details class="passon passon-after-reveal">
+          <summary>Pass this key on</summary>
+          <p>This key can carry one letter at a time. When you are done with yours, it can carry a new one to someone new.</p>
+          <ol>
+            <li><b>Save your letter.</b> Keep anything you want before the key moves on.</li>
+            <li><b>Clear the key.</b> Seal checks that nothing else needs it first.</li>
+            <li><b>Write the next letter.</b> Use your own Seal account on an iPhone.</li>
+            <li><b>Hand it to them.</b> Their letter opens when they plug in the key.</li>
+          </ol>
+        </details>
+      </div>
+    </section>
+  </main>
+  <script src="mockup.js"></script>
+</body>
+</html>
