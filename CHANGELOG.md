@@ -7,6 +7,17 @@ Dates are the day the work landed in the repository. Anything marked
 
 ### Added
 
+- The Get and Give pages, redesigned from the approved references in
+  docs/design/website-1.3: navy, warm cream and gold, bold sans serif. Get
+  leads with "A private letter. Opened on your terms." and the three ways a
+  letter opens; Give leads with "Give them a place for the things they want
+  to say." and one evening in three steps. Both pick a kit by iPhone, show
+  what is in the box with the real key, the real Seal icon and the real
+  envelope art, and fold prices, shipping and returns into one quiet
+  section. Same Stripe links, same thanks banner after checkout, same
+  sample letter link. Montserrat is served from the site (SIL OFL,
+  site/fonts/OFL.txt); pictures are optimized copies in site/img/kit, the
+  originals untouched. (`site/get.html`, `site/give.html`, `site/get.css`)
 - A sample letter anyone can open without a key (sealmessenger.com/open/#sample,
   and "No key yet? See a sample letter open" on the first screen). It plays
   the same reveal a real letter gets, on plain data that says on screen it is
