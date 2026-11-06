@@ -17,7 +17,7 @@
 //  Nothing is written to browser storage. Closing the tab forgets it all.
 
 import { config } from "./config.js";
-import { toHex, sha256, same, utf8, concat, toB64, fromB64 } from "./bytes.js";
+import { toHex, sha256, same, utf8, concat, toB64, toB64url, fromB64 } from "./bytes.js";
 import { CloudKit, bytesField, stringField } from "./cloudkit.js";
 import { unlockSponsored } from "./crypto.js";
 import { signingKeyFrom } from "./signer.js";
@@ -187,7 +187,14 @@ async function run() {
   }
 
   working("Touch the gold circle once more to unlock.");
-  const second = await navigator.credentials.get(keyRequest([credentialID], { prf: { eval: { first: sponsored.prfSalt } } }));
+  // Send both standard assertion forms. eval is the simple form Chrome has
+  // long accepted. evalByCredential makes the input explicit for Firefox
+  // and other clients when an allow list identifies the credential.
+  const prfValues = { first: sponsored.prfSalt };
+  const second = await navigator.credentials.get(keyRequest([credentialID], { prf: {
+    eval: prfValues,
+    evalByCredential: { [toB64url(credentialID)]: prfValues },
+  } }));
   if (!same(new Uint8Array(second.rawId), credentialID)) throw new Error("A different key answered the second time. Use the same key for both taps.");
   const prf = second.getClientExtensionResults?.().prf?.results?.first;
   if (!prf) throw new Error("This browser or key did not hand over the key's secret. Try a current Chrome, Edge, Firefox or Safari, and make sure the key's PIN is set.");
