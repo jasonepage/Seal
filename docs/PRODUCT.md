@@ -1065,3 +1065,140 @@ one.
 `tools/webtests/passon.test.mjs`: the held boundary, held envelopes and
 secrets kept out of the file, the ownership proof, every refusal, and every
 unknown failing closed. Not yet tried with a real key end to end.
+
+## 19. One button: write a secret letter (planned for 1.4, 2026-11-24)
+
+**Plan only. No code yet. Agreed by Jason and Vega on 2026-11-24: bottles
+stay free, and this plan comes before any code.**
+
+### The failure this exists for
+
+Seal needs a pamphlet to understand. It should need only its name. A new
+person in 1.3 meets "Which one are you?" with four roles before writing a
+word, then key holders, break glass, quiet rules, silence days, warning
+periods, thresholds and "start a new set". Real 1.3 line from the home
+screen: "When you meet them in person and add them, it becomes theirs and
+can be sealed." That is the opposite of a message in a bottle.
+
+### What 1.4 is
+
+For a new person, the whole app is one loop:
+
+1. **Open.** The Seal mark and one button: "Write a secret letter." Under
+   it, small: "Got a key? Open your letter."
+2. **Write.** "Who is it for?" Type a name. Write a few lines. Photo or
+   voice if they want.
+3. **Seal.** The wax stamp comes down with an animation, a haptic thunk
+   and a sound. This is the screen people will record. Spend the polish
+   here.
+4. **Give.** "Plug in the key you are giving Sam." Two taps on the key.
+   Done. No key yet? "Get a key" opens sealmessenger.com/give.
+5. **Open and pass on.** Sam plugs the key into any phone or computer at
+   sealmessenger.com/open, or into the app. After it opens: "Pass this key
+   on."
+
+Nothing else shows until the person asks for it.
+
+### What was checked in the code (2026-11-24)
+
+1. **Money already matches /give.** `runSeal` in EstateHomeView skips the
+   paywall when every rule waiting to seal is right away (`onlyBottles`).
+   /give says letters that open right away are free and $29.99 unlocks key
+   holders. They agree. Every bottle is free, not only the first. No
+   paywall change.
+2. **The write side works, with one name step.** A bottle's recipient
+   must be a person record: a Seal account met in person, or a sponsored
+   key (`registerSponsoredKey(displayName:)` in
+   CeremonyManager+Sponsored.swift, two taps: register, then endorse and
+   lock). Step 4 reuses the name typed in step 2, so the person never sees
+   a second name screen. Today this flow lives in SponsoredKeyView and is
+   reached only from People and from Add key holder. 1.4 moves it into
+   step 4.
+3. **A new owner's first rule is break glass** (EstateEngine.swift, the
+   `shaped(as: .breakGlass)` line, from the 2026-11-04 decision). Break
+   glass needs key holders and the $29.99 unlock, so a new person's very
+   first seal runs into a key holder step and a paywall. **1.4 makes the
+   first rule right away.** This reverses the 2026-11-04 decision. Break
+   glass moves under More ways to seal.
+4. **The pass on loop is built on the web only** (section 18) and has not
+   been tried with a real key end to end. Writing the next letter still
+   needs an iPhone and the person's own Seal account. The reply chain
+   (each holder adds to one growing letter, resealed by someone who is not
+   the owner) is not built.
+
+### The chain: out of 1.4
+
+Step 5 is the section 18 "Pass this key on" card, not a reply chain. The
+reply chain is a later version. 1.4 adds only:
+
+- In the app, after a bottle opens, a card that sends the person to
+  sealmessenger.com/open to pass the key on (today only the web shows it).
+- One real end to end test with a kit key: open, save, clear, set up as the
+  next person, seal a new bottle, open it. Before anything ships.
+
+### What moves behind "More ways to seal"
+
+Break glass, When I go quiet, key holders, couples, check-ins, the weekly
+question, family preview and How it works. Nothing is deleted. The four
+role picker goes away; a person who was handed a key uses "Got a key? Open
+your letter" on the first screen.
+
+### Words that leave the main path
+
+key holder, break glass, rule, quiet, silence, warning, threshold, estate,
+set, passkey, PRF. Say "key", not "security key". Say "letter", not
+"envelope". These words may still appear under More ways to seal.
+
+### Apple
+
+Kits are physical goods, so they are sold on the website and never through
+in-app purchase (Guideline 3.1.3(e)). The "Get a key" button links to
+/give. The key is pitched as how your friend opens the letter, not as a
+ticket to use the app. The $29.99 unlock stays an in-app purchase.
+
+### Website redo, modeled on getpawl.com
+
+What getpawl.com does: a small label, a five word headline that says what
+you do ("Block the app. Hide the key."), one line, two buttons, mascot art;
+"Three steps." with one picture and one line each; one real App Store
+review; "Plain facts." questions; the same top nav on every page.
+
+What sealmessenger.com does today: the home page is already short, but it
+has no top nav, and /get opens with three rule cards (Right away, Break
+glass, If I go quiet) before the kits.
+
+The redo:
+
+- **Same top nav on every page:** How it works, Get a kit, Give one, Open a
+  letter, Get the app.
+- **Home:** headline "Write a secret letter." Line: "Seal it. Hand them the
+  key. Only they can open it." Buttons: Get Seal free, Got a key? Open your
+  letter.
+- **"Three steps."** Write it. Seal it. Hand them the key. One picture and
+  one line each.
+- **One real review** once Seal has one on the App Store. None is made up.
+- **"Plain facts."** What if they lose the key? Can Seal read my letter? Do
+  they need an iPhone? What does it cost? Shipping and returns.
+- **/get:** "Pick a kit." then "Which iPhone do they have?" with a model
+  picker like Pawl's, then plain facts. The three rule cards move to How it
+  works.
+- **Palette stays Seal's** (warm paper, dark ink, brass, serif headlines,
+  decided 2026-11-20). Copy Pawl's layout, not its colors.
+- **Seal stays separate** from every other app on the site (2026-11-05
+  rule). Pawl is a layout reference only and is never named.
+
+### Unknowns
+
+- Whether kit keys ship with a PIN already set. SponsoredKeyView tells the
+  writer to set a PIN first. If kits come without one, step 4 gains a PIN
+  step.
+- Whether pass on works with a real key end to end.
+- Whether 1.3, now in review, is approved with its link to /give.
+
+### Order of work
+
+1. End to end pass on test with a real kit key.
+2. App: first rule right away; the one button first screen; the sponsored
+   key flow moved into step 4; the stamp moment; More ways to seal.
+3. Website redo.
+4. Store screenshots and store text last.
