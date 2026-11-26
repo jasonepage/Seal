@@ -144,7 +144,7 @@ home += '<body class="home">\n' + nav("home") + f"""<main id="main">
         <p class="eyebrow">A message in a bottle</p>
         <h1>Write a secret letter.</h1>
         <p class="lead">Seal it. Hand them the key. Only they can open it.</p>
-        <div class="actions">{BADGE}<a class="text-link" href="/open/">Got a key? Open your letter</a></div>
+        <div class="actions">{BADGE}<a class="text-link" href="/open/">Got a key? Open your letter</a><a class="text-link" href="/get">Get a kit</a></div>
         <ul class="trust" aria-label="About Seal"><li>Free on iPhone</li><li>No subscription</li><li>Seal cannot read your letters</li></ul>
       </div>
       <div class="art">
