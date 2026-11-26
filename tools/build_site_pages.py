@@ -40,7 +40,8 @@ def head(path, title, desc, og_title, og_desc, og_image):
 
 def nav(current):
     links = [("/#how", "How it works", "home"), ("/get", "Get a kit", "get"), ("/give", "Give one", "give"), ("/open/", "Open a letter", "open")]
-    items = "".join(f'<a href="{h}"{" aria-current=\"page\"" if k == current else ""}>{t}</a>' for h, t, k in links)
+    cur = ' aria-current="page"'
+    items = "".join('<a href="%s"%s>%s</a>' % (h, cur if k == current else "", t) for h, t, k in links)
     return f"""<a class="skip" href="#main">Skip to the page</a>
 <nav class="nav" aria-label="Main">
   <div class="wrap nav-inner">
@@ -63,7 +64,7 @@ def kits(title, sub):
         <p>{sub}</p>
       </div>
       <div class="picker"><label for="phone-model">Pick their iPhone</label><select id="phone-model"><option value="">Choose a model</option>
-        <optgroup label="USB-C kit"><option value="usbc">iPhone 17</option><option value="usbc">iPhone 17 Pro</option><option value="usbc">iPhone 17 Pro Max</option><option value="usbc">iPhone Air</option><option value="usbc">iPhone 16e</option><option value="usbc">iPhone 16</option><option value="usbc">iPhone 16 Plus</option><option value="usbc">iPhone 16 Pro</option><option value="usbc">iPhone 16 Pro Max</option><option value="usbc">iPhone 15</option><option value="usbc">iPhone 15 Plus</option><option value="usbc">iPhone 15 Pro</option><option value="usbc">iPhone 15 Pro Max</option><option value="usbc">Newer than these</option></optgroup>
+        <optgroup label="USB-C kit"><option value="usbc">iPhone Duo</option><option value="usbc">iPhone 18 Pro</option><option value="usbc">iPhone 18 Pro Max</option><option value="usbc">iPhone 17e</option><option value="usbc">iPhone 17</option><option value="usbc">iPhone 17 Pro</option><option value="usbc">iPhone 17 Pro Max</option><option value="usbc">iPhone Air</option><option value="usbc">iPhone 16e</option><option value="usbc">iPhone 16</option><option value="usbc">iPhone 16 Plus</option><option value="usbc">iPhone 16 Pro</option><option value="usbc">iPhone 16 Pro Max</option><option value="usbc">iPhone 15</option><option value="usbc">iPhone 15 Plus</option><option value="usbc">iPhone 15 Pro</option><option value="usbc">iPhone 15 Pro Max</option><option value="usbc">Newer than these</option></optgroup>
         <optgroup label="Lightning kit"><option value="lightning">iPhone 14</option><option value="lightning">iPhone 14 Plus</option><option value="lightning">iPhone 14 Pro</option><option value="lightning">iPhone 14 Pro Max</option><option value="lightning">iPhone SE (3rd generation)</option><option value="lightning">iPhone 13</option><option value="lightning">iPhone 13 mini</option><option value="lightning">iPhone 13 Pro</option><option value="lightning">iPhone 13 Pro Max</option><option value="lightning">iPhone 12</option><option value="lightning">iPhone 12 mini</option><option value="lightning">iPhone 12 Pro</option><option value="lightning">iPhone 12 Pro Max</option><option value="lightning">iPhone SE (2nd generation)</option><option value="lightning">iPhone 11</option><option value="lightning">iPhone 11 Pro</option><option value="lightning">iPhone 11 Pro Max</option><option value="lightning">iPhone XS</option><option value="lightning">iPhone XS Max</option><option value="lightning">iPhone XR</option></optgroup>
         <option value="old">Older than iPhone XR</option></select><p id="phone-result" class="picker-result" aria-live="polite"></p></div>
       <div class="products">
