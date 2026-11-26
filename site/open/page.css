@@ -1,0 +1,133 @@
+/* page.css: the open page's frame (2026-11-26 redo), matching the home,
+   get and give pages. Loaded after seal.css and open.css. Everything the
+   page script draws inside #app keeps the open.css styles; this file only
+   lays out the nav, the hero, the card the script draws into, the steps,
+   the questions and the footer. No inline styles or scripts: the page's
+   content security policy allows neither. */
+
+@font-face { font-family:"Montserrat"; font-weight:800; font-display:swap; src:url("/fonts/montserrat-latin-800-normal.woff2") format("woff2"); }
+
+body.open-page { margin:0; font-size:17px; overflow-x:hidden; -webkit-font-smoothing:antialiased; }
+.open-page img { display:block; max-width:100%; height:auto; }
+.o-wrap { width:min(1180px, calc(100% - 40px)); margin-inline:auto; }
+.o-skip { position:absolute; left:-9999px; top:10px; z-index:99; padding:10px 16px; border-radius:10px; background:#d4a24a; color:#1c1408; font-weight:700; }
+.o-skip:focus { left:12px; }
+.open-page :focus-visible { outline:3px solid #d4a24a; outline-offset:3px; border-radius:6px; }
+
+/* Nav: always solid here, since the page allows no inline script to watch scrolling. */
+.o-nav { position:fixed; inset:0 0 auto; z-index:50; color:#f6ecd9; background:rgba(22,18,13,.9); box-shadow:0 1px 0 rgba(255,255,255,.08); -webkit-backdrop-filter:blur(18px); backdrop-filter:blur(18px); }
+.o-nav-inner { height:72px; display:flex; align-items:center; justify-content:space-between; gap:20px; }
+.o-brand { display:inline-flex; align-items:center; gap:11px; color:inherit; text-decoration:none; font-family:var(--serif); font-weight:700; font-size:25px; }
+.o-brand img { width:40px; height:40px; border-radius:11px; box-shadow:0 4px 18px rgba(0,0,0,.3); }
+.o-nav-links { display:flex; align-items:center; gap:28px; font-family:"Montserrat",var(--sans); font-size:14px; font-weight:800; }
+.o-nav-links a { margin:0; color:#f6ecd9; text-decoration:none; opacity:.82; }
+.o-nav-links a:hover, .o-nav-links a[aria-current] { opacity:1; color:#f6ecd9; }
+.o-nav-links .o-nav-button { padding:10px 18px; border-radius:999px; background:#d4a24a; color:#1c1408; opacity:1; }
+.o-nav-links .o-nav-button:hover { color:#1c1408; background:#e2b55e; }
+
+/* Hero */
+.o-hero { position:relative; padding:136px 0 130px; color:#f6ecd9; overflow:hidden;
+  background:radial-gradient(circle at 72% 46%, rgba(212,162,74,.26), transparent 34%), linear-gradient(150deg, #2a2117 0%, #16120d 55%, #0f0c08 100%); }
+.o-hero-grid { display:grid; grid-template-columns:1fr 1fr; align-items:center; gap:40px; }
+.o-eyebrow, .o-label { margin:0 0 20px; font-family:"Montserrat",var(--sans); font-size:12px; font-weight:800; letter-spacing:.16em; text-transform:uppercase; }
+.o-eyebrow { display:flex; align-items:center; gap:10px; color:#e7cf9f; }
+.o-eyebrow::before { content:""; width:8px; height:8px; border-radius:50%; background:#d4a24a; box-shadow:0 0 0 5px rgba(212,162,74,.16); }
+.o-hero h1 { margin:0; color:#fbf3e4; font-family:var(--serif); font-weight:700; font-size:clamp(52px, 7vw, 96px); line-height:.98; letter-spacing:-.035em; }
+.o-lead { max-width:520px; margin:26px 0 0; color:#e2d6c1; font-size:clamp(18px, 2vw, 22px); line-height:1.5; }
+.o-trust { display:flex; flex-wrap:wrap; gap:10px 24px; margin:30px 0 0; padding:0; list-style:none; color:#bdae95; font-size:13px; font-weight:650; }
+.o-trust li { display:flex; align-items:center; gap:8px; margin:0; }
+.o-trust li::before { content:""; width:5px; height:5px; border-radius:50%; background:#d4a24a; }
+
+.o-art { position:relative; min-height:500px; display:grid; place-items:center; }
+.o-orbit { position:absolute; border:1px solid rgba(231,207,159,.16); border-radius:50%; }
+.o-orbit.one { width:440px; height:440px; }
+.o-orbit.two { width:580px; height:580px; }
+.o-scene { position:relative; z-index:1; width:min(400px, 78%); border-radius:32px; box-shadow:0 40px 80px rgba(0,0,0,.45); transform:rotate(2deg); animation:o-arrive .8s cubic-bezier(.2,.75,.25,1) both; }
+.o-key { position:absolute; z-index:2; left:4%; bottom:2%; width:min(240px, 42%); transform:rotate(-4deg); filter:drop-shadow(0 26px 22px rgba(0,0,0,.45)); animation:o-arrive .9s .15s cubic-bezier(.2,.75,.25,1) both; }
+.o-key img { width:100%; }
+/* The key's gold touch circle sits at 55% across and 42% down the picture. */
+.o-touch { position:absolute; left:55.1%; top:41.9%; width:16%; aspect-ratio:1; border-radius:50%; transform:translate(-50%, -50%); pointer-events:none; }
+.o-listen { position:absolute; z-index:3; left:50%; bottom:-6px; margin:0; padding:9px 16px; border-radius:999px; background:#d4a24a; color:#1c1408; font-family:"Montserrat",var(--sans); font-size:13px; font-weight:800; white-space:nowrap; opacity:0; transform:translate(-50%, 8px); transition:opacity .3s ease, transform .3s ease; }
+
+/* While the page waits for the key (app.js adds .is-listening to #hero-pic). */
+.o-hero.is-listening .o-touch { animation:o-ping 1.4s ease-out infinite; }
+.o-hero.is-listening .o-key { animation:o-nudge 1.4s ease-in-out infinite; }
+.o-hero.is-listening .o-listen { opacity:1; transform:translate(-50%, 0); }
+@keyframes o-ping { 0% { box-shadow:0 0 0 0 rgba(240,190,90,.85); } 100% { box-shadow:0 0 0 34px rgba(240,190,90,0); } }
+@keyframes o-nudge { 0%, 100% { translate:0 0; } 50% { translate:0 -6px; } }
+@keyframes o-arrive { from { opacity:0; translate:0 24px; } to { opacity:1; translate:0 0; } }
+
+/* The card the page script draws into: the button on the first screen,
+   then every later step and the letters themselves. */
+.o-stage { position:relative; z-index:3; width:min(640px, calc(100% - 28px)); margin:-84px auto 0; padding:34px 40px 26px; border:1px solid var(--rule); border-radius:28px; background:var(--paper); box-shadow:0 30px 70px rgba(30,20,10,.25); }
+.o-stage #app > :first-child { margin-top:0; }
+.o-stage .lede { margin:0 0 20px; color:var(--ink); font-size:19px; text-align:center; }
+.o-stage button.cta.big { display:block; width:100%; max-width:none; margin:0 0 14px; padding:20px 28px; border-radius:16px; background:#d4a24a; color:#1c1408; font-family:"Montserrat",var(--sans); font-size:19px; font-weight:800; box-shadow:0 14px 32px rgba(212,162,74,.3); transition:transform .18s ease, background .18s ease; }
+.o-stage button.cta.big:hover { transform:translateY(-2px); background:#e2b55e; }
+.o-stage .sample-link { margin:0; text-align:center; font-size:16px; }
+.o-stage .sample-link a { color:var(--brass); font-weight:650; text-underline-offset:4px; }
+/* Once something else is on screen (a letter, a sample, a key holder step),
+   the hero is hidden and the card becomes the page. */
+@media (prefers-color-scheme: dark) { .o-stage { background:var(--paper2); } }
+#hero-pic[hidden] ~ .o-stage { width:min(760px, calc(100% - 28px)); margin-top:108px; padding:8px 0 40px; border:0; background:none; box-shadow:none; }
+
+/* Steps */
+.o-guide { padding:90px 0 40px; }
+.o-heading { display:grid; grid-template-columns:220px 1fr; gap:32px; align-items:start; }
+.o-label { color:var(--brass); }
+.o-guide h2 { margin:0; font-family:var(--serif); font-weight:700; font-size:clamp(36px, 4.6vw, 60px); line-height:1.02; letter-spacing:-.03em; }
+.o-steps { list-style:none; margin:52px 0 0; padding:0; display:grid; grid-template-columns:repeat(3, 1fr); gap:20px; }
+.o-steps li { margin:0; padding:28px 26px 30px; border:1px solid var(--rule); border-radius:26px; background:var(--paper2); }
+.o-steps li > span { display:grid; place-items:center; width:40px; height:40px; border-radius:50%; background:#d4a24a; color:#1c1408; font-family:"Montserrat",var(--sans); font-size:16px; font-weight:800; }
+.o-steps h3 { margin:20px 0 8px; color:var(--ink); font-family:var(--serif); font-size:25px; font-weight:700; letter-spacing:-.02em; line-height:1.15; }
+.o-steps p { margin:0; color:var(--dim); font-size:16px; }
+
+/* Questions */
+.o-facts { display:grid; grid-template-columns:.8fr 1.2fr; gap:40px 100px; margin-top:100px; }
+.o-faq { border-top:1px solid var(--rule); }
+.o-faq details, .o-faq details.safe { margin:0; padding:0; border:0; border-bottom:1px solid var(--rule); color:inherit; font-size:inherit; }
+.o-faq summary { cursor:pointer; padding:20px 0; color:var(--ink); font-size:18px; font-weight:700; list-style-position:outside; }
+.o-faq details.safe summary { list-style-position:outside; color:var(--ink); font-weight:700; }
+.o-faq summary:focus-visible { outline:3px solid #d4a24a; outline-offset:4px; }
+.o-faq details p { margin:0 0 16px; color:var(--dim); font-size:17px; }
+.o-faq a { color:var(--brass); }
+
+/* Footer */
+.o-foot { margin-top:80px; padding:56px 0; background:#0d0a07; color:#b5a891; }
+.o-foot-grid { display:grid; grid-template-columns:1fr 1fr; gap:30px 70px; align-items:start; }
+.o-foot .o-brand { color:#fbf3e4; }
+.o-foot p { margin:8px 0 0; font-size:14px; }
+.o-foot-links { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:12px 22px; font-size:14px; }
+.o-foot-links a { color:#b5a891; text-decoration:none; }
+.o-foot-links a:hover { color:#fbf3e4; text-decoration:underline; }
+
+@media (max-width:900px) {
+  .o-nav-links a:not(.o-nav-button) { display:none; }
+  .o-hero { padding:110px 0 118px; }
+  .o-hero-grid, .o-facts { grid-template-columns:1fr; }
+  .o-art { min-height:420px; }
+  .o-heading { grid-template-columns:1fr; gap:4px; }
+  .o-steps { grid-template-columns:1fr; }
+}
+@media (max-width:640px) {
+  .o-wrap { width:calc(100% - 28px); }
+  .o-nav-inner { height:64px; }
+  .o-hero { padding:92px 0 96px; }
+  .o-hero-grid { gap:18px; }
+  .o-hero h1 { font-size:clamp(46px, 14vw, 64px); }
+  .o-art { min-height:250px; margin-top:0; }
+  .o-scene { width:min(230px, 62%); }
+  .o-key { width:min(150px, 38%); left:10%; }
+  .o-orbit.one { width:230px; height:230px; } .o-orbit.two { width:300px; height:300px; }
+  .o-stage { padding:26px 20px 20px; border-radius:24px; margin-top:-76px; }
+  @media (prefers-color-scheme: dark) { .o-stage { background:var(--paper2); } }
+#hero-pic[hidden] ~ .o-stage { margin-top:88px; }
+  .o-guide { padding-top:64px; }
+  .o-facts { margin-top:64px; }
+  .o-foot-grid { grid-template-columns:1fr; }
+  .o-foot-links { justify-content:flex-start; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .o-scene, .o-key, .o-hero.is-listening .o-key, .o-hero.is-listening .o-touch { animation:none; }
+  .o-hero.is-listening .o-touch { box-shadow:0 0 0 6px rgba(240,190,90,.6); }
+}
