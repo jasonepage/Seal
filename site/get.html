@@ -3,160 +3,125 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="icon" href="favicon.ico?v=3" sizes="any">
-<link rel="icon" type="image/png" href="favicon.png?v=3">
-<link rel="apple-touch-icon" href="apple-touch-icon.png?v=3">
+<title>Pick your Seal kit: USB-C or Lightning</title>
+<meta name="description" content="Pick the Seal kit that plugs into their iPhone: USB-C for iPhone 15 or newer, or Lightning for iPhone 14 or earlier. The app is free.">
 <link rel="canonical" href="https://sealmessenger.com/get">
-<meta name="theme-color" content="#FBF8F3" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#14120F" media="(prefers-color-scheme: dark)">
-<link rel="stylesheet" href="get.css?v=7">
-<title>Seal: a private letter, opened on your terms</title>
-<meta name="description" content="Write a private letter on your iPhone, choose when it can open, and give the person you trust a physical key. The app is free. Key kits from $49.">
+<meta name="theme-color" content="#16120d">
+<link rel="icon" href="/favicon.ico?v=3" sizes="any">
+<link rel="icon" type="image/png" href="/favicon.png?v=3">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=3">
+<link rel="stylesheet" href="/site.css?v=1">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Seal">
 <meta property="og:url" content="https://sealmessenger.com/get">
-<meta property="og:title" content="A private letter. Opened on your terms.">
-<meta property="og:description" content="Write it now. Choose when it can open. Give the person you trust a physical key.">
+<meta property="og:title" content="Pick a Seal kit.">
+<meta property="og:description" content="Two kits. Pick the plug that matches their iPhone: USB-C or Lightning.">
 <meta property="og:image" content="https://sealmessenger.com/social-get.png?v=1">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Seal. A private letter, opened on your terms.">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="A private letter. Opened on your terms.">
-<meta name="twitter:description" content="Write it now. Choose when it can open. Give the person you trust a physical key.">
+<meta name="twitter:title" content="Pick a Seal kit.">
+<meta name="twitter:description" content="Two kits. Pick the plug that matches their iPhone: USB-C or Lightning.">
 <meta name="twitter:image" content="https://sealmessenger.com/social-get.png?v=1">
-<meta name="twitter:image:alt" content="Seal. A private letter, opened on your terms.">
 </head>
-<body class="kit">
+<body class="get">
+<div id="ordered" class="ordered" role="status" hidden><strong>Order received. Thank you.</strong>Your kit ships within 3 business days to your US address, and we email you when it is on the way. Questions? Write to <a href="mailto:support@sealmessenger.com">support@sealmessenger.com</a>.<button type="button" aria-label="Close">&times;</button></div>
 <a class="skip" href="#main">Skip to the page</a>
-<header class="site-head">
-  <div class="wrap">
-    <a class="brand" href="/"><img src="img/kit/seal-icon-96.webp" width="96" height="96" alt="">Seal</a>
-    <nav class="nav-links" aria-label="Main"><a href="how-it-works.html">How it works</a><a href="#inside">What&rsquo;s inside</a><a href="give.html">Give Seal</a></nav>
-    <details class="menu">
-      <summary aria-label="Menu"><span></span></summary>
-      <nav aria-label="Main"><a href="how-it-works.html">How it works</a><a href="#inside">What&rsquo;s inside</a><a href="give.html">Give Seal</a></nav>
-    </details>
-    <a class="btn btn-gold btn-small" href="#choose">Choose a kit</a>
+<nav class="nav" aria-label="Main">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/" aria-label="Seal home"><img src="/img/kit/seal-icon-192.webp" alt="" width="42" height="42">Seal</a>
+    <div class="nav-links"><a href="/#how">How it works</a><a href="/get" aria-current="page">Get a kit</a><a href="/give">Give one</a><a href="/open/">Open a letter</a><a class="nav-button" href="https://apps.apple.com/app/id6779471126">Get the app</a></div>
   </div>
-</header>
-
+</nav>
 <main id="main">
-  <section id="ordered" class="thanks" hidden aria-live="polite">
-    <div class="wrap">
-      <h2>Thanks! Your order is in.</h2>
-      <p>Check your email for the receipt. We ship within 3 business days and email you when it is on the way. Questions? Write to <a href="mailto:support@sealmessenger.com">support@sealmessenger.com</a>.</p>
-    </div>
-  </section>
-  <script>if(new URLSearchParams(location.search).get("ordered")==="1"){document.getElementById("ordered").hidden=false}</script>
-  <section class="hero" aria-labelledby="hero-title">
-    <div class="wrap">
-      <div class="hero-copy">
-        <h1 id="hero-title"><span>A private letter.</span> <span>Opened on your terms.</span></h1>
-        <p class="hero-sub"><span>Write it now. Choose when it can open.</span> <span>Give the person you trust a physical key.</span></p>
-        <div class="hero-cta">
-          <a class="btn btn-gold" href="#choose">Choose a kit</a>
-          <a class="btn btn-line" href="#opens">See how Seal works</a>
-        </div>
-        <ul class="trust">
-          <li>One-time purchase</li>
-          <li>No subscription</li>
-          <li class="lock"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="4" y="9" width="12" height="9" rx="2"/><path d="M7 9V6a3 3 0 0 1 6 0v3"/></svg>Seal cannot read your letters</li>
-        </ul>
-      </div>
-      <div class="art" role="img" aria-label="A black security key with a USB-C plug and a gold touch circle, an iPhone showing the Seal app, and an envelope closed with a gold wax seal.">
-        <img class="art-key" src="img/kit/key-390.webp" width="390" height="349" alt="">
-        <span class="phone"><span class="screen"><img src="img/kit/seal-icon-480.webp" width="480" height="480" alt=""></span></span>
-        <img class="art-env" src="img/kit/envelope-900.webp" srcset="img/kit/envelope-480.webp 480w, img/kit/envelope-900.webp 900w" sizes="(min-width:760px) 330px, 42vw" width="900" height="647" alt="">
-      </div>
-    </div>
-  </section>
-
-  <section class="band" id="opens" aria-labelledby="opens-title">
-    <div class="wrap">
-      <h2 id="opens-title">Choose when each letter opens.</h2>
-      <ul class="cards">
-        <li class="card"><span class="ic"><svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="20" cy="20" r="15"/><path d="M20 11v10h7"/></svg></span><div><h3>Right away</h3><p>Only the recipient can open it.</p></div></li>
-        <li class="card"><span class="ic"><svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="15" cy="14" r="6"/><path d="M4 33c0-6 5-10 11-10s11 4 11 10z"/><circle cx="27" cy="12" r="5"/><path d="M26 21c5 0 10 3 10 9h-7"/></svg></span><div><h3>Break glass</h3><p>Trusted people open it together.</p></div></li>
-        <li class="card"><span class="ic"><svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="9" width="30" height="22" rx="2"/><path d="M5 11l15 11 15-11"/></svg></span><div><h3>If I go quiet</h3><p>Warnings come first. You can stop it anytime.</p></div></li>
-      </ul>
-      <p class="aside">Want to see one open first? <a href="open/#sample">Open a sample letter</a>.</p>
-    </div>
-  </section>
-
-  <section class="pick" id="choose" aria-labelledby="choose-title">
-    <div class="wrap pick-grid">
+  <header class="hero">
+    <div class="wrap hero-grid">
       <div>
-        <h2 id="choose-title">Which iPhone do they have?</h2>
-      <div class="kits">
-        <article class="kit-card">
-          <div class="port"><svg viewBox="0 0 300 104" role="img" aria-label="The bottom of an iPhone with an oval USB-C port"><defs><linearGradient id="tiC" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f6ead2"/><stop offset=".5" stop-color="#c7ae80"/><stop offset="1" stop-color="#8a7350"/></linearGradient><linearGradient id="glC" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a3a40"/><stop offset="1" stop-color="#0b0b0e"/></linearGradient></defs><path d="M18 34 Q18 8 46 8 H254 Q282 8 282 34 V46 H18 Z" fill="url(#glC)"/><path d="M8 44 Q8 32 24 32 H276 Q292 32 292 44 V68 Q292 96 260 96 H40 Q8 96 8 68 Z" fill="url(#tiC)"/><path d="M14 46 H286" stroke="#fff6e2" stroke-opacity=".7" stroke-width="2"/><g fill="#2b2620"><circle cx="58" cy="66" r="4.2"/><circle cx="72" cy="66" r="4.2"/><circle cx="86" cy="66" r="4.2"/><circle cx="214" cy="66" r="4.2"/><circle cx="228" cy="66" r="4.2"/><circle cx="242" cy="66" r="4.2"/><circle cx="256" cy="66" r="4.2"/><circle cx="114" cy="66" r="3"/><circle cx="186" cy="66" r="3"/></g><rect x="126.0" y="58.5" width="48" height="15" rx="7.5" fill="#141414" stroke="#5b4a2e" stroke-width="1.5"/></svg></div>
-          <div class="body">
-            <h3>iPhone 15 or newer</h3>
-            <p class="what">USB-C kit &middot; $49</p>
-            <a class="btn btn-gold" href="https://buy.stripe.com/28EcMY5aT4aBfpi5Xs0Fi01">Choose USB-C</a>
-          </div>
-        </article>
-        <article class="kit-card">
-          <div class="port"><svg viewBox="0 0 300 104" role="img" aria-label="The bottom of an iPhone with a thin Lightning port"><defs><linearGradient id="tiL" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f6ead2"/><stop offset=".5" stop-color="#c7ae80"/><stop offset="1" stop-color="#8a7350"/></linearGradient><linearGradient id="glL" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a3a40"/><stop offset="1" stop-color="#0b0b0e"/></linearGradient></defs><path d="M18 34 Q18 8 46 8 H254 Q282 8 282 34 V46 H18 Z" fill="url(#glL)"/><path d="M8 44 Q8 32 24 32 H276 Q292 32 292 44 V68 Q292 96 260 96 H40 Q8 96 8 68 Z" fill="url(#tiL)"/><path d="M14 46 H286" stroke="#fff6e2" stroke-opacity=".7" stroke-width="2"/><g fill="#2b2620"><circle cx="58" cy="66" r="4.2"/><circle cx="72" cy="66" r="4.2"/><circle cx="86" cy="66" r="4.2"/><circle cx="214" cy="66" r="4.2"/><circle cx="228" cy="66" r="4.2"/><circle cx="242" cy="66" r="4.2"/><circle cx="256" cy="66" r="4.2"/><circle cx="114" cy="66" r="3"/><circle cx="186" cy="66" r="3"/></g><rect x="130.0" y="60.5" width="40" height="11" rx="5.5" fill="#141414" stroke="#5b4a2e" stroke-width="1.5"/></svg></div>
-          <div class="body">
-            <h3>iPhone 14 or earlier</h3>
-            <p class="what">Lightning kit &middot; $119</p>
-            <a class="btn btn-gold" href="https://buy.stripe.com/aFaaEQ46PePfelebhM0Fi00">Choose Lightning</a>
-          </div>
-        </article>
+        <p class="eyebrow">Seal kits</p>
+        <h1>Pick a kit.</h1>
+        <p class="lead">Each kit has a real security key, a printed setup card, and the free Seal app. No subscription.</p>
+        <div class="actions"><a class="btn btn-brass btn-stack" href="#kits"><small>From $49</small>See the kits</a></div>
       </div>
-      <p class="not-sure"><a href="#cable">Not sure? Check their charging cable.</a></p>
-      </div>
-      <div class="inbox" id="inside">
-        <h2>What&rsquo;s in the box</h2>
-        <ul>
-          <li><span class="thing"><img class="thing-key" src="img/kit/key-390.webp" width="390" height="349" alt=""></span>Security key</li>
-          <li><span class="thing"><span class="phone"><span class="screen"><img src="img/kit/seal-icon-192.webp" width="192" height="192" alt=""></span></span></span>Seal app</li>
-          <li><span class="thing"><span class="setup-card" aria-hidden="true"><img src="img/kit/seal-mark-96.webp" width="96" height="99" alt=""><i></i><i></i><i></i></span></span>Setup card</li>
-        </ul>
+      <div class="art">
+        <span class="orbit one" aria-hidden="true"></span><span class="orbit two" aria-hidden="true"></span>
+        <img class="scene" src="/img/inside-key.webp" alt="A black USB-C security key on cream paper." width="600" height="600">
+        <img class="front card" src="/img/inside-card.webp" alt="The printed setup card with three steps." width="600" height="600">
       </div>
     </div>
-  </section>
+  </header>
 
-<section class="shipbar" aria-label="Shipping">
-  <div class="wrap"><p><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M14 3l10 5v12l-10 5-10-5V8z"/><path d="M4 8l10 5 10-5M14 13v12"/></svg><span>One kit for each person who holds a key. Shipping calculated at checkout.</span></p></div>
-</section>
-
-  <section class="facts" aria-label="Good to know">
+  <section id="kits" class="kits" aria-labelledby="kits-title">
     <div class="wrap">
-      <details>
-        <summary>Prices, shipping and returns</summary>
-        <dl>
-          <dt id="cable">Which kit fits</dt>
-          <dd>Look at the end of their charging cable. A small oval plug is USB-C, for iPhone 15 or newer. A thin flat plug is Lightning, for iPhone 14 or earlier. The Lightning key has both plugs, so it fits every iPhone.</dd>
-          <dt>What it costs</dt>
-          <dd>The Seal app is free, and letters that open right away are free to seal. One payment of $29.99 in the app unlocks key holders, for good. No subscription. Kits are $49 for USB-C and $119 for Lightning, plus $7.95 shipping per order, however many kits are in it.</dd>
-          <dt>Shipping</dt>
-          <dd>US addresses only, including US territories and military addresses. Orders ship within 3 business days and usually arrive 3 to 8 business days after you order.</dd>
-          <dt>Returns</dt>
-          <dd>Unopened kits can come back within 30 days for a refund of the kit price. If a key arrives damaged or does not work, send us a photo within 30 days and we send a new one free. Email <a href="mailto:support@sealmessenger.com">support@sealmessenger.com</a> first.</dd>
-          <dt>Phones</dt>
-          <dd>Writing letters needs an iPhone with iOS 18 or newer. The people holding keys do not need an iPhone: a key opens their letters on any phone or computer at sealmessenger.com/open.</dd>
-          <dt>Privacy</dt>
-          <dd>Stripe handles payment. Your order details are used only to ship it and help you. Keys are made by Yubico, and key prices can change.</dd>
-        </dl>
-      </details>
+      <div class="kits-head">
+        <div><p class="label">Kits</p><h2 id="kits-title">Which iPhone do they have?</h2></div>
+        <p>Pick the phone the key will plug into, and we send the right one.</p>
+      </div>
+      <div class="picker"><label for="phone-model">Pick their iPhone</label><select id="phone-model"><option value="">Choose a model</option>
+        <optgroup label="USB-C kit"><option value="usbc">iPhone 17</option><option value="usbc">iPhone 17 Pro</option><option value="usbc">iPhone 17 Pro Max</option><option value="usbc">iPhone Air</option><option value="usbc">iPhone 16e</option><option value="usbc">iPhone 16</option><option value="usbc">iPhone 16 Plus</option><option value="usbc">iPhone 16 Pro</option><option value="usbc">iPhone 16 Pro Max</option><option value="usbc">iPhone 15</option><option value="usbc">iPhone 15 Plus</option><option value="usbc">iPhone 15 Pro</option><option value="usbc">iPhone 15 Pro Max</option><option value="usbc">Newer than these</option></optgroup>
+        <optgroup label="Lightning kit"><option value="lightning">iPhone 14</option><option value="lightning">iPhone 14 Plus</option><option value="lightning">iPhone 14 Pro</option><option value="lightning">iPhone 14 Pro Max</option><option value="lightning">iPhone SE (3rd generation)</option><option value="lightning">iPhone 13</option><option value="lightning">iPhone 13 mini</option><option value="lightning">iPhone 13 Pro</option><option value="lightning">iPhone 13 Pro Max</option><option value="lightning">iPhone 12</option><option value="lightning">iPhone 12 mini</option><option value="lightning">iPhone 12 Pro</option><option value="lightning">iPhone 12 Pro Max</option><option value="lightning">iPhone SE (2nd generation)</option><option value="lightning">iPhone 11</option><option value="lightning">iPhone 11 Pro</option><option value="lightning">iPhone 11 Pro Max</option><option value="lightning">iPhone XS</option><option value="lightning">iPhone XS Max</option><option value="lightning">iPhone XR</option></optgroup>
+        <option value="old">Older than iPhone XR</option></select><p id="phone-result" class="picker-result" aria-live="polite"></p></div>
+      <div class="products">
+        <article id="usb-c-kit" class="product featured">
+          <div class="product-badge">Most iPhones today</div>
+          <img src="/img/connector-usbc-seal.svg?v=1" alt="USB-C is a small rounded oval plug." width="640" height="260">
+          <div class="product-copy"><p class="fit">USB-C kit</p><h3>iPhone 15 or newer</h3><div class="price"><strong>$49</strong><span>+ $7.95 shipping</span></div><a class="buy" href="https://buy.stripe.com/28EcMY5aT4aBfpi5Xs0Fi01">Buy the USB-C kit</a></div>
+        </article>
+        <article id="lightning-kit" class="product">
+          <img src="/img/connector-lightning-seal.svg?v=1" alt="Lightning is a narrow flat plug with gold contacts." width="640" height="260">
+          <div class="product-copy"><p class="fit">Lightning kit</p><h3>iPhone 14 or earlier</h3><div class="price"><strong>$119</strong><span>+ $7.95 shipping</span></div><a class="buy" href="https://buy.stripe.com/aFaaEQ46PePfelebhM0Fi00">Buy the Lightning kit</a></div>
+        </article>
+      </div>
+      <p class="kits-note">Not sure which iPhone? Open Settings, then General, then About. US shipping only. One shipping charge per order.</p>
+      <details class="why"><summary>Why does the Lightning kit cost more?</summary><p>The Lightning key has two plugs, Lightning and USB-C, so it fits every iPhone and most computers. That key costs much more to buy. The rest of the kit is the same.</p></details>
     </div>
   </section>
-  <div class="end-cta"><div class="wrap"><a class="btn btn-gold btn-block" href="#choose">Choose a kit</a></div></div>
+
+  <section class="section" aria-labelledby="box-title">
+    <div class="wrap">
+      <div class="heading"><p class="label">In the box</p><h2 id="box-title">Three things.</h2></div>
+      <div class="box">
+        <figure><img src="/img/inside-key.webp" alt="A black USB-C security key." width="600" height="600" loading="lazy"><figcaption><b>A security key</b><span>It opens the letters written to it. Nothing else can.</span></figcaption></figure>
+        <figure><img src="/img/inside-app.webp" alt="The Seal app icon, a gold wax seal on an envelope." width="600" height="600" loading="lazy"><figcaption><b>The free Seal app</b><span>Write and seal letters on iPhone.</span></figcaption></figure>
+        <figure><img src="/img/inside-card.webp" alt="The printed setup card." width="600" height="600" loading="lazy"><figcaption><b>A printed setup card</b><span>Plain steps you can follow together.</span></figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="facts-title">
+    <div class="wrap facts-grid">
+      <div><p class="label">Questions</p><h2 id="facts-title">Plain facts.</h2></div>
+      <div class="fact-list"><div><strong>Which kit fits?</strong><p>Look at the end of their charging cable. A small oval plug is USB-C, for iPhone 15 or newer. A thin flat plug is Lightning, for iPhone 14 or earlier.</p></div><div><strong>What does it cost?</strong><p>The app is free, and letters that open right away are free to seal. One payment of $29.99 in the app unlocks more ways to seal, for good. No subscription. Kits are $49 or $119, plus $7.95 shipping per order.</p></div><div><strong>Shipping and returns</strong><p>Kits ship to US addresses within 3 business days. Unopened kits can come back within 30 days for a refund. If a key arrives broken, send a photo and we send a new one free. Email <a href="mailto:support@sealmessenger.com">support@sealmessenger.com</a> first.</p></div><div><strong>Do they need an iPhone?</strong><p>No. A key opens letters on any phone or computer at sealmessenger.com/open. Writing a letter needs an iPhone with iOS 18 or newer.</p></div><div><strong>Privacy</strong><p>Stripe handles payment. Your order details are used only to ship it and help you. Keys are made by Yubico.</p></div></div>
+      <div class="fact-links"><a href="/give">Giving a kit to someone?</a><a href="/open/#sample">See a sample letter</a><a href="/privacy.html">Privacy policy</a></div>
+    </div>
+  </section>
 </main>
 
-<footer class="site-foot">
-  <nav class="wrap" aria-label="More">
-    <a href="/">Seal</a>
-    <a href="give.html">Giving Seal to someone?</a>
-    <a href="how-it-works.html">How it works</a>
-    <a href="open/#sample">See a sample letter</a>
-    <a href="support.html">Support</a>
-    <a href="privacy.html">Privacy</a>
-    <a href="https://apps.apple.com/app/id6779471126">App Store</a>
-  </nav>
+<footer class="foot">
+  <div class="wrap foot-grid">
+    <div><a class="brand" href="/"><img src="/img/kit/seal-icon-192.webp" alt="" width="42" height="42">Seal</a><p class="foot-tag">Secret letters, opened on your terms.</p></div>
+    <div class="foot-links"><a href="/#how">How it works</a><a href="/get">Get a kit</a><a href="/give">Give one</a><a href="/open/">Open a letter</a><a href="/how-it-works.html">The details</a><a href="/limits.html">Limits</a><a href="/support.html">Support</a><a href="/privacy.html">Privacy</a><a href="https://github.com/jasonepage/Seal">Source</a><a href="mailto:support@sealmessenger.com">support@sealmessenger.com</a></div>
+    <small>Seal cannot read your letters. The code is public.</small>
+    <small class="copy">&copy; 2026 Jason Page</small>
+  </div>
 </footer>
+<script>
+(function () {
+  var nav = document.querySelector('.nav');
+  function onScroll() { nav.classList.toggle('scrolled', window.scrollY > 16); }
+  onScroll(); window.addEventListener('scroll', onScroll, { passive: true });
+  var sel = document.getElementById('phone-model');
+  if (sel) sel.addEventListener('change', function () {
+    var v = sel.value, out = document.getElementById('phone-result');
+    document.getElementById('usb-c-kit').classList.toggle('dim', v === 'lightning' || v === 'old');
+    document.getElementById('lightning-kit').classList.toggle('dim', v === 'usbc' || v === 'old');
+    out.textContent = v === 'usbc' ? 'That iPhone takes the USB-C kit.' : v === 'lightning' ? 'That iPhone takes the Lightning kit.' : v === 'old' ? 'That iPhone cannot run Seal. Write to support@sealmessenger.com and we will help.' : '';
+  });
+  var done = document.getElementById('ordered');
+  if (done) {
+    if (new URLSearchParams(location.search).get('ordered') === '1') done.hidden = false;
+    done.querySelector('button').addEventListener('click', function () { done.hidden = true; });
+  }
+})();
+</script>
 </body>
 </html>

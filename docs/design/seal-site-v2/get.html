@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Pick a Seal kit.</title>
+  <meta name="description" content="Choose a USB-C or Lightning Seal kit for their iPhone.">
+  <link rel="stylesheet" href="seal-site.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="wrap nav">
+      <a class="brand" href="index.html"><img src="assets/seal-icon.png" width="40" height="40" alt="">Seal</a>
+      <nav class="nav-links" aria-label="Main navigation"><a href="index.html#steps">How it works</a><a href="get.html">Get a kit</a><a href="/give.html">Give one</a><a href="/open/">Open a letter</a></nav>
+      <details class="menu"><summary>Menu</summary><nav class="menu-panel" aria-label="Mobile navigation"><a href="index.html#steps">How it works</a><a href="get.html">Get a kit</a><a href="/give.html">Give one</a><a href="/open/">Open a letter</a><a href="https://apps.apple.com/app/id6779471126">Get the app</a></nav></details>
+      <a class="button button-primary button-small" href="https://apps.apple.com/app/id6779471126">Get the app</a>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero kit-hero">
+      <div class="wrap hero-grid">
+        <div class="hero-copy"><p class="eyebrow">The Seal kit</p><h1>Pick a kit.</h1><p class="hero-line">Choose their iPhone. We will point you to the right key.</p><div class="hero-actions"><a class="button button-primary" href="#choose">Choose their iPhone</a><a class="button" href="#inside">See what is inside</a></div><p class="hero-note">$7.95 shipping. US addresses only.</p></div>
+        <div class="hero-art" role="img" aria-label="A black USB-C security key beside a cream envelope with a gold wax seal."><img class="hero-envelope" src="assets/envelope.png" alt=""><img class="hero-key" src="assets/security-key.png" alt=""></div>
+      </div>
+    </section>
+
+    <section class="section" id="choose">
+      <div class="wrap">
+        <div class="section-head"><p class="eyebrow">Find the right key</p><h2>Which iPhone do they have?</h2><p>If you are not sure, look at the bottom of the phone or the end of its charging cable.</p></div>
+        <div class="picker-shell">
+          <aside class="picker-panel">
+            <label for="iphone-model">Their iPhone</label>
+            <select id="iphone-model">
+              <option value="unknown">Choose a model</option>
+              <option value="usb">iPhone 17, 16, or 15</option>
+              <option value="lightning">iPhone 14 or earlier</option>
+              <option value="unknown">I do not know</option>
+            </select>
+            <p class="recommendation" id="recommendation">Pick a model to see the right kit.</p>
+          </aside>
+
+          <div class="kit-list">
+            <article class="kit-card" id="usb-kit">
+              <div class="kit-photo"><img src="assets/security-key.png" alt="A black USB-C security key with a gold touch circle"></div>
+              <div class="kit-copy"><p class="fit">iPhone 15 or newer</p><h3>USB-C kit</h3><p class="price">$49 <small>plus $7.95 shipping</small></p><ul><li>Black USB-C security key</li><li>Free Seal app</li><li>Printed setup card</li></ul><a class="button button-primary" href="https://buy.stripe.com/28EcMY5aT4aBfpi5Xs0Fi01">Choose USB-C</a></div>
+            </article>
+            <article class="kit-card" id="lightning-kit">
+              <div class="kit-photo"><img src="assets/lightning-key.svg" alt="A black security key with Lightning and USB-C plugs"></div>
+              <div class="kit-copy"><p class="fit">iPhone 14 or earlier</p><h3>Lightning kit</h3><p class="price">$119 <small>plus $7.95 shipping</small></p><ul><li>Lightning and USB-C security key</li><li>Free Seal app</li><li>Printed setup card</li></ul><a class="button button-primary" href="https://buy.stripe.com/aFaaEQ46PePfelebhM0Fi00">Choose Lightning</a></div>
+            </article>
+            <p class="shipping-note">US addresses only. One shipping charge per order.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section-ink" id="inside">
+      <div class="wrap"><div class="section-head"><p class="eyebrow">What is in the box</p><h2>Three useful things.</h2></div><div class="box-grid"><article class="box-item"><img src="assets/security-key.png" alt="A black USB-C security key"><h3>A security key</h3></article><article class="box-item"><img src="assets/seal-app.png" alt="The Seal app icon on a cream envelope"><h3>The free Seal app</h3></article><article class="box-item"><img src="assets/setup-card.png" alt="A printed Seal setup card"><h3>A printed setup card</h3></article></div></div>
+    </section>
+
+    <section class="section">
+      <div class="wrap"><div class="section-head"><p class="eyebrow">Plain facts</p><h2>Before you order.</h2></div><div class="facts"><details class="fact"><summary>Which kit fits?</summary><p>iPhone 15 or newer uses USB-C. iPhone 14 or earlier uses Lightning.</p></details><details class="fact"><summary>Does the app cost money?</summary><p>The app is free. Letters that open right away are free. One payment of $29.99 in the app unlocks more ways to seal.</p></details><details class="fact"><summary>Do they need an iPhone?</summary><p>No. Opening works on any phone or computer. Writing a letter uses the iPhone app.</p></details><details class="fact"><summary>Shipping</summary><p>Shipping is $7.95 per order. US addresses only.</p></details><details class="fact"><summary>Returns</summary><p>Unopened kits can be returned within 30 days. Email support@sealmessenger.com first.</p></details></div></div>
+    </section>
+  </main>
+
+  <footer class="site-footer"><div class="wrap footer-grid"><a class="brand" href="index.html"><img src="assets/seal-icon.png" alt="">Seal</a><nav class="footer-links" aria-label="Footer"><a href="index.html#steps">How it works</a><a href="/open/">Open a letter</a><a href="/privacy.html">Privacy</a><a href="/support.html">Support</a></nav></div></footer>
+
+  <script>
+    const picker = document.querySelector('#iphone-model');
+    const recommendation = document.querySelector('#recommendation');
+    const usb = document.querySelector('#usb-kit');
+    const lightning = document.querySelector('#lightning-kit');
+    picker.addEventListener('change', () => {
+      usb.classList.toggle('is-match', picker.value === 'usb');
+      lightning.classList.toggle('is-match', picker.value === 'lightning');
+      if (picker.value === 'usb') recommendation.innerHTML = '<strong>USB-C kit.</strong> That is the $49 kit.';
+      else if (picker.value === 'lightning') recommendation.innerHTML = '<strong>Lightning kit.</strong> That is the $119 kit.';
+      else recommendation.textContent = 'Look at their charging cable. A small oval plug is USB-C. A thin flat plug is Lightning.';
+    });
+  </script>
+</body>
+</html>
