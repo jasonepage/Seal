@@ -22,7 +22,7 @@ def head(path, title, desc, og_title, og_desc, og_image):
 <link rel="icon" href="/favicon.ico?v=3" sizes="any">
 <link rel="icon" type="image/png" href="/favicon.png?v=3">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=3">
-<link rel="stylesheet" href="/site.css?v=2">
+<link rel="stylesheet" href="/site.css?v=3">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Seal">
 <meta property="og:url" content="{url}">
@@ -129,7 +129,7 @@ SCRIPT = """<script>
 </html>
 """
 
-COST = "The app is free, and letters that open right away are free to seal. One payment of $29.99 in the app unlocks more ways to seal, for good. No subscription. Kits are $49 or $119, plus $7.95 shipping per order."
+COST = "The app is free, and letters that open right away are free to seal. One payment of $29.99 in the app unlocks key holders, for good. No subscription. Kits are $49 or $119, plus $7.95 shipping per order."
 SHIP = "Kits ship to US addresses within 3 business days. Unopened kits can come back within 30 days for a refund. If a key arrives broken, send a photo and we send a new one free. Email <a href=\"mailto:support@sealmessenger.com\">support@sealmessenger.com</a> first."
 PHONES = "No. A key opens letters on any phone or computer at sealmessenger.com/open. Writing a letter needs an iPhone with iOS 18 or newer."
 
@@ -143,8 +143,8 @@ home += '<body class="home">\n' + nav("home") + f"""<main id="main">
       <div>
         <p class="eyebrow">A message in a bottle</p>
         <h1>Write a secret letter.</h1>
-        <p class="lead">Seal it. Hand them the key. Only they can open it.</p>
-        <div class="actions">{BADGE}<a class="text-link" href="/open/">Got a key? Open your letter</a><a class="text-link" href="/get">Get a kit</a></div>
+        <p class="lead">Seal it, then hand them the key. They plug it in and it opens. Only that key works.</p>
+        <div class="actions">{BADGE}<a class="btn btn-brass kit-button" href="/give">Get a kit</a><a class="text-link" href="/open/">Got a key? Open your letter</a></div>
         <ul class="trust" aria-label="About Seal"><li>Free on iPhone</li><li>No subscription</li><li>Seal cannot read your letters</li></ul>
       </div>
       <div class="art">

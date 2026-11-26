@@ -66,6 +66,7 @@ h1, h2, h3, p { margin:0; }
 .btn:hover { transform:translateY(-2px); }
 .btn-brass { background:var(--brass-hi); color:var(--on-brass); box-shadow:0 12px 30px rgba(212,162,74,.25); }
 .btn-dark { background:#0b0906; color:#fbf3e4; box-shadow:0 12px 32px rgba(0,0,0,.35); }
+.kit-button { min-height:56px; padding:0 30px; border-radius:10px; }
 .btn small { display:block; font-size:10px; font-weight:700; opacity:.75; }
 .btn-stack { flex-direction:column; align-items:flex-start; padding:9px 22px; line-height:1.1; }
 
