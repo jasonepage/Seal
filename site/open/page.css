@@ -82,14 +82,19 @@ body.open-page { margin:0; font-size:17px; overflow-x:hidden; -webkit-font-smoot
 .o-steps h3 { margin:20px 0 8px; color:var(--ink); font-family:var(--serif); font-size:25px; font-weight:700; letter-spacing:-.02em; line-height:1.15; }
 .o-steps p { margin:0; color:var(--dim); font-size:16px; }
 
-/* Questions */
-.o-facts { display:grid; grid-template-columns:.8fr 1.2fr; gap:40px 100px; margin-top:100px; }
+/* Questions: one clean column, a chevron on the right that flips when open. */
+.o-facts { max-width:880px; margin-top:96px; }
+.o-facts .o-label { margin-bottom:22px; }
 .o-faq { border-top:1px solid var(--rule); }
 .o-faq details, .o-faq details.safe { margin:0; padding:0; border:0; border-bottom:1px solid var(--rule); color:inherit; font-size:inherit; }
-.o-faq summary { cursor:pointer; padding:20px 0; color:var(--ink); font-size:18px; font-weight:700; list-style-position:outside; }
-.o-faq details.safe summary { list-style-position:outside; color:var(--ink); font-weight:700; }
+.o-faq summary, .o-faq details.safe summary { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:22px 2px; cursor:pointer; list-style:none; color:var(--ink); font-size:18px; font-weight:700; }
+.o-faq summary::-webkit-details-marker { display:none; }
+.o-faq summary::after { content:""; flex:none; width:10px; height:10px; margin-right:8px; border-right:2px solid var(--brass); border-bottom:2px solid var(--brass); transform:translateY(-3px) rotate(45deg); transition:transform .2s ease; }
+.o-faq details[open] > summary::after { transform:translateY(3px) rotate(-135deg); }
+.o-faq summary:hover { color:var(--brass); }
 .o-faq summary:focus-visible { outline:3px solid #d4a24a; outline-offset:4px; }
-.o-faq details p { margin:0 0 16px; color:var(--dim); font-size:17px; }
+.o-faq details > p { max-width:720px; margin:0 2px 18px; color:var(--dim); font-size:17px; }
+.o-faq details > p:last-child { margin-bottom:24px; }
 .o-faq a { color:var(--brass); }
 
 /* Footer */
@@ -104,7 +109,7 @@ body.open-page { margin:0; font-size:17px; overflow-x:hidden; -webkit-font-smoot
 @media (max-width:900px) {
   .o-nav-links a:not(.o-nav-button) { display:none; }
   .o-hero { padding:110px 0 118px; }
-  .o-hero-grid, .o-facts { grid-template-columns:1fr; }
+  .o-hero-grid { grid-template-columns:1fr; }
   .o-art { min-height:420px; }
   .o-heading { grid-template-columns:1fr; gap:4px; }
   .o-steps { grid-template-columns:1fr; }

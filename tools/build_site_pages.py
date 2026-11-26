@@ -22,7 +22,7 @@ def head(path, title, desc, og_title, og_desc, og_image):
 <link rel="icon" href="/favicon.ico?v=3" sizes="any">
 <link rel="icon" type="image/png" href="/favicon.png?v=3">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=3">
-<link rel="stylesheet" href="/site.css?v=1">
+<link rel="stylesheet" href="/site.css?v=2">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Seal">
 <meta property="og:url" content="{url}">
@@ -87,9 +87,9 @@ def kits(title, sub):
 def facts(label, title, rows, links):
     body = "".join(f"<div><strong>{q}</strong><p>{a}</p></div>" for q, a in rows)
     lk = "".join(f'<a href="{h}">{t}</a>' for h, t in links)
-    return f"""  <section class="section" aria-labelledby="facts-title">
-    <div class="wrap facts-grid">
-      <div><p class="label">{label}</p><h2 id="facts-title">{title}</h2></div>
+    return f"""  <section class="section" aria-label="{label}">
+    <div class="wrap facts">
+      <p class="label">{label}</p>
       <div class="fact-list">{body}</div>
       <div class="fact-links">{lk}</div>
     </div>
